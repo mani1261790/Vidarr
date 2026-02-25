@@ -213,25 +213,25 @@ final class MainWindowController: NSWindowController {
             newTabButton.heightAnchor.constraint(equalToConstant: 24),
 
             rightPanelView.trailingAnchor.constraint(equalTo: toolbarContent.trailingAnchor, constant: -10),
-            rightPanelView.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 6),
-            rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -6),
+            rightPanelView.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 4),
+            rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -4),
             rightPanelWidth,
 
             addressDisplayView.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 2),
             addressDisplayView.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
             addressDisplayView.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
-            addressDisplayView.heightAnchor.constraint(equalToConstant: 16),
+            addressDisplayView.heightAnchor.constraint(equalToConstant: 14),
 
             addressEditorField.centerYAnchor.constraint(equalTo: addressDisplayView.centerYAnchor),
             addressEditorField.leadingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor),
             addressEditorField.trailingAnchor.constraint(equalTo: addressDisplayView.trailingAnchor),
-            addressEditorField.heightAnchor.constraint(equalToConstant: 20),
+            addressEditorField.heightAnchor.constraint(equalToConstant: 18),
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor, constant: -6),
-            tabSearchField.heightAnchor.constraint(equalToConstant: 22),
-            tabSearchField.topAnchor.constraint(equalTo: addressDisplayView.bottomAnchor, constant: 2)
+            tabSearchField.topAnchor.constraint(equalTo: addressDisplayView.bottomAnchor, constant: 4),
+            tabSearchField.heightAnchor.constraint(equalToConstant: 20),
+            tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -2)
         ])
 
         applyAddressDisplayMode(display: "")
@@ -835,6 +835,7 @@ private final class AddressDisplayView: NSView {
     private let textField = NSTextField(labelWithString: "")
     var onClick: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -847,7 +848,6 @@ private final class AddressDisplayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
         onClick?()
     }
 

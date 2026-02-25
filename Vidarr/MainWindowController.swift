@@ -831,6 +831,7 @@ private final class HorizontalOnlyClipView: NSClipView {
 private final class AddressDisplayView: NSView {
     private let textField = NSTextField(labelWithString: "")
     var onClick: (() -> Void)?
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -843,6 +844,7 @@ private final class AddressDisplayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
         onClick?()
     }
 
@@ -859,6 +861,7 @@ private final class AddressDisplayView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
+        addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(handleClickGesture)))
 
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.font = NSFont.systemFont(ofSize: 13.0, weight: .regular)
@@ -874,6 +877,10 @@ private final class AddressDisplayView: NSView {
             textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
             textField.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+    }
+
+    @objc private func handleClickGesture() {
+        onClick?()
     }
 }
 

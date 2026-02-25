@@ -12,7 +12,7 @@ final class MainWindowController: NSWindowController {
     private let toolbarContainer = LiquidGlassToolbarView()
     private let webContainer = NonDraggableView()
 
-    private let tabStripContainer = TabStripContainerView()
+    private let tabStripContainer = NonDraggableView()
     private let tabStripScrollView = TabStripScrollView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
@@ -138,7 +138,6 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.contentView = HorizontalOnlyClipView()
         tabStripScrollView.contentView.drawsBackground = false
         tabStripContainer.addSubview(tabStripScrollView)
-        tabStripContainer.forwardingView = tabStripScrollView
 
         tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
         tabStripDocumentView.wantsLayer = false
@@ -883,21 +882,6 @@ private final class LiquidGlassToolbarView: NSView {
 
 private final class NonDraggableVisualEffectView: NSVisualEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
-}
-
-private final class TabStripContainerView: NonDraggableView {
-    weak var forwardingView: NSView?
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        if let forwardingView {
-            let pointInForwarding = convert(point, to: forwardingView)
-            return forwardingView.hitTest(pointInForwarding) ?? forwardingView
-        }
-        return self
-    }
 }
 
 private final class HorizontalOnlyClipView: NSClipView {

@@ -14,10 +14,10 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 - 現在の配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。
 
 ## ジェスチャー一覧 (実装)
-- `Left` : 前タブ
-- `Right` : 次タブ
-- `L` : 現在タブを閉じる
-- `LL` : 全タブを閉じる
+- `← (Left)` : 前タブ
+- `→ (Right)` : 次タブ
+- `L (↓→ / DownRight)` : 現在タブを閉じる
+- `LL (↓→↓→ / DownRightDownRight)` : 全タブを閉じる
 - `U (↓→↑)` : 閉じたタブを復元
 - `O` : 現在タブをリロード
 - `OO` : 全タブをリロード
@@ -58,13 +58,13 @@ xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS
 
 ### リリース手順
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 ### ローカルでDMG作成
 ```bash
-./scripts/build_dmg.sh v0.1.0
+./scripts/build_dmg.sh v0.1.1
 ```
 
 ### License

@@ -216,7 +216,7 @@ final class MainWindowController: NSWindowController {
             rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -6),
             rightPanelWidth,
 
-            addressDisplayView.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 1),
+            addressDisplayView.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 2),
             addressDisplayView.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
             addressDisplayView.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
             addressDisplayView.heightAnchor.constraint(equalToConstant: 16),
@@ -228,9 +228,9 @@ final class MainWindowController: NSWindowController {
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor, constant: -1),
+            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor, constant: -4),
             tabSearchField.heightAnchor.constraint(equalToConstant: 22),
-            tabSearchField.topAnchor.constraint(greaterThanOrEqualTo: addressDisplayView.bottomAnchor, constant: 7)
+            tabSearchField.topAnchor.constraint(greaterThanOrEqualTo: addressDisplayView.bottomAnchor, constant: 4)
         ])
 
         applyAddressDisplayMode(display: "")
@@ -814,6 +814,11 @@ private final class AddressDisplayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onClick?()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        return self
     }
 
     func update(text: String) {

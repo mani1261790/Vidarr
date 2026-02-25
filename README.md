@@ -16,6 +16,7 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 ```bash
 xattr -dr com.apple.quarantine /Applications/Vidarr.app
 ```
+- もし `“Vidarr.app” Not Opened` / `Apple could not verify ...` が出る場合も同様に上記コマンドで解除できます。
 
 ## ジェスチャー一覧 (実装)
 - `← (Left)` : 前タブ
@@ -62,13 +63,13 @@ xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS
 
 ### リリース手順
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 ### ローカルでDMG作成
 ```bash
-./scripts/build_dmg.sh v0.1.1
+./scripts/build_dmg.sh v0.1.3
 ```
 
 ### License

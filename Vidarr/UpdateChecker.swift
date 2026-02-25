@@ -6,17 +6,21 @@ struct UpdateCandidate {
 }
 
 final class UpdateChecker {
-    private struct LatestReleaseResponse: Decodable {
+    private struct ReleaseResponse: Decodable {
         let tagName: String
         let htmlURL: URL
+        let draft: Bool
+        let prerelease: Bool
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlURL = "html_url"
+            case draft
+            case prerelease
         }
     }
 
-    private let latestReleaseAPI = URL(string: "https://api.github.com/repos/mani1261790/Vidarr/releases/latest")!
+    private let releasesAPI = URL(string: "https://api.github.com/repos/mani1261790/Vidarr/releases?per_page=30")!
 
     func check(completion: @escaping (UpdateCandidate?) -> Void) {
         let currentVersion = Self.normalizedVersionString(from: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
@@ -25,10 +29,12 @@ final class UpdateChecker {
             return
         }
 
-        var request = URLRequest(url: latestReleaseAPI)
+        var request = URLRequest(url: releasesAPI)
         request.timeoutInterval = 6
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("VidarrUpdateChecker/1.0", forHTTPHeaderField: "User-Agent")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
             guard let data else {
@@ -37,22 +43,34 @@ final class UpdateChecker {
             }
 
             let decoder = JSONDecoder()
-            guard let release = try? decoder.decode(LatestReleaseResponse.self, from: data) else {
+            guard let releases = try? decoder.decode([ReleaseResponse].self, from: data) else {
                 completion(nil)
                 return
             }
 
-            guard let latestVersion = Self.normalizedVersionString(from: release.tagName) else {
+            guard let latest = Self.bestStableRelease(from: releases),
+                  let latestVersion = Self.normalizedVersionString(from: latest.tagName) else {
                 completion(nil)
                 return
             }
 
             if Self.compareSemanticVersion(latestVersion, currentVersion) == .orderedDescending {
-                completion(UpdateCandidate(version: latestVersion, url: release.htmlURL))
+                completion(UpdateCandidate(version: latestVersion, url: latest.htmlURL))
             } else {
                 completion(nil)
             }
         }.resume()
+    }
+
+    private static func bestStableRelease(from releases: [ReleaseResponse]) -> ReleaseResponse? {
+        let stable = releases.filter { !$0.draft && !$0.prerelease }
+        guard !stable.isEmpty else { return nil }
+
+        return stable.max { lhs, rhs in
+            let left = normalizedVersionString(from: lhs.tagName) ?? "0"
+            let right = normalizedVersionString(from: rhs.tagName) ?? "0"
+            return compareSemanticVersion(left, right) == .orderedAscending
+        }
     }
 
     private static func normalizedVersionString(from raw: String?) -> String? {

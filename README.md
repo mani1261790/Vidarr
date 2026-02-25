@@ -52,6 +52,12 @@ xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS
 - `main` への push / PR で、GitHub Actions が自動ビルド検証します。
 - `v*` タグを push すると、GitHub Actions が `.dmg` を作成して Releases に自動添付します。
 
+### インストール手順 (一般ユーザー向け)
+1. [Releases](https://github.com/mani1261790/Vidarr/releases) から最新版の `Vidarr-*.dmg` をダウンロード
+2. `.dmg` を開いて `Vidarr.app` を `Applications` にドラッグ
+3. 初回起動時に警告が出る場合は `Vidarr.app` を右クリックして `開く`
+4. 確認ダイアログでもう一度 `開く` を選択
+
 ### リリース手順
 ```bash
 git tag v0.1.0

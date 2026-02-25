@@ -2,7 +2,7 @@
 //  AppDelegate.swift
 //  Vidarr
 //
-//  Created by 中川誠星 on 2026/02/25.
+//  Created by Mani on 2026/02/25.
 //
 
 import Cocoa

@@ -14,8 +14,8 @@ final class MainWindowController: NSWindowController {
 
     private let tabStripContainer = NonDraggableView()
     private let tabStripScrollView = TabStripScrollView()
-    private let tabStripDocumentView = NonDraggableView()
-    private let tabStripStackView = NSStackView()
+    private let tabStripDocumentView = NonInteractiveView()
+    private let tabStripStackView = NonInteractiveStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
     private let addressDisplayView = AddressDisplayView()
@@ -886,6 +886,10 @@ private final class NonDraggableVisualEffectView: NSVisualEffectView {
 
 private final class HorizontalOnlyClipView: NSClipView {
     override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        return enclosingScrollView ?? self
+    }
 
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var constrained = super.constrainBoundsRect(proposedBounds)
@@ -896,6 +900,15 @@ private final class HorizontalOnlyClipView: NSClipView {
 
 private class NonDraggableView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
+}
+
+private class NonInteractiveView: NonDraggableView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private final class NonInteractiveStackView: NSStackView {
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 private class NonDraggableScrollView: NSScrollView {
@@ -954,6 +967,7 @@ private final class PassthroughLabelField: NSTextField {
 
 private final class AddressDisplayView: NSView {
     private let textField = PassthroughLabelField(labelWithString: "")
+    private let clickButton = NSButton(title: "", target: nil, action: nil)
     var onClick: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -966,14 +980,6 @@ private final class AddressDisplayView: NSView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupView()
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        // handled on mouseUp
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        onClick?()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -996,13 +1002,31 @@ private final class AddressDisplayView: NSView {
         textField.usesSingleLineMode = true
         textField.alignment = .right
 
+        clickButton.translatesAutoresizingMaskIntoConstraints = false
+        clickButton.isBordered = false
+        clickButton.bezelStyle = .regularSquare
+        clickButton.target = self
+        clickButton.action = #selector(handleClickGesture)
+        clickButton.focusRingType = .none
+        clickButton.setButtonType(.momentaryChange)
+
         addSubview(textField)
+        addSubview(clickButton)
 
         NSLayoutConstraint.activate([
             textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            clickButton.leadingAnchor.constraint(equalTo: leadingAnchor),
+            clickButton.trailingAnchor.constraint(equalTo: trailingAnchor),
+            clickButton.topAnchor.constraint(equalTo: topAnchor),
+            clickButton.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+    }
+
+    @objc private func handleClickGesture() {
+        onClick?()
     }
 
 }

@@ -1,6 +1,8 @@
 import Cocoa
 
 final class GestureHUDView: NSView {
+    static let preferredSize = NSSize(width: 300, height: 280)
+
     private struct Descriptor {
         let actionSymbol: String
     }
@@ -115,7 +117,7 @@ final class GestureHUDView: NSView {
 
     private func positionInCenter() {
         guard let superview else { return }
-        let size = NSSize(width: 560, height: 290)
+        let size = Self.preferredSize
         let x = (superview.bounds.width - size.width) * 0.5
         let y = (superview.bounds.height - size.height) * 0.5
         frame = CGRect(origin: CGPoint(x: x, y: y), size: size)

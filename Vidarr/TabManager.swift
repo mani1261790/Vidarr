@@ -6,6 +6,12 @@ protocol TabManagerDelegate: AnyObject {
     func tabManager(_ manager: TabManager, didUpdateTabs count: Int)
 }
 
+struct TabStripItem {
+    let index: Int
+    let title: String
+    let isActive: Bool
+}
+
 final class TabManager {
     weak var delegate: TabManagerDelegate?
 
@@ -31,6 +37,16 @@ final class TabManager {
     var tabCount: Int { tabs.count }
 
     var canReopenClosedTab: Bool { !closedStack.isEmpty }
+
+    var tabStripItems: [TabStripItem] {
+        tabs.enumerated().map { index, tab in
+            let resolvedURL = tab.webView.url ?? tab.lastKnownURL
+            let fallbackTitle = resolvedURL?.host ?? resolvedURL?.absoluteString ?? "New Tab"
+            let resolvedTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = (resolvedTitle?.isEmpty == false) ? resolvedTitle! : fallbackTitle
+            return TabStripItem(index: index, title: title, isActive: index == currentIndex)
+        }
+    }
 
     func newTab(url: URL?) {
         performOnMain { [weak self] in

@@ -8,16 +8,16 @@ final class MainWindowController: NSWindowController {
         static let tabSwitchGap: CGFloat = 16
     }
 
-    private let rootContainer = NSView()
+    private let rootContainer = NonDraggableView()
     private let toolbarContainer = LiquidGlassToolbarView()
-    private let webContainer = NSView()
+    private let webContainer = NonDraggableView()
 
-    private let tabStripContainer = NSView()
-    private let tabStripScrollView = NSScrollView()
-    private let tabStripDocumentView = NSView()
+    private let tabStripContainer = NonDraggableView()
+    private let tabStripScrollView = NonDraggableScrollView()
+    private let tabStripDocumentView = NonDraggableView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
-    private let rightPanelView = NSView()
+    private let rightPanelView = NonDraggableView()
     private let addressDisplayView = AddressDisplayView()
     private let addressEditorField = NSTextField()
     private let tabSearchField = NSSearchField()
@@ -788,7 +788,7 @@ extension MainWindowController: WKNavigationDelegate {
 }
 
 private final class LiquidGlassToolbarView: NSView {
-    let contentLayoutView = NSView()
+    let contentLayoutView = NonDraggableView()
     private let separatorLayer = CALayer()
     private let topShineLayer = CAGradientLayer()
     private let bottomDepthLayer = CAGradientLayer()
@@ -866,11 +866,21 @@ private final class NonDraggableVisualEffectView: NSVisualEffectView {
 }
 
 private final class HorizontalOnlyClipView: NSClipView {
+    override var mouseDownCanMoveWindow: Bool { false }
+
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var constrained = super.constrainBoundsRect(proposedBounds)
         constrained.origin.y = 0
         return constrained
     }
+}
+
+private class NonDraggableView: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
+}
+
+private final class NonDraggableScrollView: NSScrollView {
+    override var mouseDownCanMoveWindow: Bool { false }
 }
 
 private final class AddressDisplayView: NSView {
@@ -955,6 +965,9 @@ private final class TabChipView: NSView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount >= 2 {

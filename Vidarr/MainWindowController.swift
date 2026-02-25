@@ -128,10 +128,13 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.translatesAutoresizingMaskIntoConstraints = false
         tabStripScrollView.drawsBackground = false
         tabStripScrollView.hasVerticalScroller = false
-        tabStripScrollView.hasHorizontalScroller = true
+        tabStripScrollView.hasHorizontalScroller = false
         tabStripScrollView.autohidesScrollers = true
         tabStripScrollView.borderType = .noBorder
         tabStripScrollView.scrollerStyle = .overlay
+        tabStripScrollView.verticalScrollElasticity = .none
+        tabStripScrollView.horizontalScrollElasticity = .automatic
+        tabStripScrollView.contentView = HorizontalOnlyClipView()
         tabStripContainer.addSubview(tabStripScrollView)
 
         tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
@@ -781,6 +784,14 @@ private final class LiquidGlassToolbarView: NSView {
                 contentLayoutView.bottomAnchor.constraint(equalTo: fallback.bottomAnchor)
             ])
         }
+    }
+}
+
+private final class HorizontalOnlyClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var constrained = super.constrainBoundsRect(proposedBounds)
+        constrained.origin.y = 0
+        return constrained
     }
 }
 

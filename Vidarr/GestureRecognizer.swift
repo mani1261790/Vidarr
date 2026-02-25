@@ -66,6 +66,23 @@ final class GestureRecognizer {
         return GestureResult(name: first.name, score: first.score)
     }
 
+    /// 緩和判定用。距離スコアとヒューリスティックを満たす最上位候補だけ返す。
+    func bestPassingMatch(points raw: [CGPoint], minimumScore: CGFloat) -> GestureResult? {
+        guard raw.count >= 5 else { return nil }
+
+        let normalized = normalize(raw)
+        let ranked = rankedTemplateMatches(for: normalized)
+
+        for candidate in ranked {
+            guard candidate.score >= minimumScore else { continue }
+            if passesHeuristic(for: candidate.name, raw: raw) {
+                return GestureResult(name: candidate.name, score: candidate.score)
+            }
+        }
+
+        return nil
+    }
+
     private func rankedTemplateMatches(for normalizedPoints: [CGPoint]) -> [(name: String, score: CGFloat)] {
         var bestDistanceByName: [String: CGFloat] = [:]
         for template in templates {

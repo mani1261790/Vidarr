@@ -113,9 +113,11 @@ final class GestureOverlayView: NSView {
 
     private func scheduleCommitTimer() {
         captureTimer?.invalidate()
-        captureTimer = Timer.scheduledTimer(withTimeInterval: config.captureEndTimeoutMs / 1000, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: config.captureEndTimeoutMs / 1000, repeats: false) { [weak self] _ in
             self?.commitCapture()
         }
+        captureTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func commitCapture() {
@@ -126,7 +128,14 @@ final class GestureOverlayView: NSView {
             return
         }
 
-        guard let result = recognizer.recognize(points: capturePoints) else {
+        let strict = recognizer.recognize(points: capturePoints)
+        let relaxed: GestureResult? = {
+            guard strict == nil else { return nil }
+            guard pathLength(capturePoints) >= config.minPathLength * 0.62 else { return nil }
+            return recognizer.bestPassingMatch(points: capturePoints, minimumScore: max(0.82, config.matchScoreThreshold))
+        }()
+
+        guard let result = strict ?? relaxed else {
             hudView.hideImmediately()
             return
         }
@@ -149,6 +158,18 @@ final class GestureOverlayView: NSView {
             return
         }
         hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
+    }
+
+    private func pathLength(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+
+        var total: CGFloat = 0
+        for i in 1..<points.count {
+            let dx = points[i].x - points[i - 1].x
+            let dy = points[i].y - points[i - 1].y
+            total += sqrt(dx * dx + dy * dy)
+        }
+        return total
     }
 
     private func commonInit() {

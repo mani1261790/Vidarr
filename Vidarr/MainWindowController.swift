@@ -4,7 +4,7 @@ import WebKit
 final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 38
-        static let tabChipSize = NSSize(width: 106, height: 26)
+        static let tabChipSize = NSSize(width: 108, height: 26)
     }
 
     private let rootContainer = NSView()
@@ -14,9 +14,10 @@ final class MainWindowController: NSWindowController {
     private let tabStripContainer = NSView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
-    private let addressField = NSTextField()
+    private let addressField = AddressDisplayField()
 
-    private var tabStripLeadingConstraint: NSLayoutConstraint?
+    private var tabStripMinLeadingConstraint: NSLayoutConstraint?
+    private var tabStripWidthConstraint: NSLayoutConstraint?
     private var addressWidthConstraint: NSLayoutConstraint?
 
     private let tabManager: TabManager
@@ -24,6 +25,7 @@ final class MainWindowController: NSWindowController {
     private let actions: ActionCenter
 
     private var overlayView: GestureOverlayView?
+    private var isAddressEditing = false
 
     init() {
         tabManager = TabManager()
@@ -61,7 +63,7 @@ final class MainWindowController: NSWindowController {
         super.showWindow(sender)
         ensureInitialTabVisible()
         DispatchQueue.main.async { [weak self] in
-            self?.syncToolbarLayoutToTrafficLights()
+            self?.syncToolbarLayout()
         }
     }
 
@@ -108,59 +110,63 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.orientation = .horizontal
         tabStripStackView.alignment = .centerY
         tabStripStackView.spacing = 4
-
         tabStripContainer.addSubview(tabStripStackView)
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
         newTabButton.action = #selector(didTapNewTab)
-        newTabButton.bezelStyle = .texturedRounded
-        newTabButton.font = NSFont.systemFont(ofSize: 14, weight: .regular)
+        newTabButton.isBordered = false
+        newTabButton.font = NSFont.systemFont(ofSize: 19, weight: .light)
+        newTabButton.contentTintColor = NSColor(calibratedWhite: 0.30, alpha: 1)
 
         addressField.translatesAutoresizingMaskIntoConstraints = false
-        addressField.placeholderString = "開きたいページを入力"
-        addressField.font = NSFont.systemFont(ofSize: 12.5)
-        addressField.focusRingType = .none
-        addressField.bezelStyle = .roundedBezel
         addressField.delegate = self
+        addressField.onDisplayClick = { [weak self] in
+            self?.beginAddressEditing()
+        }
+        applyAddressDisplayMode(display: "")
 
         toolbarContainer.addSubview(tabStripContainer)
         toolbarContainer.addSubview(newTabButton)
         toolbarContainer.addSubview(addressField)
 
-        let leading = tabStripContainer.leadingAnchor.constraint(equalTo: toolbarContainer.leadingAnchor, constant: 82)
-        tabStripLeadingConstraint = leading
-
-        let addressWidth = addressField.widthAnchor.constraint(equalToConstant: 320)
+        let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContainer.leadingAnchor, constant: 84)
+        tabStripMinLeadingConstraint = minLeading
+        let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
+        tabStripWidthConstraint = tabWidth
+        let addressWidth = addressField.widthAnchor.constraint(equalToConstant: 240)
         addressWidthConstraint = addressWidth
 
         NSLayoutConstraint.activate([
-            leading,
+            minLeading,
+            tabWidth,
+            tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContainer.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContainer.topAnchor, constant: 5),
             tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContainer.bottomAnchor, constant: -5),
-            tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -8),
+            tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
-            tabStripStackView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
+            tabStripStackView.centerXAnchor.constraint(equalTo: tabStripContainer.centerXAnchor),
+            tabStripStackView.leadingAnchor.constraint(greaterThanOrEqualTo: tabStripContainer.leadingAnchor),
             tabStripStackView.trailingAnchor.constraint(lessThanOrEqualTo: tabStripContainer.trailingAnchor),
             tabStripStackView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
             tabStripStackView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
             newTabButton.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
             newTabButton.trailingAnchor.constraint(equalTo: addressField.leadingAnchor, constant: -8),
-            newTabButton.widthAnchor.constraint(equalToConstant: 24),
+            newTabButton.widthAnchor.constraint(equalToConstant: 18),
+            newTabButton.heightAnchor.constraint(equalToConstant: 18),
 
             addressField.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
             addressField.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
-            addressField.heightAnchor.constraint(equalToConstant: 24),
+            addressField.heightAnchor.constraint(equalToConstant: 22),
             addressWidth
         ])
     }
 
     private func configureBindings() {
         tabManager.delegate = self
-
         actions.focusAddressField = { [weak self] in
-            self?.focusAddressField()
+            self?.beginAddressEditing()
         }
     }
 
@@ -182,13 +188,69 @@ final class MainWindowController: NSWindowController {
         actions.newTab()
     }
 
-    private func submitAddressFieldIfNeeded() {
-        actions.openLocationInput(addressField.stringValue)
-    }
+    private func beginAddressEditing() {
+        guard !isAddressEditing else { return }
+        isAddressEditing = true
 
-    private func focusAddressField() {
+        addressField.isEditable = true
+        addressField.isSelectable = true
+        addressField.isBordered = true
+        addressField.drawsBackground = true
+        addressField.backgroundColor = NSColor(calibratedWhite: 0.97, alpha: 1.0)
+        addressField.textColor = .labelColor
+        addressField.focusRingType = .none
+        addressField.font = NSFont.systemFont(ofSize: 12.5)
+
+        if addressField.stringValue.hasPrefix("  ") {
+            addressField.stringValue = String(addressField.stringValue.dropFirst(2))
+        }
+
         window?.makeFirstResponder(addressField)
         addressField.selectText(nil)
+    }
+
+    private func endAddressEditingWithoutSubmit() {
+        guard isAddressEditing else { return }
+        isAddressEditing = false
+        let display = tabManager.currentWebView?.url?.absoluteString ?? ""
+        applyAddressDisplayMode(display: display)
+        window?.makeFirstResponder(nil)
+    }
+
+    private func submitAddressFieldIfNeeded() {
+        let input = addressField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !input.isEmpty {
+            actions.openLocationInput(input)
+        }
+        isAddressEditing = false
+        applyAddressDisplayMode(display: input)
+        window?.makeFirstResponder(nil)
+    }
+
+    private func applyAddressDisplayMode(display: String) {
+        addressField.isEditable = false
+        addressField.isSelectable = false
+        addressField.isBordered = false
+        addressField.drawsBackground = true
+        addressField.backgroundColor = NSColor(calibratedWhite: 0.18, alpha: 0.92)
+        addressField.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+        addressField.focusRingType = .none
+        addressField.font = NSFont.systemFont(ofSize: 11.5)
+        addressField.alignment = .left
+        addressField.wantsLayer = true
+        addressField.layer?.cornerRadius = 6
+        addressField.layer?.masksToBounds = true
+
+        let collapsed = compactDisplayAddress(display)
+        addressField.stringValue = collapsed.isEmpty ? "  開きたいページを入力" : "  \(collapsed)"
+    }
+
+    private func compactDisplayAddress(_ raw: String) -> String {
+        guard !raw.isEmpty else { return "" }
+        if let url = URL(string: raw), let host = url.host {
+            return host
+        }
+        return raw
     }
 
     private func attachWebView(_ webView: WKWebView) {
@@ -219,7 +281,7 @@ final class MainWindowController: NSWindowController {
         ])
 
         overlayView = overlay
-        addressField.stringValue = webView.url?.absoluteString ?? ""
+        applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
         rebuildTabStrip()
     }
 
@@ -227,7 +289,7 @@ final class MainWindowController: NSWindowController {
         guard webView.bounds.width > 1, webView.bounds.height > 1 else { return }
 
         let width = min(webView.bounds.width, 320)
-        let height = min(webView.bounds.height, 180)
+        let height = min(webView.bounds.height, 160)
         let config = WKSnapshotConfiguration()
         config.rect = CGRect(x: 0, y: 0, width: width, height: height)
 
@@ -258,22 +320,26 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    private func syncToolbarLayoutToTrafficLights() {
+    private func syncToolbarLayout() {
         guard let window, let contentView = window.contentView else { return }
 
-        let buttons: [NSButton] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let trafficButtons: [NSButton] = [.closeButton, .miniaturizeButton, .zoomButton]
             .compactMap { window.standardWindowButton($0) }
 
-        let maxX = buttons.compactMap { button -> CGFloat? in
+        let maxButtonX = trafficButtons.compactMap { button -> CGFloat? in
             guard let superview = button.superview else { return nil }
             let rect = contentView.convert(button.frame, from: superview)
             return rect.maxX
-        }.max() ?? 68
+        }.max() ?? 74
 
-        tabStripLeadingConstraint?.constant = maxX + 10
+        tabStripMinLeadingConstraint?.constant = maxButtonX + 10
 
-        let frameWidth = window.frame.width
-        addressWidthConstraint?.constant = min(360, max(210, frameWidth * 0.25))
+        let addressWidth = min(280, max(210, window.frame.width * 0.22))
+        addressWidthConstraint?.constant = addressWidth
+
+        let reservedRight = addressWidth + 10 + 20 + 8 + 12
+        let available = window.frame.width - (maxButtonX + 10) - reservedRight
+        tabStripWidthConstraint?.constant = min(640, max(220, available))
     }
 }
 
@@ -283,17 +349,29 @@ extension MainWindowController: NSTextFieldDelegate {
             submitAddressFieldIfNeeded()
             return true
         }
+
+        if commandSelector == #selector(cancelOperation(_:)) {
+            endAddressEditingWithoutSubmit()
+            return true
+        }
+
         return false
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        if isAddressEditing, window?.firstResponder !== addressField.currentEditor() {
+            endAddressEditingWithoutSubmit()
+        }
     }
 }
 
 extension MainWindowController: NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
-        syncToolbarLayoutToTrafficLights()
+        syncToolbarLayout()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        syncToolbarLayoutToTrafficLights()
+        syncToolbarLayout()
     }
 }
 
@@ -302,7 +380,7 @@ extension MainWindowController: TabManagerDelegate {
         guard let webView else {
             webContainer.subviews.forEach { $0.removeFromSuperview() }
             overlayView = nil
-            addressField.stringValue = ""
+            applyAddressDisplayMode(display: "")
             rebuildTabStrip()
             return
         }
@@ -320,8 +398,8 @@ extension MainWindowController: WKNavigationDelegate {
         tabManager.updateMetadata(for: webView)
         captureThumbnail(for: webView)
 
-        if tabManager.currentWebView === webView {
-            addressField.stringValue = webView.url?.absoluteString ?? ""
+        if tabManager.currentWebView === webView, !isAddressEditing {
+            applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
             rebuildTabStrip()
         }
     }
@@ -351,14 +429,26 @@ private final class GradientBarView: NSView {
         gradientLayer.frame = bounds
         gradientLayer.colors = [
             NSColor(calibratedWhite: 0.94, alpha: 0.99).cgColor,
-            NSColor(calibratedWhite: 0.76, alpha: 0.99).cgColor
+            NSColor(calibratedWhite: 0.77, alpha: 0.99).cgColor
         ]
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
 
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         separatorLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / scale)
-        separatorLayer.backgroundColor = NSColor(calibratedWhite: 0.50, alpha: 0.65).cgColor
+        separatorLayer.backgroundColor = NSColor(calibratedWhite: 0.52, alpha: 0.65).cgColor
+    }
+}
+
+private final class AddressDisplayField: NSTextField {
+    var onDisplayClick: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        if !isEditable {
+            onDisplayClick?()
+            return
+        }
+        super.mouseDown(with: event)
     }
 }
 
@@ -386,22 +476,21 @@ private final class TabChipView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = title
         wantsLayer = true
-        layer?.cornerRadius = 3
+        layer?.cornerRadius = 2
         layer?.masksToBounds = true
         layer?.borderWidth = 1
         layer?.borderColor = isActive
-            ? NSColor(calibratedWhite: 0.16, alpha: 0.95).cgColor
-            : NSColor(calibratedWhite: 0.52, alpha: 0.58).cgColor
+            ? NSColor(calibratedWhite: 0.18, alpha: 0.95).cgColor
+            : NSColor(calibratedWhite: 0.60, alpha: 0.55).cgColor
         layer?.backgroundColor = isActive
-            ? NSColor(calibratedWhite: 0.21, alpha: 0.95).cgColor
-            : NSColor(calibratedWhite: 0.88, alpha: 0.62).cgColor
+            ? NSColor(calibratedWhite: 0.24, alpha: 0.95).cgColor
+            : NSColor(calibratedWhite: 0.88, alpha: 0.58).cgColor
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailView.imageScaling = .scaleAxesIndependently
         thumbnailView.image = thumbnail
         thumbnailView.wantsLayer = true
-        thumbnailView.layer?.backgroundColor = NSColor(calibratedWhite: 0.95, alpha: 0.95).cgColor
-
+        thumbnailView.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 0.96).cgColor
         addSubview(thumbnailView)
 
         NSLayoutConstraint.activate([

@@ -14,7 +14,8 @@ final class MainWindowController: NSWindowController {
     private let tabStripContainer = NSView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
-    private let addressField = AddressDisplayField()
+    private let addressDisplayView = AddressDisplayView()
+    private let addressEditorField = NSTextField()
 
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
@@ -26,6 +27,7 @@ final class MainWindowController: NSWindowController {
 
     private var overlayView: GestureOverlayView?
     private var isAddressEditing = false
+    private var currentAddressURLString = ""
 
     init() {
         tabManager = TabManager()
@@ -119,22 +121,28 @@ final class MainWindowController: NSWindowController {
         newTabButton.font = NSFont.systemFont(ofSize: 19, weight: .light)
         newTabButton.contentTintColor = NSColor(calibratedWhite: 0.30, alpha: 1)
 
-        addressField.translatesAutoresizingMaskIntoConstraints = false
-        addressField.delegate = self
-        addressField.onDisplayClick = { [weak self] in
+        addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
+        addressDisplayView.onClick = { [weak self] in
             self?.beginAddressEditing()
         }
-        applyAddressDisplayMode(display: "")
+
+        addressEditorField.translatesAutoresizingMaskIntoConstraints = false
+        addressEditorField.delegate = self
+        addressEditorField.font = NSFont.systemFont(ofSize: 12.5)
+        addressEditorField.focusRingType = .none
+        addressEditorField.bezelStyle = .roundedBezel
+        addressEditorField.isHidden = true
 
         toolbarContainer.addSubview(tabStripContainer)
         toolbarContainer.addSubview(newTabButton)
-        toolbarContainer.addSubview(addressField)
+        toolbarContainer.addSubview(addressDisplayView)
+        toolbarContainer.addSubview(addressEditorField)
 
         let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContainer.leadingAnchor, constant: 84)
         tabStripMinLeadingConstraint = minLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
-        let addressWidth = addressField.widthAnchor.constraint(equalToConstant: 240)
+        let addressWidth = addressDisplayView.widthAnchor.constraint(equalToConstant: 240)
         addressWidthConstraint = addressWidth
 
         NSLayoutConstraint.activate([
@@ -152,15 +160,22 @@ final class MainWindowController: NSWindowController {
             tabStripStackView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
             newTabButton.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
-            newTabButton.trailingAnchor.constraint(equalTo: addressField.leadingAnchor, constant: -8),
+            newTabButton.trailingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor, constant: -8),
             newTabButton.widthAnchor.constraint(equalToConstant: 18),
             newTabButton.heightAnchor.constraint(equalToConstant: 18),
 
-            addressField.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
-            addressField.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
-            addressField.heightAnchor.constraint(equalToConstant: 22),
-            addressWidth
+            addressDisplayView.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
+            addressDisplayView.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
+            addressDisplayView.heightAnchor.constraint(equalToConstant: 22),
+            addressWidth,
+
+            addressEditorField.centerYAnchor.constraint(equalTo: addressDisplayView.centerYAnchor),
+            addressEditorField.leadingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor),
+            addressEditorField.trailingAnchor.constraint(equalTo: addressDisplayView.trailingAnchor),
+            addressEditorField.heightAnchor.constraint(equalTo: addressDisplayView.heightAnchor)
         ])
+
+        applyAddressDisplayMode(display: "")
     }
 
     private func configureBindings() {
@@ -192,21 +207,12 @@ final class MainWindowController: NSWindowController {
         guard !isAddressEditing else { return }
         isAddressEditing = true
 
-        addressField.isEditable = true
-        addressField.isSelectable = true
-        addressField.isBordered = true
-        addressField.drawsBackground = true
-        addressField.backgroundColor = NSColor(calibratedWhite: 0.97, alpha: 1.0)
-        addressField.textColor = .labelColor
-        addressField.focusRingType = .none
-        addressField.font = NSFont.systemFont(ofSize: 12.5)
+        addressDisplayView.isHidden = true
+        addressEditorField.isHidden = false
+        addressEditorField.stringValue = currentAddressURLString
 
-        if addressField.stringValue.hasPrefix("  ") {
-            addressField.stringValue = String(addressField.stringValue.dropFirst(2))
-        }
-
-        window?.makeFirstResponder(addressField)
-        addressField.selectText(nil)
+        window?.makeFirstResponder(addressEditorField)
+        addressEditorField.selectText(nil)
     }
 
     private func endAddressEditingWithoutSubmit() {
@@ -218,7 +224,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func submitAddressFieldIfNeeded() {
-        let input = addressField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let input = addressEditorField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !input.isEmpty {
             actions.openLocationInput(input)
         }
@@ -228,29 +234,12 @@ final class MainWindowController: NSWindowController {
     }
 
     private func applyAddressDisplayMode(display: String) {
-        addressField.isEditable = false
-        addressField.isSelectable = false
-        addressField.isBordered = false
-        addressField.drawsBackground = true
-        addressField.backgroundColor = NSColor(calibratedWhite: 0.18, alpha: 0.92)
-        addressField.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
-        addressField.focusRingType = .none
-        addressField.font = NSFont.systemFont(ofSize: 11.5)
-        addressField.alignment = .left
-        addressField.wantsLayer = true
-        addressField.layer?.cornerRadius = 6
-        addressField.layer?.masksToBounds = true
+        currentAddressURLString = display
+        addressDisplayView.update(text: display.isEmpty ? "開きたいページを入力" : display)
 
-        let collapsed = compactDisplayAddress(display)
-        addressField.stringValue = collapsed.isEmpty ? "  開きたいページを入力" : "  \(collapsed)"
-    }
-
-    private func compactDisplayAddress(_ raw: String) -> String {
-        guard !raw.isEmpty else { return "" }
-        if let url = URL(string: raw), let host = url.host {
-            return host
-        }
-        return raw
+        addressEditorField.stringValue = display
+        addressEditorField.isHidden = true
+        addressDisplayView.isHidden = false
     }
 
     private func attachWebView(_ webView: WKWebView) {
@@ -359,7 +348,7 @@ extension MainWindowController: NSTextFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        if isAddressEditing, window?.firstResponder !== addressField.currentEditor() {
+        if isAddressEditing, window?.firstResponder !== addressEditorField.currentEditor() {
             endAddressEditingWithoutSubmit()
         }
     }
@@ -440,15 +429,50 @@ private final class GradientBarView: NSView {
     }
 }
 
-private final class AddressDisplayField: NSTextField {
-    var onDisplayClick: (() -> Void)?
+private final class AddressDisplayView: NSView {
+    private let textField = NSTextField(labelWithString: "")
+    var onClick: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupView()
+    }
 
     override func mouseDown(with event: NSEvent) {
-        if !isEditable {
-            onDisplayClick?()
-            return
-        }
-        super.mouseDown(with: event)
+        onClick?()
+    }
+
+    func update(text: String) {
+        textField.stringValue = text
+        toolTip = text
+    }
+
+    private func setupView() {
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.masksToBounds = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.18, alpha: 0.92).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(calibratedWhite: 0.34, alpha: 0.8).cgColor
+
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.font = NSFont.systemFont(ofSize: 11.5)
+        textField.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+        textField.lineBreakMode = .byTruncatingMiddle
+        textField.usesSingleLineMode = true
+
+        addSubview(textField)
+
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
     }
 }
 

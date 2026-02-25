@@ -21,5 +21,8 @@ jobs:
             -project Vidarr.xcodeproj \
             -scheme Vidarr \
             -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -jobs 1 \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            clean build

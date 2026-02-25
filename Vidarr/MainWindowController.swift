@@ -295,12 +295,8 @@ final class MainWindowController: NSWindowController {
         addressDisplayView.isHidden = true
         addressEditorField.isHidden = false
         addressEditorField.stringValue = currentAddressURLString
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.window?.makeFirstResponder(self.addressEditorField)
-            self.addressEditorField.selectText(nil)
-        }
+        window?.makeFirstResponder(addressEditorField)
+        addressEditorField.selectText(nil)
     }
 
     private func endAddressEditingWithoutSubmit() {
@@ -967,7 +963,6 @@ private final class PassthroughLabelField: NSTextField {
 
 private final class AddressDisplayView: NSView {
     private let textField = PassthroughLabelField(labelWithString: "")
-    private let clickButton = NSButton(title: "", target: nil, action: nil)
     var onClick: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -984,7 +979,7 @@ private final class AddressDisplayView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point) else { return nil }
-        return clickButton
+        return self
     }
 
     func update(text: String) {
@@ -1002,33 +997,19 @@ private final class AddressDisplayView: NSView {
         textField.usesSingleLineMode = true
         textField.alignment = .right
 
-        clickButton.translatesAutoresizingMaskIntoConstraints = false
-        clickButton.isBordered = false
-        clickButton.bezelStyle = .regularSquare
-        clickButton.target = self
-        clickButton.action = #selector(handleClickGesture)
-        clickButton.focusRingType = .none
-        clickButton.setButtonType(.momentaryChange)
-
         addSubview(textField)
-        addSubview(clickButton)
 
         NSLayoutConstraint.activate([
             textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            textField.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            clickButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            clickButton.trailingAnchor.constraint(equalTo: trailingAnchor),
-            clickButton.topAnchor.constraint(equalTo: topAnchor),
-            clickButton.bottomAnchor.constraint(equalTo: bottomAnchor)
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
 
-    @objc private func handleClickGesture() {
+    override func mouseDown(with event: NSEvent) {
+        _ = event
         onClick?()
     }
-
 }
 
 private final class TabChipView: NSView {

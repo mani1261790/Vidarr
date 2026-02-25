@@ -8,7 +8,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private let rootContainer = NSView()
-    private let toolbarContainer = GradientBarView()
+    private let toolbarContainer = LiquidGlassToolbarView()
     private let webContainer = NSView()
 
     private let tabStripContainer = NSView()
@@ -119,7 +119,7 @@ final class MainWindowController: NSWindowController {
         newTabButton.action = #selector(didTapNewTab)
         newTabButton.isBordered = false
         newTabButton.font = NSFont.systemFont(ofSize: 19, weight: .light)
-        newTabButton.contentTintColor = NSColor(calibratedWhite: 0.30, alpha: 1)
+        newTabButton.contentTintColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
 
         addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
         addressDisplayView.onClick = { [weak self] in
@@ -394,38 +394,60 @@ extension MainWindowController: WKNavigationDelegate {
     }
 }
 
-private final class GradientBarView: NSView {
-    private let gradientLayer = CAGradientLayer()
+private final class LiquidGlassToolbarView: NSVisualEffectView {
+    private let tintLayer = CAGradientLayer()
+    private let shineLayer = CAGradientLayer()
     private let separatorLayer = CALayer()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.addSublayer(gradientLayer)
-        layer?.addSublayer(separatorLayer)
+        setupView()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        wantsLayer = true
-        layer?.addSublayer(gradientLayer)
-        layer?.addSublayer(separatorLayer)
+        setupView()
     }
 
     override func layout() {
         super.layout()
 
-        gradientLayer.frame = bounds
-        gradientLayer.colors = [
-            NSColor(calibratedWhite: 0.94, alpha: 0.99).cgColor,
-            NSColor(calibratedWhite: 0.77, alpha: 0.99).cgColor
+        tintLayer.frame = bounds
+        tintLayer.colors = [
+            NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor,
+            NSColor(calibratedWhite: 0.92, alpha: 0.08).cgColor
         ]
-        gradientLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-        gradientLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
+        tintLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
+        tintLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
+
+        shineLayer.frame = CGRect(x: 0, y: bounds.height * 0.52, width: bounds.width, height: bounds.height * 0.48)
+        shineLayer.colors = [
+            NSColor.white.withAlphaComponent(0.30).cgColor,
+            NSColor.white.withAlphaComponent(0.05).cgColor,
+            NSColor.clear.cgColor
+        ]
+        shineLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
+        shineLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
 
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         separatorLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / scale)
-        separatorLayer.backgroundColor = NSColor(calibratedWhite: 0.52, alpha: 0.65).cgColor
+    }
+
+    private func setupView() {
+        if #available(macOS 10.14, *) {
+            material = .headerView
+        } else {
+            material = .titlebar
+        }
+        blendingMode = .withinWindow
+        state = .followsWindowActiveState
+        isEmphasized = true
+
+        wantsLayer = true
+        layer?.addSublayer(tintLayer)
+        layer?.addSublayer(shineLayer)
+        layer?.addSublayer(separatorLayer)
+        separatorLayer.backgroundColor = NSColor(calibratedWhite: 0.58, alpha: 0.52).cgColor
     }
 }
 
@@ -456,13 +478,13 @@ private final class AddressDisplayView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.18, alpha: 0.92).cgColor
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.34).cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor(calibratedWhite: 0.34, alpha: 0.8).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
 
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.font = NSFont.systemFont(ofSize: 11.5)
-        textField.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+        textField.textColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
         textField.lineBreakMode = .byTruncatingMiddle
         textField.usesSingleLineMode = true
 
@@ -504,17 +526,17 @@ private final class TabChipView: NSView {
         layer?.masksToBounds = true
         layer?.borderWidth = 1
         layer?.borderColor = isActive
-            ? NSColor(calibratedWhite: 0.18, alpha: 0.95).cgColor
-            : NSColor(calibratedWhite: 0.60, alpha: 0.55).cgColor
+            ? NSColor.white.withAlphaComponent(0.75).cgColor
+            : NSColor.white.withAlphaComponent(0.46).cgColor
         layer?.backgroundColor = isActive
-            ? NSColor(calibratedWhite: 0.24, alpha: 0.95).cgColor
-            : NSColor(calibratedWhite: 0.88, alpha: 0.58).cgColor
+            ? NSColor.white.withAlphaComponent(0.42).cgColor
+            : NSColor.white.withAlphaComponent(0.24).cgColor
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailView.imageScaling = .scaleAxesIndependently
         thumbnailView.image = thumbnail
         thumbnailView.wantsLayer = true
-        thumbnailView.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 0.96).cgColor
+        thumbnailView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.68).cgColor
         addSubview(thumbnailView)
 
         NSLayoutConstraint.activate([

@@ -324,6 +324,7 @@ final class MainWindowController: NSWindowController {
         overlayView = nil
 
         webView.navigationDelegate = self
+        clearLayoutConstraints(for: webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webContainer.addSubview(webView)
 
@@ -399,6 +400,8 @@ final class MainWindowController: NSWindowController {
         fromWebView.navigationDelegate = self
         toWebView.navigationDelegate = self
 
+        clearLayoutConstraints(for: fromWebView)
+        clearLayoutConstraints(for: toWebView)
         fromWebView.translatesAutoresizingMaskIntoConstraints = true
         toWebView.translatesAutoresizingMaskIntoConstraints = true
 
@@ -424,6 +427,16 @@ final class MainWindowController: NSWindowController {
         }
 
         webContainer.layoutSubtreeIfNeeded()
+    }
+
+    private func clearLayoutConstraints(for webView: WKWebView) {
+        let related = webContainer.constraints.filter { constraint in
+            (constraint.firstItem as AnyObject?) === webView
+                || (constraint.secondItem as AnyObject?) === webView
+        }
+        if !related.isEmpty {
+            webContainer.removeConstraints(related)
+        }
     }
 
     private func updateInteractiveTabSwitch(totalX: CGFloat) {

@@ -54,9 +54,10 @@ final class GestureOverlayView: NSView {
     override var isOpaque: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
-        let directionSignX: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
-        let dx = event.scrollingDeltaX * directionSignX
-        let dy = event.scrollingDeltaY
+        // Normalize to stroke direction so gesture orientation remains consistent.
+        let directionSign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        let dx = event.scrollingDeltaX * directionSign
+        let dy = event.scrollingDeltaY * directionSign
         hudAnchorPoint = convert(event.locationInWindow, from: nil)
 
         switch state {

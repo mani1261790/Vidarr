@@ -39,7 +39,7 @@ final class GestureOverlayView: NSView {
         dominanceRatio: config.upStrokeDominanceRatio
     )
 
-    private let hudView = GestureHUDView(frame: CGRect(x: 0, y: 0, width: 160, height: 28))
+    private let hudView = GestureHUDView(frame: CGRect(x: 0, y: 0, width: 560, height: 290))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

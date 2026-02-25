@@ -2,17 +2,15 @@ import Cocoa
 
 final class GestureHUDView: NSView {
     private struct Descriptor {
-        let actionTitle: String
-        let gestureHint: String
-        let symbolName: String
-        let tint: NSColor
+        let actionSymbol: String
     }
 
-    private let iconView = NSImageView()
-    private let titleField = NSTextField(labelWithString: "")
-    private let hintField = NSTextField(labelWithString: "")
-    private let capsuleLayer = CALayer()
-    private let strokeLayer = CALayer()
+    private let actionIconView = NSImageView()
+    private let cardLayer = CALayer()
+    private let borderLayer = CALayer()
+    private let iconCapsuleLayer = CALayer()
+    private let gestureShadowLayer = CAShapeLayer()
+    private let gestureLayer = CAShapeLayer()
     private var hideWorkItem: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
@@ -27,15 +25,15 @@ final class GestureHUDView: NSView {
 
     override var isOpaque: Bool { false }
 
-    func showLiveCandidate(name: String, score: CGFloat, at _: CGPoint) {
-        apply(descriptor: descriptor(for: name), committed: false, score: score)
+    func showLiveCandidate(name: String, score _: CGFloat, at _: CGPoint) {
+        apply(name: name, committed: false)
         positionInCenter()
         alphaValue = 1
         isHidden = false
     }
 
-    func showCommittedAction(name: String, score: CGFloat, at _: CGPoint, duration: TimeInterval = 0.3) {
-        apply(descriptor: descriptor(for: name), committed: true, score: score)
+    func showCommittedAction(name: String, score _: CGFloat, at _: CGPoint, duration: TimeInterval = 0.3) {
+        apply(name: name, committed: true)
         positionInCenter()
         alphaValue = 1
         isHidden = false
@@ -54,110 +52,242 @@ final class GestureHUDView: NSView {
         isHidden = true
     }
 
+    override func layout() {
+        super.layout()
+
+        cardLayer.frame = bounds
+        borderLayer.frame = bounds
+
+        let iconCapsuleRect = CGRect(x: bounds.width - 170, y: bounds.midY - 65, width: 130, height: 130)
+        iconCapsuleLayer.frame = iconCapsuleRect
+        iconCapsuleLayer.cornerRadius = iconCapsuleRect.height * 0.5
+
+        actionIconView.frame = CGRect(
+            x: iconCapsuleRect.midX - 42,
+            y: iconCapsuleRect.midY - 42,
+            width: 84,
+            height: 84
+        )
+        updateGesturePath()
+    }
+
     private func setupView() {
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = true
         isHidden = true
 
-        layer?.cornerRadius = 16
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.76).cgColor
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.32).cgColor
-        layer?.borderWidth = 1
-        layer?.shadowColor = NSColor.black.withAlphaComponent(0.65).cgColor
-        layer?.shadowOpacity = 0.35
-        layer?.shadowRadius = 18
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.addSublayer(cardLayer)
+        layer?.addSublayer(borderLayer)
+        layer?.addSublayer(iconCapsuleLayer)
+        layer?.addSublayer(gestureShadowLayer)
+        layer?.addSublayer(gestureLayer)
 
-        capsuleLayer.cornerRadius = 28
-        capsuleLayer.backgroundColor = NSColor.white.withAlphaComponent(0.20).cgColor
-        strokeLayer.cornerRadius = 28
-        strokeLayer.borderWidth = 1
-        strokeLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
-        layer?.addSublayer(capsuleLayer)
-        layer?.addSublayer(strokeLayer)
+        cardLayer.cornerRadius = 24
+        cardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
+        cardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
+        cardLayer.shadowOpacity = 0.34
+        cardLayer.shadowRadius = 24
+        cardLayer.shadowOffset = CGSize(width: 0, height: -2)
 
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(iconView)
+        borderLayer.cornerRadius = 24
+        borderLayer.borderWidth = 1
+        borderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
 
-        titleField.translatesAutoresizingMaskIntoConstraints = false
-        titleField.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
-        titleField.textColor = NSColor.labelColor
-        addSubview(titleField)
+        iconCapsuleLayer.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        iconCapsuleLayer.borderWidth = 1
+        iconCapsuleLayer.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
 
-        hintField.translatesAutoresizingMaskIntoConstraints = false
-        hintField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        hintField.textColor = NSColor.secondaryLabelColor
-        addSubview(hintField)
+        gestureShadowLayer.fillColor = NSColor.clear.cgColor
+        gestureShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        gestureShadowLayer.lineWidth = 12
+        gestureShadowLayer.lineCap = .round
+        gestureShadowLayer.lineJoin = .round
 
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 56),
-            iconView.heightAnchor.constraint(equalToConstant: 56),
+        gestureLayer.fillColor = NSColor.clear.cgColor
+        gestureLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.96).cgColor
+        gestureLayer.lineWidth = 7
+        gestureLayer.lineCap = .round
+        gestureLayer.lineJoin = .round
 
-            titleField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 14),
-            titleField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            titleField.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-
-            hintField.leadingAnchor.constraint(equalTo: titleField.leadingAnchor),
-            hintField.trailingAnchor.constraint(equalTo: titleField.trailingAnchor),
-            hintField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 6)
-        ])
+        actionIconView.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(actionIconView)
     }
 
-    override func layout() {
-        super.layout()
-        let capsuleRect = CGRect(x: 8, y: bounds.midY - 28, width: 56, height: 56)
-        capsuleLayer.frame = capsuleRect
-        strokeLayer.frame = capsuleRect
+    private func apply(name: String, committed: Bool) {
+        let descriptor = descriptor(for: name)
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: committed ? 64 : 60, weight: .bold)
+        let icon = NSImage(systemSymbolName: descriptor.actionSymbol, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
+        actionIconView.image = icon?.withSymbolConfiguration(iconConfig)
+        actionIconView.contentTintColor = NSColor.labelColor.withAlphaComponent(committed ? 1.0 : 0.86)
+
+        gestureLayer.opacity = committed ? 1.0 : 0.82
+        borderLayer.borderColor = NSColor.white.withAlphaComponent(committed ? 0.40 : 0.28).cgColor
+        cardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(committed ? 0.86 : 0.80).cgColor
+
+        if committed {
+            animateCommitPop()
+        }
+        currentGestureName = name
+        updateGesturePath()
     }
 
-    private func apply(descriptor: Descriptor, committed: Bool, score: CGFloat) {
-        let configuration = NSImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-        let image = NSImage(systemSymbolName: descriptor.symbolName, accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "questionmark.circle.fill", accessibilityDescription: nil)
-        iconView.image = image?.withSymbolConfiguration(configuration)
-        iconView.contentTintColor = descriptor.tint
-
-        titleField.stringValue = descriptor.actionTitle + (committed ? " 実行" : " 候補")
-        hintField.stringValue = descriptor.gestureHint + "    score \(String(format: "%.2f", score))"
-    }
+    private var currentGestureName: String = ""
 
     private func positionInCenter() {
         guard let superview else { return }
-        let size = NSSize(width: 340, height: 92)
+        let size = NSSize(width: 560, height: 290)
         let x = (superview.bounds.width - size.width) * 0.5
         let y = (superview.bounds.height - size.height) * 0.5
         frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
     }
 
+    private func gestureRect() -> CGRect {
+        CGRect(x: 34, y: 40, width: 340, height: 210)
+    }
+
+    private func updateGesturePath() {
+        let path = path(for: currentGestureName, in: gestureRect()).cgPath
+        gestureLayer.path = path
+        gestureShadowLayer.path = path
+    }
+
+    private func animateCommitPop() {
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.96
+        scale.toValue = 1.0
+        scale.duration = 0.14
+        scale.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer?.add(scale, forKey: "hudPop")
+    }
+
     private func descriptor(for name: String) -> Descriptor {
         switch name {
         case "Left":
-            return Descriptor(actionTitle: "次のタブへ切り替え", gestureHint: "ジェスチャー  ←", symbolName: "arrow.right.circle.fill", tint: .systemCyan)
+            return Descriptor(actionSymbol: "arrow.right.circle.fill")
         case "Right":
-            return Descriptor(actionTitle: "前のタブへ切り替え", gestureHint: "ジェスチャー  →", symbolName: "arrow.left.circle.fill", tint: .systemCyan)
+            return Descriptor(actionSymbol: "arrow.left.circle.fill")
         case "L":
-            return Descriptor(actionTitle: "現在タブを閉じる", gestureHint: "ジェスチャー  L", symbolName: "xmark.square.fill", tint: .systemOrange)
+            return Descriptor(actionSymbol: "xmark.square.fill")
         case "LL":
-            return Descriptor(actionTitle: "全タブを閉じる", gestureHint: "ジェスチャー  LL", symbolName: "trash.circle.fill", tint: .systemRed)
+            return Descriptor(actionSymbol: "trash.circle.fill")
         case "U":
-            return Descriptor(actionTitle: "閉じたタブを復元", gestureHint: "ジェスチャー  U", symbolName: "arrow.uturn.backward.circle.fill", tint: .systemGreen)
+            return Descriptor(actionSymbol: "arrow.uturn.backward.circle.fill")
         case "O":
-            return Descriptor(actionTitle: "現在タブを再読み込み", gestureHint: "ジェスチャー  O", symbolName: "arrow.clockwise.circle.fill", tint: .systemBlue)
+            return Descriptor(actionSymbol: "arrow.clockwise.circle.fill")
         case "OO":
-            return Descriptor(actionTitle: "全タブを再読み込み", gestureHint: "ジェスチャー  OO", symbolName: "arrow.triangle.2.circlepath.circle.fill", tint: .systemBlue)
+            return Descriptor(actionSymbol: "arrow.triangle.2.circlepath.circle.fill")
         case "UpRight":
-            return Descriptor(actionTitle: "戻る", gestureHint: "ジェスチャー  ↑→", symbolName: "chevron.backward.circle.fill", tint: .systemPurple)
+            return Descriptor(actionSymbol: "chevron.backward.circle.fill")
         case "UpLeft":
-            return Descriptor(actionTitle: "進む", gestureHint: "ジェスチャー  ↑←", symbolName: "chevron.forward.circle.fill", tint: .systemPurple)
+            return Descriptor(actionSymbol: "chevron.forward.circle.fill")
         case "S":
-            return Descriptor(actionTitle: "検索 / URL入力", gestureHint: "ジェスチャー  S", symbolName: "magnifyingglass.circle.fill", tint: .systemTeal)
+            return Descriptor(actionSymbol: "magnifyingglass.circle.fill")
         case "DownLeft":
-            return Descriptor(actionTitle: "新しいタブを開く", gestureHint: "ジェスチャー  ↓←", symbolName: "plus.square.on.square", tint: .systemIndigo)
+            return Descriptor(actionSymbol: "plus.square.on.square")
         default:
-            return Descriptor(actionTitle: "アクション", gestureHint: "ジェスチャー  ?", symbolName: "questionmark.circle.fill", tint: .systemGray)
+            return Descriptor(actionSymbol: "questionmark.circle")
         }
+    }
+
+    private func path(for name: String, in rect: CGRect) -> NSBezierPath {
+        switch name {
+        case "Left":
+            return arrowPath(in: rect, from: CGPoint(x: 0.9, y: 0.5), to: CGPoint(x: 0.1, y: 0.5))
+        case "Right":
+            return arrowPath(in: rect, from: CGPoint(x: 0.1, y: 0.5), to: CGPoint(x: 0.9, y: 0.5))
+        case "L":
+            return polylinePath(in: rect, points: [CGPoint(x: 0.18, y: 0.82), CGPoint(x: 0.18, y: 0.2), CGPoint(x: 0.82, y: 0.2)])
+        case "LL":
+            return polylinePath(in: rect, points: [
+                CGPoint(x: 0.12, y: 0.82), CGPoint(x: 0.12, y: 0.2), CGPoint(x: 0.38, y: 0.2),
+                CGPoint(x: 0.38, y: 0.82), CGPoint(x: 0.38, y: 0.2), CGPoint(x: 0.84, y: 0.2)
+            ])
+        case "U":
+            return polylinePath(in: rect, points: [
+                CGPoint(x: 0.18, y: 0.8), CGPoint(x: 0.18, y: 0.26), CGPoint(x: 0.82, y: 0.26), CGPoint(x: 0.82, y: 0.8)
+            ])
+        case "O":
+            return circlePath(in: rect, centerX: 0.5, centerY: 0.5, radius: 0.31)
+        case "OO":
+            let p = NSBezierPath()
+            p.append(circlePath(in: rect, centerX: 0.37, centerY: 0.5, radius: 0.24))
+            p.append(circlePath(in: rect, centerX: 0.67, centerY: 0.5, radius: 0.24))
+            return p
+        case "UpRight":
+            return polylinePath(in: rect, points: [CGPoint(x: 0.5, y: 0.18), CGPoint(x: 0.5, y: 0.82), CGPoint(x: 0.84, y: 0.82)])
+        case "UpLeft":
+            return polylinePath(in: rect, points: [CGPoint(x: 0.5, y: 0.18), CGPoint(x: 0.5, y: 0.82), CGPoint(x: 0.16, y: 0.82)])
+        case "S":
+            return sCurvePath(in: rect)
+        case "DownLeft":
+            return polylinePath(in: rect, points: [CGPoint(x: 0.5, y: 0.82), CGPoint(x: 0.5, y: 0.18), CGPoint(x: 0.16, y: 0.18)])
+        default:
+            return NSBezierPath()
+        }
+    }
+
+    private func arrowPath(in rect: CGRect, from: CGPoint, to: CGPoint) -> NSBezierPath {
+        let path = NSBezierPath()
+        let start = map(from, in: rect)
+        let end = map(to, in: rect)
+        path.move(to: start)
+        path.line(to: end)
+
+        let angle = atan2(end.y - start.y, end.x - start.x)
+        let head: CGFloat = 22
+        let left = CGPoint(
+            x: end.x - head * cos(angle - .pi / 6),
+            y: end.y - head * sin(angle - .pi / 6)
+        )
+        let right = CGPoint(
+            x: end.x - head * cos(angle + .pi / 6),
+            y: end.y - head * sin(angle + .pi / 6)
+        )
+        path.move(to: end)
+        path.line(to: left)
+        path.move(to: end)
+        path.line(to: right)
+        return path
+    }
+
+    private func polylinePath(in rect: CGRect, points: [CGPoint]) -> NSBezierPath {
+        let path = NSBezierPath()
+        guard let first = points.first else { return path }
+        path.move(to: map(first, in: rect))
+        for point in points.dropFirst() {
+            path.line(to: map(point, in: rect))
+        }
+        return path
+    }
+
+    private func circlePath(in rect: CGRect, centerX: CGFloat, centerY: CGFloat, radius: CGFloat) -> NSBezierPath {
+        let center = map(CGPoint(x: centerX, y: centerY), in: rect)
+        let r = min(rect.width, rect.height) * radius
+        return NSBezierPath(ovalIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+    }
+
+    private func sCurvePath(in rect: CGRect) -> NSBezierPath {
+        let p = NSBezierPath()
+        p.move(to: map(CGPoint(x: 0.82, y: 0.84), in: rect))
+        p.curve(
+            to: map(CGPoint(x: 0.24, y: 0.58), in: rect),
+            controlPoint1: map(CGPoint(x: 0.58, y: 0.92), in: rect),
+            controlPoint2: map(CGPoint(x: 0.34, y: 0.72), in: rect)
+        )
+        p.curve(
+            to: map(CGPoint(x: 0.78, y: 0.18), in: rect),
+            controlPoint1: map(CGPoint(x: 0.1, y: 0.42), in: rect),
+            controlPoint2: map(CGPoint(x: 0.56, y: 0.34), in: rect)
+        )
+        return p
+    }
+
+    private func map(_ point: CGPoint, in rect: CGRect) -> CGPoint {
+        CGPoint(
+            x: rect.minX + rect.width * point.x,
+            y: rect.minY + rect.height * point.y
+        )
     }
 }

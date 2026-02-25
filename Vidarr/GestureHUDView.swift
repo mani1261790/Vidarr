@@ -1,7 +1,7 @@
 import Cocoa
 
 final class GestureHUDView: NSView {
-    static let preferredSize = NSSize(width: 300, height: 280)
+    static let preferredSize = NSSize(width: 220, height: 220)
 
     private struct Descriptor {
         let actionSymbol: String
@@ -58,15 +58,17 @@ final class GestureHUDView: NSView {
         cardLayer.frame = bounds
         borderLayer.frame = bounds
 
-        let iconCapsuleRect = CGRect(x: bounds.midX - 65, y: bounds.midY - 65, width: 130, height: 130)
+        let inset = bounds.width * 0.20
+        let iconCapsuleRect = bounds.insetBy(dx: inset, dy: inset)
         iconCapsuleLayer.frame = iconCapsuleRect
         iconCapsuleLayer.cornerRadius = iconCapsuleRect.height * 0.5
 
+        let iconSide = iconCapsuleRect.width * 0.66
         actionIconView.frame = CGRect(
-            x: iconCapsuleRect.midX - 42,
-            y: iconCapsuleRect.midY - 42,
-            width: 84,
-            height: 84
+            x: iconCapsuleRect.midX - iconSide * 0.5,
+            y: iconCapsuleRect.midY - iconSide * 0.5,
+            width: iconSide,
+            height: iconSide
         )
     }
 
@@ -80,14 +82,14 @@ final class GestureHUDView: NSView {
         layer?.addSublayer(borderLayer)
         layer?.addSublayer(iconCapsuleLayer)
 
-        cardLayer.cornerRadius = 24
+        cardLayer.cornerRadius = 34
         cardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
         cardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
         cardLayer.shadowOpacity = 0.34
         cardLayer.shadowRadius = 24
         cardLayer.shadowOffset = CGSize(width: 0, height: -2)
 
-        borderLayer.cornerRadius = 24
+        borderLayer.cornerRadius = 34
         borderLayer.borderWidth = 1
         borderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
 

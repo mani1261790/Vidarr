@@ -202,7 +202,7 @@ final class MainWindowController: NSWindowController {
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 1),
             tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -1),
-            tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
+            tabStripContainer.trailingAnchor.constraint(lessThanOrEqualTo: newTabButton.leadingAnchor, constant: -6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
             tabStripScrollView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),

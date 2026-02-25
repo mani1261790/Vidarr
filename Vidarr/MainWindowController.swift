@@ -151,8 +151,15 @@ final class MainWindowController: NSWindowController {
         newTabButton.target = self
         newTabButton.action = #selector(didTapNewTab)
         newTabButton.isBordered = false
-        newTabButton.font = NSFont.systemFont(ofSize: 20, weight: .regular)
-        newTabButton.contentTintColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
+        newTabButton.title = ""
+        newTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab")
+        newTabButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        newTabButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.92)
+        newTabButton.wantsLayer = true
+        newTabButton.layer?.cornerRadius = 6
+        newTabButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        newTabButton.layer?.borderWidth = 1
+        newTabButton.layer?.borderColor = NSColor.white.withAlphaComponent(0.34).cgColor
 
         rightPanelView.translatesAutoresizingMaskIntoConstraints = false
 

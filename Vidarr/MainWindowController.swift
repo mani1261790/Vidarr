@@ -3,13 +3,13 @@ import WebKit
 
 final class MainWindowController: NSWindowController {
     private let rootContainer = NSView()
-    private let toolbarContainer = NSView()
+    private let toolbarContainer = GradientBarView()
     private let webContainer = NSView()
 
-    private let addressField = NSTextField()
-    private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let tabStripContainer = NSView()
     private let tabStripStackView = NSStackView()
+    private let newTabButton = NSButton(title: "+", target: nil, action: nil)
+    private let addressField = NSTextField()
 
     private let tabManager: TabManager
     private let session: BrowserSession
@@ -58,9 +58,6 @@ final class MainWindowController: NSWindowController {
         rootContainer.addSubview(toolbarContainer)
         rootContainer.addSubview(webContainer)
 
-        toolbarContainer.wantsLayer = true
-        toolbarContainer.layer?.backgroundColor = NSColor(calibratedWhite: 0.88, alpha: 0.96).cgColor
-
         setupToolbarUI()
 
         NSLayoutConstraint.activate([
@@ -72,7 +69,7 @@ final class MainWindowController: NSWindowController {
             toolbarContainer.topAnchor.constraint(equalTo: rootContainer.topAnchor),
             toolbarContainer.leadingAnchor.constraint(equalTo: rootContainer.leadingAnchor),
             toolbarContainer.trailingAnchor.constraint(equalTo: rootContainer.trailingAnchor),
-            toolbarContainer.heightAnchor.constraint(equalToConstant: 48),
+            toolbarContainer.heightAnchor.constraint(equalToConstant: 50),
 
             webContainer.topAnchor.constraint(equalTo: toolbarContainer.bottomAnchor),
             webContainer.leadingAnchor.constraint(equalTo: rootContainer.leadingAnchor),
@@ -85,25 +82,27 @@ final class MainWindowController: NSWindowController {
         tabStripContainer.translatesAutoresizingMaskIntoConstraints = false
         tabStripContainer.wantsLayer = true
         tabStripContainer.layer?.backgroundColor = NSColor.clear.cgColor
-        tabStripContainer.addSubview(tabStripStackView)
+        tabStripContainer.layer?.masksToBounds = true
 
         tabStripStackView.translatesAutoresizingMaskIntoConstraints = false
         tabStripStackView.orientation = .horizontal
         tabStripStackView.alignment = .centerY
         tabStripStackView.spacing = 6
 
+        tabStripContainer.addSubview(tabStripStackView)
+
+        newTabButton.translatesAutoresizingMaskIntoConstraints = false
+        newTabButton.target = self
+        newTabButton.action = #selector(didTapNewTab)
+        newTabButton.bezelStyle = .texturedRounded
+        newTabButton.font = NSFont.systemFont(ofSize: 15, weight: .regular)
+
         addressField.translatesAutoresizingMaskIntoConstraints = false
         addressField.placeholderString = "開きたいページを入力"
-        addressField.font = NSFont.systemFont(ofSize: 13)
+        addressField.font = NSFont.systemFont(ofSize: 12.5)
         addressField.focusRingType = .none
         addressField.bezelStyle = .roundedBezel
         addressField.delegate = self
-
-        newTabButton.translatesAutoresizingMaskIntoConstraints = false
-        newTabButton.bezelStyle = .texturedRounded
-        newTabButton.font = NSFont.systemFont(ofSize: 16, weight: .medium)
-        newTabButton.target = self
-        newTabButton.action = #selector(didTapNewTab)
 
         toolbarContainer.addSubview(tabStripContainer)
         toolbarContainer.addSubview(newTabButton)
@@ -111,27 +110,24 @@ final class MainWindowController: NSWindowController {
 
         NSLayoutConstraint.activate([
             tabStripContainer.leadingAnchor.constraint(equalTo: toolbarContainer.leadingAnchor, constant: 8),
-            tabStripContainer.topAnchor.constraint(equalTo: toolbarContainer.topAnchor, constant: 6),
-            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContainer.bottomAnchor, constant: -6),
+            tabStripContainer.topAnchor.constraint(equalTo: toolbarContainer.topAnchor, constant: 8),
+            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContainer.bottomAnchor, constant: -8),
+            tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -8),
 
             tabStripStackView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
-            tabStripStackView.trailingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor),
             tabStripStackView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
             tabStripStackView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
+            tabStripStackView.trailingAnchor.constraint(lessThanOrEqualTo: tabStripContainer.trailingAnchor),
 
-            newTabButton.leadingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor, constant: 8),
             newTabButton.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
+            newTabButton.trailingAnchor.constraint(equalTo: addressField.leadingAnchor, constant: -10),
             newTabButton.widthAnchor.constraint(equalToConstant: 28),
 
-            addressField.leadingAnchor.constraint(equalTo: newTabButton.trailingAnchor, constant: 10),
-            addressField.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
             addressField.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
-            addressField.heightAnchor.constraint(equalToConstant: 28),
-            addressField.widthAnchor.constraint(greaterThanOrEqualToConstant: 250)
+            addressField.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
+            addressField.heightAnchor.constraint(equalToConstant: 27),
+            addressField.widthAnchor.constraint(equalToConstant: 320)
         ])
-
-        addressField.setContentHuggingPriority(.required, for: .horizontal)
-        addressField.setContentCompressionResistancePriority(.required, for: .horizontal)
     }
 
     private func configureBindings() {
@@ -186,7 +182,22 @@ final class MainWindowController: NSWindowController {
 
         overlayView = overlay
         addressField.stringValue = webView.url?.absoluteString ?? ""
+        captureThumbnail(for: webView)
         rebuildTabStrip()
+    }
+
+    private func captureThumbnail(for webView: WKWebView) {
+        guard webView.bounds.width > 1, webView.bounds.height > 1 else { return }
+
+        let width = min(webView.bounds.width, 360)
+        let height = min(webView.bounds.height, 220)
+        let snapshotConfig = WKSnapshotConfiguration()
+        snapshotConfig.rect = CGRect(x: 0, y: 0, width: width, height: height)
+
+        webView.takeSnapshot(with: snapshotConfig) { [weak self, weak webView] image, _ in
+            guard let self, let webView else { return }
+            self.tabManager.updateThumbnail(for: webView, image: image)
+        }
     }
 
     private func rebuildTabStrip() {
@@ -196,7 +207,7 @@ final class MainWindowController: NSWindowController {
         }
 
         for item in tabManager.tabStripItems {
-            let chip = TabChipView(index: item.index, title: item.title, isActive: item.isActive)
+            let chip = TabChipView(index: item.index, title: item.title, thumbnail: item.thumbnail, isActive: item.isActive)
             chip.onSelect = { [weak self] index in
                 self?.tabManager.selectTab(index: index)
             }
@@ -234,6 +245,9 @@ extension MainWindowController: TabManagerDelegate {
 
 extension MainWindowController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        tabManager.updateMetadata(for: webView)
+        captureThumbnail(for: webView)
+
         if tabManager.currentWebView === webView {
             addressField.stringValue = webView.url?.absoluteString ?? ""
             rebuildTabStrip()
@@ -241,19 +255,47 @@ extension MainWindowController: WKNavigationDelegate {
     }
 }
 
+private final class GradientBarView: NSView {
+    private let gradientLayer = CAGradientLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.addSublayer(gradientLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layer?.addSublayer(gradientLayer)
+    }
+
+    override func layout() {
+        super.layout()
+        gradientLayer.frame = bounds
+        gradientLayer.colors = [
+            NSColor(calibratedWhite: 0.82, alpha: 0.98).cgColor,
+            NSColor(calibratedWhite: 0.72, alpha: 0.98).cgColor
+        ]
+        gradientLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
+        gradientLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
+
+        layer?.borderColor = NSColor(calibratedWhite: 0.42, alpha: 0.65).cgColor
+        layer?.borderWidth = 0.6
+    }
+}
+
 private final class TabChipView: NSView {
     private let index: Int
-    private let preview = NSView()
+    private let thumbnailView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let isActive: Bool
 
     var onSelect: ((Int) -> Void)?
 
-    init(index: Int, title: String, isActive: Bool) {
+    init(index: Int, title: String, thumbnail: NSImage?, isActive: Bool) {
         self.index = index
-        self.isActive = isActive
         super.init(frame: .zero)
-        setupView(title: title)
+        setupView(title: title, thumbnail: thumbnail, isActive: isActive)
     }
 
     required init?(coder: NSCoder) {
@@ -264,51 +306,49 @@ private final class TabChipView: NSView {
         onSelect?(index)
     }
 
-    private func setupView(title: String) {
+    private func setupView(title: String, thumbnail: NSImage?, isActive: Bool) {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.cornerRadius = 4
+        toolTip = title
+
+        layer?.cornerRadius = 3
+        layer?.masksToBounds = true
         layer?.borderWidth = 1
+        layer?.borderColor = isActive
+            ? NSColor(calibratedWhite: 0.16, alpha: 0.85).cgColor
+            : NSColor(calibratedWhite: 0.5, alpha: 0.5).cgColor
+        layer?.backgroundColor = isActive
+            ? NSColor(calibratedWhite: 0.22, alpha: 0.95).cgColor
+            : NSColor(calibratedWhite: 0.82, alpha: 0.55).cgColor
 
-        if isActive {
-            layer?.backgroundColor = NSColor(calibratedWhite: 0.3, alpha: 0.9).cgColor
-            layer?.borderColor = NSColor(calibratedWhite: 0.2, alpha: 0.8).cgColor
-        } else {
-            layer?.backgroundColor = NSColor(calibratedWhite: 0.75, alpha: 0.55).cgColor
-            layer?.borderColor = NSColor(calibratedWhite: 0.6, alpha: 0.5).cgColor
-        }
-
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        preview.wantsLayer = true
-        preview.layer?.cornerRadius = 2
-        preview.layer?.backgroundColor = isActive
-            ? NSColor(calibratedWhite: 0.9, alpha: 0.45).cgColor
-            : NSColor(calibratedWhite: 0.95, alpha: 0.4).cgColor
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        thumbnailView.imageScaling = .scaleAxesIndependently
+        thumbnailView.image = thumbnail
+        thumbnailView.wantsLayer = true
+        thumbnailView.layer?.backgroundColor = NSColor(calibratedWhite: 0.93, alpha: 0.9).cgColor
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        titleLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
         titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.textColor = isActive ? .white : .secondaryLabelColor
         titleLabel.stringValue = title
-        titleLabel.textColor = isActive ? NSColor.white : NSColor.labelColor
 
-        addSubview(preview)
+        addSubview(thumbnailView)
         addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            preview.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            preview.centerYAnchor.constraint(equalTo: centerYAnchor),
-            preview.widthAnchor.constraint(equalToConstant: 20),
-            preview.heightAnchor.constraint(equalToConstant: 14),
+            widthAnchor.constraint(equalToConstant: 108),
+            heightAnchor.constraint(equalToConstant: 34),
 
-            titleLabel.leadingAnchor.constraint(equalTo: preview.trailingAnchor, constant: 6),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            thumbnailView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
+            thumbnailView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
+            thumbnailView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            thumbnailView.bottomAnchor.constraint(equalTo: titleLabel.topAnchor, constant: -1),
 
-            heightAnchor.constraint(equalToConstant: 28)
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            titleLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            titleLabel.heightAnchor.constraint(equalToConstant: 10)
         ])
-
-        let preferredWidth = widthAnchor.constraint(equalToConstant: 130)
-        preferredWidth.priority = .defaultLow
-        preferredWidth.isActive = true
     }
 }

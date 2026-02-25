@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import WebKit
 
@@ -10,6 +11,7 @@ struct TabStripItem {
     let index: Int
     let title: String
     let isActive: Bool
+    let thumbnail: NSImage?
 }
 
 final class TabManager {
@@ -18,6 +20,7 @@ final class TabManager {
     private struct Tab {
         let webView: WKWebView
         var lastKnownURL: URL?
+        var thumbnail: NSImage?
     }
 
     private struct ClosedTabSnapshot {
@@ -44,7 +47,7 @@ final class TabManager {
             let fallbackTitle = resolvedURL?.host ?? resolvedURL?.absoluteString ?? "New Tab"
             let resolvedTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
             let title = (resolvedTitle?.isEmpty == false) ? resolvedTitle! : fallbackTitle
-            return TabStripItem(index: index, title: title, isActive: index == currentIndex)
+            return TabStripItem(index: index, title: title, isActive: index == currentIndex, thumbnail: tab.thumbnail)
         }
     }
 
@@ -53,7 +56,7 @@ final class TabManager {
             guard let self else { return }
 
             let webView = BrowserSession.makeConfiguredWebView()
-            var tab = Tab(webView: webView, lastKnownURL: nil)
+            var tab = Tab(webView: webView, lastKnownURL: nil, thumbnail: nil)
             tabs.append(tab)
             currentIndex = tabs.count - 1
 
@@ -148,6 +151,24 @@ final class TabManager {
             for tab in tabs {
                 tab.webView.reload()
             }
+        }
+    }
+
+    func updateMetadata(for webView: WKWebView) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard let index = tabs.firstIndex(where: { $0.webView === webView }) else { return }
+            tabs[index].lastKnownURL = webView.url
+            delegate?.tabManager(self, didUpdateTabs: tabs.count)
+        }
+    }
+
+    func updateThumbnail(for webView: WKWebView, image: NSImage?) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard let index = tabs.firstIndex(where: { $0.webView === webView }) else { return }
+            tabs[index].thumbnail = image
+            delegate?.tabManager(self, didUpdateTabs: tabs.count)
         }
     }
 

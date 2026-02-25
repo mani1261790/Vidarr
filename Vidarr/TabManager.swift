@@ -96,7 +96,8 @@ final class TabManager {
     func selectNextTab() {
         performOnMain { [weak self] in
             guard let self, !tabs.isEmpty else { return }
-            let next = (currentIndex + 1 + tabs.count) % tabs.count
+            let next = currentIndex + 1
+            guard next < tabs.count else { return }
             selectTab(index: next)
         }
     }
@@ -109,7 +110,8 @@ final class TabManager {
     func selectPrevTab() {
         performOnMain { [weak self] in
             guard let self, !tabs.isEmpty else { return }
-            let previous = (currentIndex - 1 + tabs.count) % tabs.count
+            let previous = currentIndex - 1
+            guard previous >= 0 else { return }
             selectTab(index: previous)
         }
     }

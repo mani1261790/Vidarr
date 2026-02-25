@@ -5,6 +5,7 @@ final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 74
         static let tabChipSize = NSSize(width: 96, height: 48)
+        static let tabSwitchGap: CGFloat = 16
     }
 
     private let rootContainer = NSView()
@@ -375,11 +376,12 @@ final class MainWindowController: NSWindowController {
         let targetIndex: Int
         switch direction {
         case .left:
-            targetIndex = (currentIndex + 1 + count) % count
+            guard currentIndex + 1 < count else { return false }
+            targetIndex = currentIndex + 1
         case .right:
-            targetIndex = (currentIndex - 1 + count) % count
+            guard currentIndex - 1 >= 0 else { return false }
+            targetIndex = currentIndex - 1
         }
-        guard targetIndex != currentIndex else { return false }
         guard let toWebView = tabManager.webView(at: targetIndex) else { return false }
 
         prepareInteractiveTabSwitchViews(from: fromWebView, to: toWebView, direction: direction)
@@ -407,7 +409,9 @@ final class MainWindowController: NSWindowController {
 
         let bounds = webContainer.bounds
         fromWebView.frame = bounds
-        let startX = direction == .left ? bounds.width : -bounds.width
+        let startX = direction == .left
+            ? bounds.width + UI.tabSwitchGap
+            : -(bounds.width + UI.tabSwitchGap)
         toWebView.frame = bounds.offsetBy(dx: startX, dy: 0)
 
         if toWebView.superview !== webContainer {
@@ -450,11 +454,11 @@ final class MainWindowController: NSWindowController {
         case .left:
             offset = max(-width, min(0, totalX))
             state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
-            state.toWebView.frame = bounds.offsetBy(dx: width + offset, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: width + UI.tabSwitchGap + offset, dy: 0)
         case .right:
             offset = min(width, max(0, totalX))
             state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
-            state.toWebView.frame = bounds.offsetBy(dx: -width + offset, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: -width - UI.tabSwitchGap + offset, dy: 0)
         }
     }
 
@@ -480,11 +484,15 @@ final class MainWindowController: NSWindowController {
         let fromTargetX: CGFloat
         let toTargetX: CGFloat
         if shouldCommit {
-            fromTargetX = state.direction == .left ? -width : width
+            fromTargetX = state.direction == .left
+                ? -(width + UI.tabSwitchGap)
+                : (width + UI.tabSwitchGap)
             toTargetX = 0
         } else {
             fromTargetX = 0
-            toTargetX = state.direction == .left ? width : -width
+            toTargetX = state.direction == .left
+                ? (width + UI.tabSwitchGap)
+                : -(width + UI.tabSwitchGap)
         }
 
         NSAnimationContext.runAnimationGroup { context in

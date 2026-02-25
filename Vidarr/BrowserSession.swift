@@ -1,44 +1,55 @@
 import Foundation
 import WebKit
 
-/// 現在表示中の WKWebView を操作する薄いセッション層。
-/// TabManager に依存し、常に現在のタブの WebView を対象に操作します。
+/// 現在タブの WKWebView 操作と共通設定を提供するセッション層。
 final class BrowserSession {
+    static let defaultHomeURL = URL(string: "https://www.google.com")!
+
     private unowned let tabManager: TabManager
 
     init(tabManager: TabManager) {
         self.tabManager = tabManager
     }
 
-    /// 現在表示中の WebView（存在しない場合は nil）
-    var currentWebView: WKWebView? { tabManager.currentWebView }
+    var currentWebView: WKWebView? {
+        tabManager.currentWebView
+    }
+
+    static func makeConfiguredWebView() -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsAirPlayForMediaPlayback = true
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.allowsBackForwardNavigationGestures = false
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        return webView
+    }
 
     // MARK: - Navigation
-    public func goBack() {
+    func goBack() {
         performOnMain { [weak self] in
             guard let webView = self?.currentWebView, webView.canGoBack else { return }
             webView.goBack()
         }
     }
 
-    public func goForward() {
+    func goForward() {
         performOnMain { [weak self] in
             guard let webView = self?.currentWebView, webView.canGoForward else { return }
             webView.goForward()
         }
     }
 
-    public func reload() {
+    func reload() {
         performOnMain { [weak self] in
             self?.currentWebView?.reload()
         }
     }
 
-    public func load(url: URL) {
+    func load(url: URL) {
         performOnMain { [weak self] in
             guard let webView = self?.currentWebView else { return }
-            let req = URLRequest(url: url)
-            webView.load(req)
+            webView.load(URLRequest(url: url))
         }
     }
 
@@ -47,7 +58,7 @@ final class BrowserSession {
         if Thread.isMainThread {
             work()
         } else {
-            DispatchQueue.main.async { work() }
+            DispatchQueue.main.async(execute: work)
         }
     }
 }

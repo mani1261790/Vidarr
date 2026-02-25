@@ -154,6 +154,12 @@ final class GestureOverlayView: NSView {
             return
         }
 
+        if let horizontal = recognizeHorizontalSwipe(points: capturePoints) {
+            performAction(for: horizontal.name)
+            hudView.hideImmediately()
+            return
+        }
+
         guard !captureInvalidated else {
             hudView.hideImmediately()
             return
@@ -181,6 +187,37 @@ final class GestureOverlayView: NSView {
         } else {
             hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
         }
+    }
+
+    private func recognizeHorizontalSwipe(points: [CGPoint]) -> GestureResult? {
+        guard points.count >= 3 else { return nil }
+
+        let start = points[0]
+        let end = points[points.count - 1]
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let absDX = abs(dx)
+        let absDY = abs(dy)
+
+        guard absDX >= 36 else { return nil }
+        guard absDX >= absDY * 1.6 else { return nil }
+
+        let path = pathLength(points)
+        guard path >= 32 else { return nil }
+        guard path <= absDX * 1.5 + 8 else { return nil }
+
+        // 波打つ入力を除外し、左右スクロールに近い直線ストロークだけを対象にする。
+        var minY = points[0].y
+        var maxY = points[0].y
+        for point in points {
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+        let verticalExcursion = maxY - minY
+        guard verticalExcursion <= max(26, absDX * 0.36) else { return nil }
+
+        let name = dx < 0 ? "Left" : "Right"
+        return GestureResult(name: name, score: 1.0)
     }
 
     private func resetCaptureState() {

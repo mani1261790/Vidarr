@@ -467,19 +467,20 @@ final class MainWindowController: NSWindowController {
         let bounds = webContainer.bounds
         let width = bounds.width
         guard width > 1 else { return }
+        let fullTravel = width + UI.tabSwitchGap
 
         let offset: CGFloat
         switch state.direction {
         case .left:
-            offset = max(-width, min(0, totalX))
+            offset = max(-fullTravel, min(0, totalX))
             let fromX = pixelAligned(offset)
-            let toX = pixelAligned(width + UI.tabSwitchGap + offset)
+            let toX = pixelAligned(fullTravel + offset)
             state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
             state.toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
         case .right:
-            offset = min(width, max(0, totalX))
+            offset = min(fullTravel, max(0, totalX))
             let fromX = pixelAligned(offset)
-            let toX = pixelAligned(-width - UI.tabSwitchGap + offset)
+            let toX = pixelAligned(-fullTravel + offset)
             state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
             state.toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
         }
@@ -495,7 +496,7 @@ final class MainWindowController: NSWindowController {
             return
         }
 
-        let commitThreshold = max(88, width * 0.22)
+        let commitThreshold = max(84, width * 0.18)
         let shouldCommit: Bool
         switch state.direction {
         case .left:
@@ -521,11 +522,13 @@ final class MainWindowController: NSWindowController {
         let currentFromX = state.fromWebView.frame.origin.x
         let remaining = abs(fromTargetX - currentFromX)
         let normalized = min(1.0, max(0.0, remaining / max(width + UI.tabSwitchGap, 1)))
-        let duration = 0.12 + (0.20 * normalized)
+        let minDuration: TimeInterval = shouldCommit ? 0.22 : 0.16
+        let maxDuration: TimeInterval = shouldCommit ? 0.34 : 0.24
+        let duration = minDuration + ((maxDuration - minDuration) * TimeInterval(normalized))
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.timingFunction = CAMediaTimingFunction(name: shouldCommit ? .easeOut : .easeInEaseOut)
             state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
             state.toWebView.animator().frame.origin.x = pixelAligned(toTargetX)
         } completionHandler: { [weak self] in

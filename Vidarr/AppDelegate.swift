@@ -13,9 +13,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+
         let windowController = MainWindowController()
-        self.mainWindowController = windowController
+        mainWindowController = windowController
+
         windowController.showWindow(self)
+        windowController.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else { return true }
+        mainWindowController?.showWindow(self)
+        mainWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {

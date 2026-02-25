@@ -35,7 +35,6 @@ final class MainWindowController: NSWindowController {
         }
         window.isReleasedWhenClosed = false
         window.center()
-        window.setFrameAutosaveName("MainWindow")
 
         super.init(window: window)
 

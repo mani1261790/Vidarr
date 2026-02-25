@@ -13,7 +13,7 @@ final class MainWindowController: NSWindowController {
     private let webContainer = NonDraggableView()
 
     private let tabStripContainer = NonDraggableView()
-    private let tabStripScrollView = NonDraggableScrollView()
+    private let tabStripScrollView = TabStripScrollView()
     private let tabStripDocumentView = NonDraggableView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
@@ -239,6 +239,7 @@ final class MainWindowController: NSWindowController {
             tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -2)
         ])
 
+        setupTabStripInteractions()
         applyAddressDisplayMode(display: "")
     }
 
@@ -593,18 +594,6 @@ final class MainWindowController: NSWindowController {
                 isActive: item.isActive,
                 isProtected: item.isProtected
             )
-            chip.onSelect = { [weak self] index in
-                self?.tabManager.selectTab(index: index)
-            }
-            chip.onToggleProtection = { [weak self] index in
-                self?.tabManager.toggleProtection(index: index)
-            }
-            chip.onDragMoved = { [weak self] fromIndex, locationInWindow in
-                self?.handleTabDragMoved(fromIndex: fromIndex, locationInWindow: locationInWindow)
-            }
-            chip.onDragEnded = { [weak self] fromIndex, locationInWindow in
-                self?.handleTabDragEnded(fromIndex: fromIndex, locationInWindow: locationInWindow)
-            }
             tabStripStackView.addArrangedSubview(chip)
         }
 
@@ -671,6 +660,36 @@ final class MainWindowController: NSWindowController {
         } else {
             clipView.scroll(to: .zero)
             tabStripScrollView.reflectScrolledClipView(clipView)
+        }
+    }
+
+    private func setupTabStripInteractions() {
+        tabStripScrollView.onClick = { [weak self] locationInWindow, clickCount in
+            guard let self, let index = self.nearestTabIndex(to: locationInWindow) else { return }
+            if clickCount >= 2 {
+                self.tabManager.toggleProtection(index: index)
+            } else {
+                self.tabManager.selectTab(index: index)
+            }
+        }
+
+        tabStripScrollView.onDragBegan = { [weak self] startInWindow in
+            guard let self else { return }
+            self.dragFromTabIndex = self.nearestTabIndex(to: startInWindow)
+            self.dragToTabIndex = self.dragFromTabIndex
+            if let source = self.dragFromTabIndex {
+                self.tabManager.selectTab(index: source)
+            }
+        }
+
+        tabStripScrollView.onDragMoved = { [weak self] currentInWindow in
+            guard let self, let source = self.dragFromTabIndex else { return }
+            self.handleTabDragMoved(fromIndex: source, locationInWindow: currentInWindow)
+        }
+
+        tabStripScrollView.onDragEnded = { [weak self] endInWindow in
+            guard let self, let source = self.dragFromTabIndex else { return }
+            self.handleTabDragEnded(fromIndex: source, locationInWindow: endInWindow)
         }
     }
 
@@ -879,8 +898,50 @@ private class NonDraggableView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
-private final class NonDraggableScrollView: NSScrollView {
+private class NonDraggableScrollView: NSScrollView {
     override var mouseDownCanMoveWindow: Bool { false }
+}
+
+private final class TabStripScrollView: NonDraggableScrollView {
+    var onClick: ((NSPoint, Int) -> Void)?
+    var onDragBegan: ((NSPoint) -> Void)?
+    var onDragMoved: ((NSPoint) -> Void)?
+    var onDragEnded: ((NSPoint) -> Void)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        let start = event.locationInWindow
+        if event.clickCount >= 2 {
+            onClick?(start, event.clickCount)
+            return
+        }
+
+        var dragging = false
+        while let next = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if next.type == .leftMouseDragged {
+                let dx = next.locationInWindow.x - start.x
+                let dy = next.locationInWindow.y - start.y
+                if !dragging, hypot(dx, dy) >= 4 {
+                    dragging = true
+                    onDragBegan?(start)
+                }
+                if dragging {
+                    onDragMoved?(next.locationInWindow)
+                }
+                continue
+            }
+
+            if next.type == .leftMouseUp {
+                if dragging {
+                    onDragEnded?(next.locationInWindow)
+                } else {
+                    onClick?(start, 1)
+                }
+                return
+            }
+        }
+    }
 }
 
 private final class PassthroughImageView: NSImageView {
@@ -908,6 +969,10 @@ private final class AddressDisplayView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        // handled on mouseUp
+    }
+
+    override func mouseUp(with event: NSEvent) {
         onClick?()
     }
 
@@ -924,8 +989,6 @@ private final class AddressDisplayView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
-        addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(handleClickGesture)))
-
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.font = NSFont.systemFont(ofSize: 13.0, weight: .regular)
         textField.textColor = NSColor.labelColor.withAlphaComponent(0.92)
@@ -942,9 +1005,6 @@ private final class AddressDisplayView: NSView {
         ])
     }
 
-    @objc private func handleClickGesture() {
-        onClick?()
-    }
 }
 
 private final class TabChipView: NSView {
@@ -955,10 +1015,6 @@ private final class TabChipView: NSView {
     private let active: Bool
     private let protectedState: Bool
 
-    var onSelect: ((Int) -> Void)?
-    var onToggleProtection: ((Int) -> Void)?
-    var onDragMoved: ((Int, NSPoint) -> Void)?
-    var onDragEnded: ((Int, NSPoint) -> Void)?
     var isActiveChip: Bool { active }
     var tabIndex: Int { index }
 
@@ -976,47 +1032,7 @@ private final class TabChipView: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        return self
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        if event.clickCount >= 2 {
-            onToggleProtection?(index)
-            return
-        }
-
-        onSelect?(index)
-        guard let window else { return }
-
-        let startPoint = event.locationInWindow
-        var dragging = false
-
-        while let nextEvent = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            if nextEvent.type == .leftMouseDragged {
-                let deltaX = nextEvent.locationInWindow.x - startPoint.x
-                let deltaY = nextEvent.locationInWindow.y - startPoint.y
-                if !dragging, hypot(deltaX, deltaY) >= 4 {
-                    dragging = true
-                    alphaValue = 0.72
-                }
-
-                if dragging {
-                    onDragMoved?(index, nextEvent.locationInWindow)
-                }
-                continue
-            }
-
-            if nextEvent.type == .leftMouseUp {
-                if dragging {
-                    alphaValue = 1
-                    onDragEnded?(index, nextEvent.locationInWindow)
-                }
-                return
-            }
-        }
-    }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func layout() {
         super.layout()

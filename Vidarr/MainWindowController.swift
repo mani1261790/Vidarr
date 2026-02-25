@@ -155,6 +155,8 @@ final class MainWindowController: NSWindowController {
         newTabButton.contentTintColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
 
         rightPanelView.translatesAutoresizingMaskIntoConstraints = false
+        let rightPanelClick = NSClickGestureRecognizer(target: self, action: #selector(handleRightPanelClick(_:)))
+        rightPanelView.addGestureRecognizer(rightPanelClick)
 
         addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
         addressDisplayView.onClick = { [weak self] in
@@ -166,6 +168,8 @@ final class MainWindowController: NSWindowController {
         addressEditorField.font = NSFont.systemFont(ofSize: 12.0)
         addressEditorField.focusRingType = .none
         addressEditorField.bezelStyle = .roundedBezel
+        addressEditorField.drawsBackground = true
+        addressEditorField.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96)
         addressEditorField.isHidden = true
 
         tabSearchField.translatesAutoresizingMaskIntoConstraints = false
@@ -277,6 +281,15 @@ final class MainWindowController: NSWindowController {
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
         tabSearchQuery = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         rebuildTabStrip()
+    }
+
+    @objc private func handleRightPanelClick(_ recognizer: NSClickGestureRecognizer) {
+        guard recognizer.state == .ended else { return }
+        guard !isAddressEditing else { return }
+        let point = recognizer.location(in: rightPanelView)
+        let pointInAddress = rightPanelView.convert(point, to: addressDisplayView)
+        guard addressDisplayView.bounds.contains(pointInAddress) else { return }
+        beginAddressEditing()
     }
 
     private func beginAddressEditing() {
@@ -859,12 +872,15 @@ private final class AddressDisplayView: NSView {
 
     private func setupView() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.26).cgColor
+        layer?.cornerRadius = 5
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
         addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(handleClickGesture)))
 
         textField.translatesAutoresizingMaskIntoConstraints = false
-        textField.font = NSFont.systemFont(ofSize: 13.0, weight: .regular)
-        textField.textColor = NSColor(calibratedWhite: 0.35, alpha: 0.92)
+        textField.font = NSFont.monospacedSystemFont(ofSize: 12.0, weight: .semibold)
+        textField.textColor = NSColor(calibratedWhite: 0.95, alpha: 0.98)
         textField.lineBreakMode = .byTruncatingMiddle
         textField.usesSingleLineMode = true
         textField.alignment = .right

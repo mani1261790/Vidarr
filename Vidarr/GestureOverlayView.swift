@@ -35,6 +35,8 @@ final class GestureOverlayView: NSView {
     private var interactiveTabSwipeActive = false
     private var interactiveTabSwipeTotalX: CGFloat = 0
     private var hudAnchorPoint: CGPoint = .zero
+    private var latestEventTimestamp: TimeInterval = 0
+    private var captureSuppressionUntil: TimeInterval = 0
     private let allowedGestureNames: Set<String> = [
         "UpRight", "UpLeft", "DownRight", "DownLeft",
         "O", "S", "OO", "DownRightDownRight",
@@ -64,6 +66,13 @@ final class GestureOverlayView: NSView {
     override var isOpaque: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
+        latestEventTimestamp = event.timestamp
+
+        if event.timestamp < captureSuppressionUntil {
+            super.scrollWheel(with: event)
+            return
+        }
+
         // Normalize to stroke direction. X and Y use independent signs.
         let xSign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         let ySign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
@@ -168,12 +177,6 @@ final class GestureOverlayView: NSView {
             return
         }
 
-        if let horizontal = recognizeHorizontalSwipe(points: capturePoints) {
-            performAction(for: horizontal.name)
-            hudView.hideImmediately()
-            return
-        }
-
         guard !captureInvalidated else {
             hudView.hideImmediately()
             return
@@ -190,17 +193,24 @@ final class GestureOverlayView: NSView {
             )
         }()
 
-        guard let result = strict ?? relaxed else {
+        if let result = strict ?? relaxed {
+            performAction(for: result.name)
+            if result.name == "Left" || result.name == "Right" {
+                hudView.hideImmediately()
+            } else {
+                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
+            }
+            return
+        }
+
+        // テンプレート不成立時のみ水平スワイプへフォールバックする。
+        if let horizontal = recognizeHorizontalSwipe(points: capturePoints) {
+            performAction(for: horizontal.name)
             hudView.hideImmediately()
             return
         }
 
-        performAction(for: result.name)
-        if result.name == "Left" || result.name == "Right" {
-            hudView.hideImmediately()
-        } else {
-            hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
-        }
+        hudView.hideImmediately()
     }
 
     private func recognizeHorizontalSwipe(points: [CGPoint]) -> GestureResult? {
@@ -353,8 +363,10 @@ final class GestureOverlayView: NSView {
             actions.gestureTabSwitchRight()
         case "DownRight":
             actions.tabClose()
+            captureSuppressionUntil = latestEventTimestamp + 0.28
         case "DownRightDownRight":
             actions.tabCloseAll()
+            captureSuppressionUntil = latestEventTimestamp + 0.28
         case "O":
             actions.reload()
         case "OO":

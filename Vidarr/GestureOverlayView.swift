@@ -6,7 +6,7 @@ final class GestureOverlayView: NSView {
         let triggerDominanceRatio: CGFloat = 1.65
         let triggerWindowMs: TimeInterval = 90
         let seedHistoryWindowMs: TimeInterval = 240
-        let captureEndTimeoutMs: TimeInterval = 45
+        let captureEndTimeoutMs: TimeInterval = 22
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
         let upStrokeDominanceRatio: CGFloat = 2.0
@@ -66,7 +66,11 @@ final class GestureOverlayView: NSView {
             trackRecent(dx: dx, dy: dy, timestamp: event.timestamp)
             if shouldStartCapture() {
                 startCapture(at: hudAnchorPoint, withSeed: recentSamples)
-                scheduleCommitTimer()
+                if shouldCommitImmediately(for: event) {
+                    commitCapture()
+                } else {
+                    scheduleCommitTimer()
+                }
                 return
             }
             super.scrollWheel(with: event)

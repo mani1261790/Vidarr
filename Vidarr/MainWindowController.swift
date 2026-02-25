@@ -398,6 +398,8 @@ extension MainWindowController: WKNavigationDelegate {
 private final class LiquidGlassToolbarView: NSView {
     let contentLayoutView = NSView()
     private let separatorLayer = CALayer()
+    private let topShineLayer = CAGradientLayer()
+    private let bottomDepthLayer = CAGradientLayer()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -414,12 +416,30 @@ private final class LiquidGlassToolbarView: NSView {
 
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         separatorLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / scale)
+        topShineLayer.frame = CGRect(x: 0, y: bounds.height * 0.46, width: bounds.width, height: bounds.height * 0.54)
+        bottomDepthLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height * 0.42)
     }
 
     private func setupView() {
         wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(separatorLayer)
+        layer?.addSublayer(bottomDepthLayer)
+        layer?.addSublayer(topShineLayer)
         separatorLayer.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+        topShineLayer.colors = [
+            NSColor.white.withAlphaComponent(0.32).cgColor,
+            NSColor.white.withAlphaComponent(0.05).cgColor,
+            NSColor.clear.cgColor
+        ]
+        topShineLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
+        topShineLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
+        bottomDepthLayer.colors = [
+            NSColor.black.withAlphaComponent(0.10).cgColor,
+            NSColor.clear.cgColor
+        ]
+        bottomDepthLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
+        bottomDepthLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
 
         contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -431,9 +451,9 @@ private final class LiquidGlassToolbarView: NSView {
 
             let glassView = NSGlassEffectView()
             glassView.translatesAutoresizingMaskIntoConstraints = false
-            glassView.style = .regular
+            glassView.style = .clear
             glassView.cornerRadius = 0
-            glassView.tintColor = NSColor.white.withAlphaComponent(0.06)
+            glassView.tintColor = NSColor.white.withAlphaComponent(0.03)
             glassView.contentView = contentLayoutView
 
             glassContainer.contentView = glassView
@@ -447,7 +467,7 @@ private final class LiquidGlassToolbarView: NSView {
         } else {
             let fallback = NSVisualEffectView()
             fallback.translatesAutoresizingMaskIntoConstraints = false
-            fallback.material = .headerView
+            fallback.material = .underWindowBackground
             fallback.state = .followsWindowActiveState
             fallback.blendingMode = .behindWindow
             fallback.addSubview(contentLayoutView)
@@ -518,11 +538,14 @@ private final class AddressDisplayView: NSView {
 private final class TabChipView: NSView {
     private let index: Int
     private let thumbnailView = NSImageView()
+    private let activeAccentLayer = CAGradientLayer()
+    private let active: Bool
 
     var onSelect: ((Int) -> Void)?
 
     init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool) {
         self.index = index
+        self.active = isActive
         super.init(frame: .zero)
         setupView(title: title, thumbnail: thumbnail, size: size, isActive: isActive)
     }
@@ -535,26 +558,48 @@ private final class TabChipView: NSView {
         onSelect?(index)
     }
 
+    override func layout() {
+        super.layout()
+        guard active else { return }
+        activeAccentLayer.frame = CGRect(x: 2, y: bounds.height - 3, width: bounds.width - 4, height: 2)
+    }
+
     private func setupView(title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool) {
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = title
         wantsLayer = true
         layer?.cornerRadius = 2
-        layer?.masksToBounds = true
+        layer?.masksToBounds = false
         layer?.borderWidth = 1
         layer?.borderColor = isActive
-            ? NSColor.white.withAlphaComponent(0.90).cgColor
+            ? NSColor.systemCyan.withAlphaComponent(0.90).cgColor
             : NSColor.white.withAlphaComponent(0.56).cgColor
         layer?.backgroundColor = isActive
-            ? NSColor.white.withAlphaComponent(0.52).cgColor
+            ? NSColor.systemBlue.withAlphaComponent(0.24).cgColor
             : NSColor.white.withAlphaComponent(0.30).cgColor
+        layer?.shadowColor = NSColor.systemBlue.withAlphaComponent(0.92).cgColor
+        layer?.shadowOpacity = isActive ? 0.52 : 0
+        layer?.shadowRadius = isActive ? 8 : 0
+        layer?.shadowOffset = CGSize(width: 0, height: -1)
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailView.imageScaling = .scaleAxesIndependently
         thumbnailView.image = thumbnail
         thumbnailView.wantsLayer = true
+        thumbnailView.layer?.cornerRadius = 1
+        thumbnailView.layer?.masksToBounds = true
         thumbnailView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.68).cgColor
         addSubview(thumbnailView)
+
+        if isActive {
+            activeAccentLayer.colors = [
+                NSColor.systemCyan.withAlphaComponent(0.95).cgColor,
+                NSColor.systemBlue.withAlphaComponent(0.65).cgColor
+            ]
+            activeAccentLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+            activeAccentLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+            layer?.addSublayer(activeAccentLayer)
+        }
 
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: size.width),
@@ -565,5 +610,9 @@ private final class TabChipView: NSView {
             thumbnailView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             thumbnailView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
         ])
+
+        if isActive {
+            activeAccentLayer.cornerRadius = 1
+        }
     }
 }

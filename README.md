@@ -47,3 +47,21 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 ```bash
 xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS' test -only-testing:VidarrTests/GestureRecognizerTests
 ```
+
+## GitHub Releases (DMG自動配布)
+- `main` への push / PR で、GitHub Actions が自動ビルド検証します。
+- `v*` タグを push すると、GitHub Actions が `.dmg` を作成して Releases に自動添付します。
+
+### リリース手順
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+### ローカルでDMG作成
+```bash
+./scripts/build_dmg.sh v0.1.0
+```
+
+注意:
+- 現在の自動配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。

@@ -1,0 +1,27 @@
+name: Release DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build DMG
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          ./scripts/build_dmg.sh "$TAG_NAME"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/dist/*.dmg
+          generate_release_notes: true

@@ -7,8 +7,7 @@
 
 import Cocoa
 
-@main
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, @preconcurrency NSApplicationDelegate {
 
     private var mainWindowController: MainWindowController?
 

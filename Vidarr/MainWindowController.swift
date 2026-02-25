@@ -119,8 +119,8 @@ final class MainWindowController: NSWindowController {
     private func setupToolbarUI() {
         tabStripContainer.translatesAutoresizingMaskIntoConstraints = false
         tabStripContainer.wantsLayer = true
-        tabStripContainer.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
-        tabStripContainer.layer?.cornerRadius = 6
+        tabStripContainer.layer?.backgroundColor = NSColor.clear.cgColor
+        tabStripContainer.layer?.cornerRadius = 0
         tabStripContainer.layer?.masksToBounds = true
 
         tabStripScrollView.translatesAutoresizingMaskIntoConstraints = false

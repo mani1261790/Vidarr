@@ -6,7 +6,6 @@ final class GestureOverlayView: NSView {
         let triggerDominanceRatio: CGFloat = 1.65
         let triggerWindowMs: TimeInterval = 90
         let seedHistoryWindowMs: TimeInterval = 240
-        let captureEndTimeoutMs: TimeInterval = 22
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
         let upStrokeDominanceRatio: CGFloat = 2.0
@@ -30,7 +29,7 @@ final class GestureOverlayView: NSView {
     private var state: State = .idle
     private var recentSamples: [DeltaSample] = []
     private var capturePoints: [CGPoint] = []
-    private var captureTimer: Timer?
+    private var lastLiveCandidate: GestureResult?
     private var hudAnchorPoint: CGPoint = .zero
 
     private lazy var recognizer = GestureRecognizer(
@@ -68,8 +67,6 @@ final class GestureOverlayView: NSView {
                 startCapture(at: hudAnchorPoint, withSeed: recentSamples)
                 if shouldCommitImmediately(for: event) {
                     commitCapture()
-                } else {
-                    scheduleCommitTimer()
                 }
                 return
             }
@@ -82,7 +79,6 @@ final class GestureOverlayView: NSView {
                 commitCapture()
                 return
             }
-            scheduleCommitTimer()
             // キャプチャ中は WebView 側へスクロールイベントを渡さない。
         }
     }
@@ -124,6 +120,7 @@ final class GestureOverlayView: NSView {
     private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
         state = .capturing
         capturePoints = [point]
+        lastLiveCandidate = nil
 
         for sample in seed {
             appendCaptureDelta(dx: sample.dx, dy: sample.dy)
@@ -137,16 +134,6 @@ final class GestureOverlayView: NSView {
         guard !capturePoints.isEmpty else { return }
         let last = capturePoints[capturePoints.count - 1]
         capturePoints.append(CGPoint(x: last.x + dx, y: last.y + dy))
-    }
-
-    private func scheduleCommitTimer() {
-        captureTimer?.invalidate()
-        let timer = Timer(timeInterval: config.captureEndTimeoutMs / 1000, repeats: false) { [weak self] _ in
-            self?.commitCapture()
-        }
-        timer.tolerance = 0.005
-        captureTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func commitCapture() {
@@ -176,17 +163,23 @@ final class GestureOverlayView: NSView {
     private func resetCaptureState() {
         state = .idle
         capturePoints.removeAll()
-        captureTimer?.invalidate()
-        captureTimer = nil
+        lastLiveCandidate = nil
         recentSamples.removeAll()
     }
 
     private func updateHUDIfNeeded() {
-        guard let best = recognizer.bestMatch(points: capturePoints) else {
-            hudView.hideImmediately()
+        if let best = recognizer.bestMatch(points: capturePoints) {
+            lastLiveCandidate = best
+            hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
             return
         }
-        hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
+
+        // 指を離すまで実行しないため、既に候補が出ている間は HUD を維持する。
+        if let lastLiveCandidate {
+            hudView.showLiveCandidate(name: lastLiveCandidate.name, score: lastLiveCandidate.score, at: hudAnchorPoint)
+        } else {
+            hudView.hideImmediately()
+        }
     }
 
     private func shouldCommitImmediately(for event: NSEvent) -> Bool {

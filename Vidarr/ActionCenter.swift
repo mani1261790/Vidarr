@@ -3,11 +3,17 @@ import Foundation
 /// すべてのブラウザ操作の入口。
 /// UI / ジェスチャーの双方はこのクラス経由で操作する。
 final class ActionCenter {
+    enum GestureTabSwitchDirection {
+        case left
+        case right
+    }
+
     private let tabManager: TabManager
     private let session: BrowserSession
 
     var focusAddressField: (() -> Void)?
     var confirmCloseProtectedTab: (() -> Bool)?
+    var performGestureTabSwitch: ((GestureTabSwitchDirection) -> Void)?
 
     init(tabManager: TabManager, session: BrowserSession) {
         self.tabManager = tabManager
@@ -25,6 +31,22 @@ final class ActionCenter {
 
     func tabPrev() {
         tabManager.selectPrevTab()
+    }
+
+    func gestureTabSwitchLeft() {
+        if let performGestureTabSwitch {
+            performGestureTabSwitch(.left)
+            return
+        }
+        tabNext()
+    }
+
+    func gestureTabSwitchRight() {
+        if let performGestureTabSwitch {
+            performGestureTabSwitch(.right)
+            return
+        }
+        tabPrev()
     }
 
     func tabClose() {

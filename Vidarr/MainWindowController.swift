@@ -30,6 +30,12 @@ final class MainWindowController: NSWindowController {
     private var overlayView: GestureOverlayView?
     private var isAddressEditing = false
     private var currentAddressURLString = ""
+    private var pendingTabSwitchAnimation: PendingTabSwitchAnimation?
+
+    private struct PendingTabSwitchAnimation {
+        weak var fromWebView: WKWebView?
+        let direction: ActionCenter.GestureTabSwitchDirection
+    }
 
     init() {
         tabManager = TabManager()
@@ -199,6 +205,9 @@ final class MainWindowController: NSWindowController {
         actions.confirmCloseProtectedTab = { [weak self] in
             self?.confirmCloseProtectedTab() ?? false
         }
+        actions.performGestureTabSwitch = { [weak self] direction in
+            self?.performGestureTabSwitch(direction: direction)
+        }
     }
 
     private func ensureInitialTabVisible() {
@@ -288,6 +297,61 @@ final class MainWindowController: NSWindowController {
         overlayView = overlay
         applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
         rebuildTabStrip()
+    }
+
+    private func performGestureTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) {
+        let count = tabManager.tabCount
+        guard count > 1 else { return }
+
+        let currentIndex = tabManager.currentIndex
+        guard currentIndex >= 0, currentIndex < count else { return }
+
+        let targetIndex: Int
+        switch direction {
+        case .left:
+            targetIndex = (currentIndex + 1 + count) % count
+        case .right:
+            targetIndex = (currentIndex - 1 + count) % count
+        }
+        guard targetIndex != currentIndex else { return }
+
+        pendingTabSwitchAnimation = PendingTabSwitchAnimation(
+            fromWebView: tabManager.currentWebView,
+            direction: direction
+        )
+        tabManager.selectTab(index: targetIndex)
+    }
+
+    private func animateTabSwitch(
+        from previousWebView: WKWebView,
+        to nextWebView: WKWebView,
+        direction: ActionCenter.GestureTabSwitchDirection
+    ) {
+        webContainer.subviews.forEach { $0.removeFromSuperview() }
+        overlayView = nil
+
+        previousWebView.navigationDelegate = self
+        nextWebView.navigationDelegate = self
+
+        previousWebView.translatesAutoresizingMaskIntoConstraints = true
+        nextWebView.translatesAutoresizingMaskIntoConstraints = true
+
+        let bounds = webContainer.bounds
+        let motionSign: CGFloat = direction == .left ? -1 : 1
+        previousWebView.frame = bounds
+        nextWebView.frame = bounds.offsetBy(dx: -motionSign * bounds.width, dy: 0)
+
+        webContainer.addSubview(previousWebView)
+        webContainer.addSubview(nextWebView)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            previousWebView.animator().frame = bounds.offsetBy(dx: motionSign * bounds.width, dy: 0)
+            nextWebView.animator().frame = bounds
+        } completionHandler: { [weak self] in
+            self?.attachWebView(nextWebView)
+        }
     }
 
     private func captureThumbnail(for webView: WKWebView) {
@@ -430,6 +494,14 @@ extension MainWindowController: TabManagerDelegate {
             return
         }
 
+        if let pending = pendingTabSwitchAnimation,
+           let previousWebView = pending.fromWebView,
+           previousWebView !== webView {
+            pendingTabSwitchAnimation = nil
+            animateTabSwitch(from: previousWebView, to: webView, direction: pending.direction)
+            return
+        }
+        pendingTabSwitchAnimation = nil
         attachWebView(webView)
     }
 

@@ -174,7 +174,11 @@ final class GestureOverlayView: NSView {
         }
 
         performAction(for: result.name)
-        hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
+        if result.name == "Left" || result.name == "Right" {
+            hudView.hideImmediately()
+        } else {
+            hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
+        }
     }
 
     private func resetCaptureState() {
@@ -196,8 +200,13 @@ final class GestureOverlayView: NSView {
             minimumScore: config.livePreviewScoreThreshold,
             allowedNames: allowedGestureNames
         ) {
-            lastLiveCandidate = best
-            hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
+            if best.name == "Left" || best.name == "Right" {
+                lastLiveCandidate = nil
+                hudView.hideImmediately()
+            } else {
+                lastLiveCandidate = best
+                hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
+            }
             return
         }
 
@@ -246,9 +255,9 @@ final class GestureOverlayView: NSView {
 
         switch name {
         case "Left":
-            actions.tabNext()
+            actions.gestureTabSwitchLeft()
         case "Right":
-            actions.tabPrev()
+            actions.gestureTabSwitchRight()
         case "DownRight":
             actions.tabClose()
         case "DownRightDownRight":

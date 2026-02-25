@@ -2,6 +2,15 @@
 
 AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで、Magic Mouse のジェスチャー操作を主軸にしています。
 
+## License
+このリポジトリは [MIT License](./LICENSE) です。
+
+## Legal Notice
+- 本プロジェクトは Fenrir Inc.（フェンリル株式会社）とは一切関係ありません。
+- 本プロジェクトは Sleipnir への愛好に基づく非公式な個人プロジェクトです。
+- `Sleipnir` などの名称・ロゴ・関連商標は各権利者に帰属します。
+- 権利者（Fenrir Inc. 含む）から申し立て・要請があった場合、公開状態（public/private）を含め、速やかに対応します。
+
 ## 実行手順 (Xcode)
 1. `Vidarr.xcodeproj` を Xcode で開く
 2. Target `Vidarr` を選択する

@@ -12,6 +12,7 @@ final class MainWindowController: NSWindowController {
     private let webContainer = NSView()
 
     private let tabStripContainer = NSView()
+    private let tabStripScrollView = NSScrollView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let addressDisplayView = AddressDisplayView()
@@ -20,6 +21,7 @@ final class MainWindowController: NSWindowController {
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
     private var addressWidthConstraint: NSLayoutConstraint?
+    private var tabStripHeightConstraint: NSLayoutConstraint?
 
     private let tabManager: TabManager
     private let session: BrowserSession
@@ -108,11 +110,20 @@ final class MainWindowController: NSWindowController {
         tabStripContainer.layer?.backgroundColor = NSColor.clear.cgColor
         tabStripContainer.layer?.masksToBounds = true
 
-        tabStripStackView.translatesAutoresizingMaskIntoConstraints = false
+        tabStripScrollView.translatesAutoresizingMaskIntoConstraints = false
+        tabStripScrollView.drawsBackground = false
+        tabStripScrollView.hasVerticalScroller = false
+        tabStripScrollView.hasHorizontalScroller = true
+        tabStripScrollView.autohidesScrollers = true
+        tabStripScrollView.borderType = .noBorder
+        tabStripScrollView.scrollerStyle = .overlay
+        tabStripContainer.addSubview(tabStripScrollView)
+
+        tabStripStackView.translatesAutoresizingMaskIntoConstraints = true
         tabStripStackView.orientation = .horizontal
         tabStripStackView.alignment = .centerY
         tabStripStackView.spacing = 6
-        tabStripContainer.addSubview(tabStripStackView)
+        tabStripScrollView.documentView = tabStripStackView
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
@@ -143,22 +154,23 @@ final class MainWindowController: NSWindowController {
         tabStripMinLeadingConstraint = minLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
+        let tabHeight = tabStripContainer.heightAnchor.constraint(equalToConstant: UI.tabChipSize.height + 4)
+        tabStripHeightConstraint = tabHeight
         let addressWidth = addressDisplayView.widthAnchor.constraint(equalToConstant: 240)
         addressWidthConstraint = addressWidth
 
         NSLayoutConstraint.activate([
             minLeading,
             tabWidth,
+            tabHeight,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 4),
-            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -4),
             tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
-            tabStripStackView.centerXAnchor.constraint(equalTo: tabStripContainer.centerXAnchor),
-            tabStripStackView.leadingAnchor.constraint(greaterThanOrEqualTo: tabStripContainer.leadingAnchor),
-            tabStripStackView.trailingAnchor.constraint(lessThanOrEqualTo: tabStripContainer.trailingAnchor),
-            tabStripStackView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
-            tabStripStackView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
+            tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
+            tabStripScrollView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
+            tabStripScrollView.trailingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor),
+            tabStripScrollView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
             newTabButton.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
             newTabButton.trailingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor, constant: -8),
@@ -315,6 +327,8 @@ final class MainWindowController: NSWindowController {
             }
             tabStripStackView.addArrangedSubview(chip)
         }
+
+        layoutTabStripAndRevealActive()
     }
 
     private func confirmCloseProtectedTab() -> Bool {
@@ -349,6 +363,28 @@ final class MainWindowController: NSWindowController {
         let reservedRight = addressWidth + 10 + 20 + 8 + 12
         let available = window.frame.width - (maxButtonX + 10) - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
+        tabStripHeightConstraint?.constant = UI.tabChipSize.height + 6
+        layoutTabStripAndRevealActive()
+    }
+
+    private func layoutTabStripAndRevealActive() {
+        guard let clipView = tabStripScrollView.contentView as NSClipView? else { return }
+
+        tabStripStackView.layoutSubtreeIfNeeded()
+
+        let contentHeight = max(tabStripContainer.bounds.height, UI.tabChipSize.height)
+        let fittingWidth = max(tabStripStackView.fittingSize.width, tabStripContainer.bounds.width)
+        tabStripStackView.frame = CGRect(x: 0, y: 0, width: fittingWidth, height: contentHeight)
+
+        if let activeChip = tabStripStackView.arrangedSubviews.first(where: {
+            ($0 as? TabChipView)?.isActiveChip == true
+        }) {
+            var target = activeChip.frame.insetBy(dx: -16, dy: 0)
+            target.origin.y = 0
+            target.size.height = contentHeight
+            clipView.scrollToVisible(target)
+            tabStripScrollView.reflectScrolledClipView(clipView)
+        }
     }
 }
 
@@ -567,6 +603,7 @@ private final class TabChipView: NSView {
 
     var onSelect: ((Int) -> Void)?
     var onToggleProtection: ((Int) -> Void)?
+    var isActiveChip: Bool { active }
 
     init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
         self.index = index

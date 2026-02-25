@@ -3,7 +3,7 @@ import WebKit
 
 final class MainWindowController: NSWindowController {
     private enum UI {
-        static let toolbarHeight: CGFloat = 64
+        static let toolbarHeight: CGFloat = 74
         static let tabChipSize = NSSize(width: 96, height: 48)
     }
 
@@ -16,12 +16,14 @@ final class MainWindowController: NSWindowController {
     private let tabStripDocumentView = NSView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
+    private let rightPanelView = NSView()
     private let addressDisplayView = AddressDisplayView()
     private let addressEditorField = NSTextField()
+    private let tabSearchField = NSSearchField()
 
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
-    private var addressWidthConstraint: NSLayoutConstraint?
+    private var rightPanelWidthConstraint: NSLayoutConstraint?
     private var tabStripHeightConstraint: NSLayoutConstraint?
 
     private let tabManager: TabManager
@@ -30,6 +32,7 @@ final class MainWindowController: NSWindowController {
 
     private var overlayView: GestureOverlayView?
     private var isAddressEditing = false
+    private var tabSearchQuery = ""
     private var currentAddressURLString = ""
     private var pendingTabSwitchAnimation: PendingTabSwitchAnimation?
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
@@ -155,6 +158,8 @@ final class MainWindowController: NSWindowController {
         newTabButton.font = NSFont.systemFont(ofSize: 20, weight: .regular)
         newTabButton.contentTintColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
 
+        rightPanelView.translatesAutoresizingMaskIntoConstraints = false
+
         addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
         addressDisplayView.onClick = { [weak self] in
             self?.beginAddressEditing()
@@ -162,16 +167,26 @@ final class MainWindowController: NSWindowController {
 
         addressEditorField.translatesAutoresizingMaskIntoConstraints = false
         addressEditorField.delegate = self
-        addressEditorField.font = NSFont.systemFont(ofSize: 12.5)
+        addressEditorField.font = NSFont.systemFont(ofSize: 12.0)
         addressEditorField.focusRingType = .none
         addressEditorField.bezelStyle = .roundedBezel
         addressEditorField.isHidden = true
 
+        tabSearchField.translatesAutoresizingMaskIntoConstraints = false
+        tabSearchField.font = NSFont.systemFont(ofSize: 12.0)
+        tabSearchField.placeholderString = "タブを検索"
+        tabSearchField.sendsSearchStringImmediately = true
+        tabSearchField.sendsWholeSearchString = false
+        tabSearchField.target = self
+        tabSearchField.action = #selector(tabSearchDidChange(_:))
+
         let toolbarContent = toolbarContainer.contentLayoutView
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
-        toolbarContent.addSubview(addressDisplayView)
-        toolbarContent.addSubview(addressEditorField)
+        toolbarContent.addSubview(rightPanelView)
+        rightPanelView.addSubview(addressDisplayView)
+        rightPanelView.addSubview(addressEditorField)
+        rightPanelView.addSubview(tabSearchField)
 
         let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
         tabStripMinLeadingConstraint = minLeading
@@ -179,15 +194,15 @@ final class MainWindowController: NSWindowController {
         tabStripWidthConstraint = tabWidth
         let tabHeight = tabStripContainer.heightAnchor.constraint(equalToConstant: UI.tabChipSize.height + 4)
         tabStripHeightConstraint = tabHeight
-        let addressWidth = addressDisplayView.widthAnchor.constraint(equalToConstant: 240)
-        addressWidthConstraint = addressWidth
+        let rightPanelWidth = rightPanelView.widthAnchor.constraint(equalToConstant: 250)
+        rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
             minLeading,
             tabWidth,
             tabHeight,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
-            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 4),
+            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 8),
             tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
@@ -195,20 +210,31 @@ final class MainWindowController: NSWindowController {
             tabStripScrollView.trailingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor),
             tabStripScrollView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
-            newTabButton.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
-            newTabButton.trailingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor, constant: -8),
+            newTabButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
+            newTabButton.trailingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: -8),
             newTabButton.widthAnchor.constraint(equalToConstant: 24),
             newTabButton.heightAnchor.constraint(equalToConstant: 24),
 
-            addressDisplayView.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
-            addressDisplayView.trailingAnchor.constraint(equalTo: toolbarContent.trailingAnchor, constant: -10),
-            addressDisplayView.heightAnchor.constraint(equalToConstant: 24),
-            addressWidth,
+            rightPanelView.trailingAnchor.constraint(equalTo: toolbarContent.trailingAnchor, constant: -10),
+            rightPanelView.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 7),
+            rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -7),
+            rightPanelWidth,
+
+            addressDisplayView.topAnchor.constraint(equalTo: rightPanelView.topAnchor),
+            addressDisplayView.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor),
+            addressDisplayView.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor),
+            addressDisplayView.heightAnchor.constraint(equalToConstant: 16),
 
             addressEditorField.centerYAnchor.constraint(equalTo: addressDisplayView.centerYAnchor),
             addressEditorField.leadingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor),
             addressEditorField.trailingAnchor.constraint(equalTo: addressDisplayView.trailingAnchor),
-            addressEditorField.heightAnchor.constraint(equalTo: addressDisplayView.heightAnchor)
+            addressEditorField.heightAnchor.constraint(equalToConstant: 20),
+
+            tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor),
+            tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor),
+            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor),
+            tabSearchField.heightAnchor.constraint(equalToConstant: 22),
+            tabSearchField.topAnchor.constraint(greaterThanOrEqualTo: addressDisplayView.bottomAnchor, constant: 5)
         ])
 
         applyAddressDisplayMode(display: "")
@@ -254,6 +280,11 @@ final class MainWindowController: NSWindowController {
         actions.newTab()
     }
 
+    @objc private func tabSearchDidChange(_ sender: NSSearchField) {
+        tabSearchQuery = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        rebuildTabStrip()
+    }
+
     private func beginAddressEditing() {
         guard !isAddressEditing else { return }
         isAddressEditing = true
@@ -286,7 +317,7 @@ final class MainWindowController: NSWindowController {
 
     private func applyAddressDisplayMode(display: String) {
         currentAddressURLString = display
-        addressDisplayView.update(text: display.isEmpty ? "開きたいページを入力" : display)
+        addressDisplayView.update(text: display)
 
         addressEditorField.stringValue = display
         addressEditorField.isHidden = true
@@ -530,7 +561,16 @@ final class MainWindowController: NSWindowController {
             $0.removeFromSuperview()
         }
 
-        for item in tabManager.tabStripItems {
+        let visibleItems: [TabStripItem]
+        if tabSearchQuery.isEmpty {
+            visibleItems = tabManager.tabStripItems
+        } else {
+            visibleItems = tabManager.tabStripItems.filter { item in
+                item.title.localizedCaseInsensitiveContains(tabSearchQuery)
+            }
+        }
+
+        for item in visibleItems {
             let chip = TabChipView(
                 index: item.index,
                 title: item.title,
@@ -577,10 +617,10 @@ final class MainWindowController: NSWindowController {
 
         tabStripMinLeadingConstraint?.constant = maxButtonX + 10
 
-        let addressWidth = min(280, max(210, window.frame.width * 0.22))
-        addressWidthConstraint?.constant = addressWidth
+        let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
+        rightPanelWidthConstraint?.constant = rightPanelWidth
 
-        let reservedRight = addressWidth + 10 + 20 + 8 + 12
+        let reservedRight = rightPanelWidth + 10 + 20 + 8 + 12
         let available = window.frame.width - (maxButtonX + 10) - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
         tabStripHeightConstraint?.constant = UI.tabChipSize.height + 6
@@ -820,23 +860,20 @@ private final class AddressDisplayView: NSView {
 
     private func setupView() {
         wantsLayer = true
-        layer?.cornerRadius = 6
-        layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.34).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
 
         textField.translatesAutoresizingMaskIntoConstraints = false
-        textField.font = NSFont.systemFont(ofSize: 11.5)
-        textField.textColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
+        textField.font = NSFont.systemFont(ofSize: 13.0, weight: .regular)
+        textField.textColor = NSColor(calibratedWhite: 0.35, alpha: 0.92)
         textField.lineBreakMode = .byTruncatingMiddle
         textField.usesSingleLineMode = true
+        textField.alignment = .right
 
         addSubview(textField)
 
         NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
             textField.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }

@@ -3,8 +3,8 @@ import WebKit
 
 final class MainWindowController: NSWindowController {
     private enum UI {
-        static let toolbarHeight: CGFloat = 56
-        static let tabChipSize = NSSize(width: 116, height: 38)
+        static let toolbarHeight: CGFloat = 64
+        static let tabChipSize = NSSize(width: 96, height: 48)
     }
 
     private let rootContainer = NSView()
@@ -150,8 +150,8 @@ final class MainWindowController: NSWindowController {
             minLeading,
             tabWidth,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
-            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 5),
-            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -5),
+            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 4),
+            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -4),
             tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
             tabStripStackView.centerXAnchor.constraint(equalTo: tabStripContainer.centerXAnchor),
@@ -162,8 +162,8 @@ final class MainWindowController: NSWindowController {
 
             newTabButton.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
             newTabButton.trailingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor, constant: -8),
-            newTabButton.widthAnchor.constraint(equalToConstant: 22),
-            newTabButton.heightAnchor.constraint(equalToConstant: 22),
+            newTabButton.widthAnchor.constraint(equalToConstant: 24),
+            newTabButton.heightAnchor.constraint(equalToConstant: 24),
 
             addressDisplayView.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
             addressDisplayView.trailingAnchor.constraint(equalTo: toolbarContent.trailingAnchor, constant: -10),

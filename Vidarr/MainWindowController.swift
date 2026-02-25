@@ -91,7 +91,7 @@ final class MainWindowController: NSWindowController {
         toolbarContainer.translatesAutoresizingMaskIntoConstraints = false
         webContainer.translatesAutoresizingMaskIntoConstraints = false
         webContainer.wantsLayer = true
-        webContainer.layer?.backgroundColor = NSColor.white.cgColor
+        webContainer.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.94).cgColor
 
         contentView.addSubview(rootContainer)
         rootContainer.addSubview(toolbarContainer)

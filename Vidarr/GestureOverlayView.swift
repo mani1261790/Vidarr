@@ -5,6 +5,7 @@ final class GestureOverlayView: NSView {
         let triggerHorizontalDelta: CGFloat = 4.5
         let triggerDominanceRatio: CGFloat = 1.65
         let triggerWindowMs: TimeInterval = 90
+        let seedHistoryWindowMs: TimeInterval = 240
         let captureEndTimeoutMs: TimeInterval = 45
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
@@ -83,22 +84,28 @@ final class GestureOverlayView: NSView {
     private func trackRecent(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval) {
         recentSamples.append(DeltaSample(dx: dx, dy: dy, timestamp: timestamp))
 
-        let maxAge = config.triggerWindowMs / 1000
+        let maxAge = config.seedHistoryWindowMs / 1000
         let threshold = timestamp - maxAge
         recentSamples.removeAll { $0.timestamp < threshold }
     }
 
     private func shouldStartCapture() -> Bool {
         guard !recentSamples.isEmpty else { return false }
+        guard let latestTimestamp = recentSamples.last?.timestamp else { return false }
 
-        if recentSamples.contains(where: { sample in
+        let triggerAge = config.triggerWindowMs / 1000
+        let triggerThreshold = latestTimestamp - triggerAge
+        let triggerSamples = recentSamples.filter { $0.timestamp >= triggerThreshold }
+        guard !triggerSamples.isEmpty else { return false }
+
+        if triggerSamples.contains(where: { sample in
             abs(sample.dx) > abs(sample.dy) * config.triggerDominanceRatio
                 && abs(sample.dx) > config.triggerHorizontalDelta
         }) {
             return true
         }
 
-        let lastSamples = recentSamples.suffix(4)
+        let lastSamples = triggerSamples.suffix(4)
         guard !lastSamples.isEmpty else { return false }
 
         let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }

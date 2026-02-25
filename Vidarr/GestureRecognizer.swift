@@ -21,6 +21,7 @@ final class GestureRecognizer {
     private let matchScoreThreshold: CGFloat
     private let minPathLength: CGFloat
     private let dominanceRatio: CGFloat
+    private let compositePreferenceSlack: CGFloat = 0.12
 
     private lazy var templates: [GestureTemplate] = {
         Self.rawTemplates().map { template in
@@ -40,15 +41,12 @@ final class GestureRecognizer {
 
         let normalized = normalize(raw)
         let ranked = rankedTemplateMatches(for: normalized)
-
-        for candidate in ranked {
-            guard candidate.score >= matchScoreThreshold else { continue }
-            if passesHeuristic(for: candidate.name, raw: raw) {
-                return GestureResult(name: candidate.name, score: candidate.score)
-            }
-        }
-
-        return nil
+        guard let passing = bestPassingCandidate(
+            from: ranked,
+            raw: raw,
+            minimumScore: matchScoreThreshold
+        ) else { return nil }
+        return GestureResult(name: passing.name, score: passing.score)
     }
 
     /// HUD 用。しきい値チェックは行わず現在の最有力候補を返す。
@@ -58,7 +56,7 @@ final class GestureRecognizer {
         let normalized = normalize(raw)
         let ranked = rankedTemplateMatches(for: normalized)
 
-        if let passing = ranked.first(where: { passesHeuristic(for: $0.name, raw: raw) }) {
+        if let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: 0) {
             return GestureResult(name: passing.name, score: passing.score)
         }
 
@@ -72,15 +70,8 @@ final class GestureRecognizer {
 
         let normalized = normalize(raw)
         let ranked = rankedTemplateMatches(for: normalized)
-
-        for candidate in ranked {
-            guard candidate.score >= minimumScore else { continue }
-            if passesHeuristic(for: candidate.name, raw: raw) {
-                return GestureResult(name: candidate.name, score: candidate.score)
-            }
-        }
-
-        return nil
+        guard let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: minimumScore) else { return nil }
+        return GestureResult(name: passing.name, score: passing.score)
     }
 
     private func rankedTemplateMatches(for normalizedPoints: [CGPoint]) -> [(name: String, score: CGFloat)] {
@@ -117,10 +108,22 @@ final class GestureRecognizer {
 
         switch name {
         case "Left":
-            return dx < 0 && abs(dx) > abs(dy) * 1.6
+            return isSimpleHorizontalStroke(
+                raw,
+                horizontalDirection: .left,
+                dx: dx,
+                dy: dy,
+                corners: corners
+            )
 
         case "Right":
-            return dx > 0 && abs(dx) > abs(dy) * 1.6
+            return isSimpleHorizontalStroke(
+                raw,
+                horizontalDirection: .right,
+                dx: dx,
+                dy: dy,
+                corners: corners
+            )
 
         case "L":
             return corners >= 1
@@ -161,6 +164,26 @@ final class GestureRecognizer {
         }
     }
 
+    private func bestPassingCandidate(
+        from ranked: [(name: String, score: CGFloat)],
+        raw: [CGPoint],
+        minimumScore: CGFloat
+    ) -> (name: String, score: CGFloat)? {
+        let passing = ranked.filter { candidate in
+            candidate.score >= minimumScore && passesHeuristic(for: candidate.name, raw: raw)
+        }
+
+        guard let best = passing.first else { return nil }
+
+        if best.name == "Left" || best.name == "Right",
+           let composite = passing.first(where: { $0.name == "UpRight" || $0.name == "UpLeft" || $0.name == "DownLeft" }),
+           composite.score >= best.score - compositePreferenceSlack {
+            return composite
+        }
+
+        return best
+    }
+
     private enum HorizontalDirection {
         case left
         case right
@@ -171,6 +194,42 @@ final class GestureRecognizer {
         case down
     }
 
+    private func isSimpleHorizontalStroke(
+        _ raw: [CGPoint],
+        horizontalDirection: HorizontalDirection,
+        dx: CGFloat,
+        dy: CGFloat,
+        corners: Int
+    ) -> Bool {
+        switch horizontalDirection {
+        case .left:
+            guard dx < 0 else { return false }
+        case .right:
+            guard dx > 0 else { return false }
+        }
+
+        let absDx = abs(dx)
+        let absDy = abs(dy)
+        guard absDx > max(absDy * 1.6, minPathLength * 0.18) else { return false }
+        guard corners <= 1 else { return false }
+
+        let box = boundingBox(raw)
+        guard box.width > 0 else { return false }
+        guard box.height <= max(box.width * 0.34, 22) else { return false }
+        guard totalTurningAngle(raw) <= .pi * 0.66 else { return false }
+
+        switch horizontalDirection {
+        case .left:
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .left) else { return false }
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .left) else { return false }
+        case .right:
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right) else { return false }
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .right) else { return false }
+        }
+
+        return true
+    }
+
     private func isVerticalThenHorizontal(
         _ raw: [CGPoint],
         verticalDirection: VerticalDirection,
@@ -178,23 +237,38 @@ final class GestureRecognizer {
     ) -> Bool {
         guard raw.count >= 8 else { return false }
 
-        let split = max(2, min(raw.count - 3, Int(Double(raw.count) * 0.58)))
-        let first = vector(from: raw[0], to: raw[split])
-        let second = vector(from: raw[split], to: raw[raw.count - 1])
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(22, box.height * 0.34)
+        let minHorizontalTravel = max(20, box.width * 0.34)
 
-        switch verticalDirection {
-        case .up:
-            guard first.dy > 0, abs(first.dy) > abs(first.dx) * 1.08 else { return false }
-        case .down:
-            guard first.dy < 0, abs(first.dy) > abs(first.dx) * 1.08 else { return false }
+        for ratio in stride(from: 0.34, through: 0.72, by: 0.06) {
+            let split = max(2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(ratio))))
+            let first = vector(from: raw[0], to: raw[split])
+            let second = vector(from: raw[split], to: raw[raw.count - 1])
+
+            guard abs(first.dy) >= minVerticalTravel else { continue }
+            guard abs(second.dx) >= minHorizontalTravel else { continue }
+
+            switch verticalDirection {
+            case .up:
+                guard first.dy > 0, abs(first.dy) > abs(first.dx) * 0.92 else { continue }
+            case .down:
+                guard first.dy < 0, abs(first.dy) > abs(first.dx) * 0.92 else { continue }
+            }
+
+            switch horizontalDirection {
+            case .right:
+                if second.dx > 0 && abs(second.dx) > abs(second.dy) * 0.7 {
+                    return true
+                }
+            case .left:
+                if second.dx < 0 && abs(second.dx) > abs(second.dy) * 0.7 {
+                    return true
+                }
+            }
         }
 
-        switch horizontalDirection {
-        case .right:
-            return second.dx > 0 && abs(second.dx) > abs(second.dy) * 0.95
-        case .left:
-            return second.dx < 0 && abs(second.dx) > abs(second.dy) * 0.95
-        }
+        return false
     }
 
     private func isUShape(_ raw: [CGPoint]) -> Bool {

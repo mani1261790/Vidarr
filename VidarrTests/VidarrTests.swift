@@ -71,6 +71,30 @@ struct GestureRecognizerTests {
         #expect((result?.score ?? 0) >= 0.65)
     }
 
+    @Test func prefersUpRightOverSimpleRightWhenVerticalLeadExists() {
+        let recognizer = makeRecognizer()
+        let points = polyline([
+            CGPoint(x: 160, y: 60),
+            CGPoint(x: 160, y: 240),
+            CGPoint(x: 320, y: 235)
+        ], stepsPerSegment: 24)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "UpRight", "actual result: \(String(describing: result))")
+    }
+
+    @Test func prefersDownLeftOverSimpleLeftWhenVerticalLeadExists() {
+        let recognizer = makeRecognizer()
+        let points = polyline([
+            CGPoint(x: 220, y: 250),
+            CGPoint(x: 214, y: 70),
+            CGPoint(x: 70, y: 72)
+        ], stepsPerSegment: 24)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "DownLeft", "actual result: \(String(describing: result))")
+    }
+
     @Test func recognizesSingleLoopO() {
         let recognizer = makeRecognizer()
         let points = circle(loopCount: 1, center: CGPoint(x: 190, y: 190), radius: 85, segmentsPerLoop: 54)

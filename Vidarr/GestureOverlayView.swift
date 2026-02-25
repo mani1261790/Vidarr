@@ -222,9 +222,9 @@ final class GestureOverlayView: NSView {
 
         switch name {
         case "Left":
-            actions.tabPrev()
-        case "Right":
             actions.tabNext()
+        case "Right":
+            actions.tabPrev()
         case "L":
             actions.tabClose()
         case "LL":

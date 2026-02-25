@@ -203,6 +203,18 @@ final class GestureOverlayView: NSView {
             return
         }
 
+        // OO は入力ばらつきが大きいため専用フォールバックを使う。
+        if isLikelyDoubleLoop(capturePoints) {
+            if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.32, allowedNames: ["OO"]) {
+                performAction(for: oo.name)
+                hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint)
+                return
+            }
+            performAction(for: "OO")
+            hudView.showCommittedAction(name: "OO", score: 0.32, at: hudAnchorPoint)
+            return
+        }
+
         // テンプレート不成立時のみ水平スワイプへフォールバックする。
         if let horizontal = recognizeHorizontalSwipe(points: capturePoints) {
             performAction(for: horizontal.name)
@@ -343,6 +355,42 @@ final class GestureOverlayView: NSView {
             total += sqrt(dx * dx + dy * dy)
         }
         return total
+    }
+
+    private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {
+        guard points.count >= 16 else { return false }
+
+        var minX = points[0].x
+        var maxX = points[0].x
+        var minY = points[0].y
+        var maxY = points[0].y
+        for p in points {
+            minX = min(minX, p.x)
+            maxX = max(maxX, p.x)
+            minY = min(minY, p.y)
+            maxY = max(maxY, p.y)
+        }
+
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width > 24, height > 24 else { return false }
+
+        let diagonal = sqrt(width * width + height * height)
+        guard diagonal > 1 else { return false }
+
+        let start = points[0]
+        let end = points[points.count - 1]
+        let closeDistance = sqrt(pow(end.x - start.x, 2) + pow(end.y - start.y, 2))
+        let closeRatio = closeDistance / diagonal
+        guard closeRatio <= 0.68 else { return false }
+
+        let a = max(width * 0.5, 1)
+        let b = max(height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return false }
+
+        let loops = pathLength(points) / ellipseCircumference
+        return loops >= 1.4
     }
 
     private func commonInit() {

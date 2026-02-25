@@ -155,10 +155,12 @@ final class GestureRecognizer {
 
         case "O":
             return isClosedCircular(raw, expectedTurns: 2 * .pi, tolerance: 1.55 * .pi, closeRatioLimit: 0.45)
+                && estimatedLoopCount(raw) <= 1.45
 
         case "OO":
             return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 2.35 * .pi, closeRatioLimit: 0.62)
-                && pathLength(raw) >= minPathLength * 1.18
+                && pathLength(raw) >= minPathLength * 1.08
+                && estimatedLoopCount(raw) >= 1.35
 
         case "UpRight":
             return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right)
@@ -409,6 +411,16 @@ final class GestureRecognizer {
         }
 
         return signChanges >= 2
+    }
+
+    private func estimatedLoopCount(_ raw: [CGPoint]) -> CGFloat {
+        guard raw.count >= 6 else { return 0 }
+        let box = boundingBox(raw)
+        let a = max(box.width * 0.5, 1)
+        let b = max(box.height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return 0 }
+        return pathLength(raw) / ellipseCircumference
     }
 
     // MARK: - Geometry helpers

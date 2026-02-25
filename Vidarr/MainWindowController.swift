@@ -883,8 +883,16 @@ private final class NonDraggableScrollView: NSScrollView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
+private final class PassthroughImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private final class PassthroughLabelField: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 private final class AddressDisplayView: NSView {
-    private let textField = NSTextField(labelWithString: "")
+    private let textField = PassthroughLabelField(labelWithString: "")
     var onClick: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -941,8 +949,8 @@ private final class AddressDisplayView: NSView {
 
 private final class TabChipView: NSView {
     private let index: Int
-    private let thumbnailView = NSImageView()
-    private let protectedIconView = NSImageView()
+    private let thumbnailView = PassthroughImageView()
+    private let protectedIconView = PassthroughImageView()
     private let activeAccentLayer = CAGradientLayer()
     private let active: Bool
     private let protectedState: Bool
@@ -968,6 +976,10 @@ private final class TabChipView: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        return self
+    }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount >= 2 {

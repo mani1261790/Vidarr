@@ -13,6 +13,7 @@ final class MainWindowController: NSWindowController {
 
     private let tabStripContainer = NSView()
     private let tabStripScrollView = NSScrollView()
+    private let tabStripDocumentView = NSView()
     private let tabStripStackView = NSStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let addressDisplayView = AddressDisplayView()
@@ -133,11 +134,16 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.scrollerStyle = .overlay
         tabStripContainer.addSubview(tabStripScrollView)
 
+        tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
+        tabStripDocumentView.wantsLayer = true
+        tabStripDocumentView.layer?.backgroundColor = NSColor.clear.cgColor
+        tabStripScrollView.documentView = tabStripDocumentView
+
         tabStripStackView.translatesAutoresizingMaskIntoConstraints = true
         tabStripStackView.orientation = .horizontal
         tabStripStackView.alignment = .centerY
         tabStripStackView.spacing = 6
-        tabStripScrollView.documentView = tabStripStackView
+        tabStripDocumentView.addSubview(tabStripStackView)
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
@@ -588,8 +594,8 @@ final class MainWindowController: NSWindowController {
         let viewportWidth = tabStripContainer.bounds.width
         let documentWidth = max(chipWidth, viewportWidth)
         let centeredX = chipWidth < viewportWidth ? (viewportWidth - chipWidth) * 0.5 : 0
+        tabStripDocumentView.frame = CGRect(x: 0, y: 0, width: documentWidth, height: contentHeight)
         tabStripStackView.frame = CGRect(x: centeredX, y: 0, width: chipWidth, height: contentHeight)
-        tabStripScrollView.documentView?.frame = CGRect(x: 0, y: 0, width: documentWidth, height: contentHeight)
 
         if chipWidth > viewportWidth,
            let activeChip = tabStripStackView.arrangedSubviews.first(where: {

@@ -420,22 +420,24 @@ private final class LiquidGlassToolbarView: NSView {
         bottomDepthLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height * 0.42)
     }
 
+    override var isOpaque: Bool { false }
+
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(separatorLayer)
         layer?.addSublayer(bottomDepthLayer)
         layer?.addSublayer(topShineLayer)
-        separatorLayer.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+        separatorLayer.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
         topShineLayer.colors = [
-            NSColor.white.withAlphaComponent(0.32).cgColor,
-            NSColor.white.withAlphaComponent(0.05).cgColor,
+            NSColor.white.withAlphaComponent(0.14).cgColor,
+            NSColor.white.withAlphaComponent(0.02).cgColor,
             NSColor.clear.cgColor
         ]
         topShineLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
         topShineLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
         bottomDepthLayer.colors = [
-            NSColor.black.withAlphaComponent(0.10).cgColor,
+            NSColor.black.withAlphaComponent(0.03).cgColor,
             NSColor.clear.cgColor
         ]
         bottomDepthLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
@@ -453,7 +455,7 @@ private final class LiquidGlassToolbarView: NSView {
             glassView.translatesAutoresizingMaskIntoConstraints = false
             glassView.style = .clear
             glassView.cornerRadius = 0
-            glassView.tintColor = NSColor.white.withAlphaComponent(0.03)
+            glassView.tintColor = NSColor.white.withAlphaComponent(0.012)
             glassView.contentView = contentLayoutView
 
             glassContainer.contentView = glassView
@@ -470,6 +472,7 @@ private final class LiquidGlassToolbarView: NSView {
             fallback.material = .underWindowBackground
             fallback.state = .followsWindowActiveState
             fallback.blendingMode = .behindWindow
+            fallback.isEmphasized = false
             fallback.addSubview(contentLayoutView)
             addSubview(fallback)
 

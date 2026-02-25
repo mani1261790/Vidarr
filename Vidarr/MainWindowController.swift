@@ -3,8 +3,8 @@ import WebKit
 
 final class MainWindowController: NSWindowController {
     private enum UI {
-        static let toolbarHeight: CGFloat = 74
-        static let tabChipSize = NSSize(width: 96, height: 48)
+        static let toolbarHeight: CGFloat = 54
+        static let tabChipSize = NSSize(width: 96, height: 34)
         static let tabSwitchGap: CGFloat = 16
     }
 

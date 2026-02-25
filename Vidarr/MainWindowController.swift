@@ -122,10 +122,7 @@ final class MainWindowController: NSWindowController {
 
     private func setupToolbarUI() {
         tabStripContainer.translatesAutoresizingMaskIntoConstraints = false
-        tabStripContainer.wantsLayer = true
-        tabStripContainer.layer?.backgroundColor = NSColor.clear.cgColor
-        tabStripContainer.layer?.cornerRadius = 0
-        tabStripContainer.layer?.masksToBounds = true
+        tabStripContainer.wantsLayer = false
 
         tabStripScrollView.translatesAutoresizingMaskIntoConstraints = false
         tabStripScrollView.drawsBackground = false
@@ -137,11 +134,11 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.verticalScrollElasticity = .none
         tabStripScrollView.horizontalScrollElasticity = .automatic
         tabStripScrollView.contentView = HorizontalOnlyClipView()
+        tabStripScrollView.contentView.drawsBackground = false
         tabStripContainer.addSubview(tabStripScrollView)
 
         tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
-        tabStripDocumentView.wantsLayer = true
-        tabStripDocumentView.layer?.backgroundColor = NSColor.clear.cgColor
+        tabStripDocumentView.wantsLayer = false
         tabStripScrollView.documentView = tabStripDocumentView
 
         tabStripStackView.translatesAutoresizingMaskIntoConstraints = true
@@ -180,6 +177,7 @@ final class MainWindowController: NSWindowController {
         tabSearchField.sendsWholeSearchString = false
         tabSearchField.target = self
         tabSearchField.action = #selector(tabSearchDidChange(_:))
+        tabSearchField.delegate = self
 
         let toolbarContent = toolbarContainer.contentLayoutView
         toolbarContent.addSubview(tabStripContainer)
@@ -666,7 +664,15 @@ final class MainWindowController: NSWindowController {
     }
 }
 
-extension MainWindowController: NSTextFieldDelegate {
+extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField else { return }
+        if field == tabSearchField {
+            tabSearchQuery = tabSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            rebuildTabStrip()
+        }
+    }
+
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
             submitAddressFieldIfNeeded()
@@ -757,6 +763,7 @@ private final class LiquidGlassToolbarView: NSView {
     }
 
     override var isOpaque: Bool { false }
+    override var mouseDownCanMoveWindow: Bool { false }
 
     private func setupView() {
         wantsLayer = true
@@ -781,7 +788,7 @@ private final class LiquidGlassToolbarView: NSView {
 
         contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
 
-        let visualEffectView = NSVisualEffectView()
+        let visualEffectView = NonDraggableVisualEffectView()
         visualEffectView.translatesAutoresizingMaskIntoConstraints = false
         visualEffectView.material = .underWindowBackground
         visualEffectView.state = .followsWindowActiveState
@@ -802,6 +809,10 @@ private final class LiquidGlassToolbarView: NSView {
             contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
         ])
     }
+}
+
+private final class NonDraggableVisualEffectView: NSVisualEffectView {
+    override var mouseDownCanMoveWindow: Bool { false }
 }
 
 private final class HorizontalOnlyClipView: NSClipView {

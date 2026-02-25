@@ -2,10 +2,10 @@ import Cocoa
 
 final class GestureOverlayView: NSView {
     struct CaptureConfig {
-        let triggerHorizontalDelta: CGFloat = 6.0
-        let triggerDominanceRatio: CGFloat = 2.0
-        let triggerWindowMs: TimeInterval = 120
-        let captureEndTimeoutMs: TimeInterval = 110
+        let triggerHorizontalDelta: CGFloat = 4.5
+        let triggerDominanceRatio: CGFloat = 1.65
+        let triggerWindowMs: TimeInterval = 90
+        let captureEndTimeoutMs: TimeInterval = 45
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
         let upStrokeDominanceRatio: CGFloat = 2.0
@@ -131,6 +131,7 @@ final class GestureOverlayView: NSView {
         let timer = Timer(timeInterval: config.captureEndTimeoutMs / 1000, repeats: false) { [weak self] _ in
             self?.commitCapture()
         }
+        timer.tolerance = 0.005
         captureTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }

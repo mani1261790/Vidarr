@@ -57,7 +57,10 @@ final class MainWindowController: NSWindowController {
         window.title = "Vidarr"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
+        window.contentResizeIncrements = NSSize(width: 1, height: 1)
+        window.minSize = NSSize(width: 760, height: 520)
+        window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         if #available(macOS 11.0, *) {
             window.titlebarSeparatorStyle = .none
         }

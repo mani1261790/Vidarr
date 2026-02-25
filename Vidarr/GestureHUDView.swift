@@ -146,6 +146,8 @@ final class GestureHUDView: NSView {
             return Descriptor(actionSymbol: "trash.circle.fill")
         case "O":
             return Descriptor(actionSymbol: "arrow.clockwise.circle.fill")
+        case "U":
+            return Descriptor(actionSymbol: "arrow.uturn.backward.circle.fill")
         case "OO":
             return Descriptor(actionSymbol: "arrow.triangle.2.circlepath.circle.fill")
         case "UpRight":

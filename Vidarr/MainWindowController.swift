@@ -12,14 +12,13 @@ final class MainWindowController: NSWindowController {
     private let toolbarContainer = LiquidGlassToolbarView()
     private let webContainer = NonDraggableView()
 
-    private let tabStripContainer = NonDraggableView()
+    private let tabStripContainer = TabStripContainerView()
     private let tabStripScrollView = TabStripScrollView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
-    private let addressDisplayView = AddressDisplayView()
-    private let addressEditorField = NSTextField()
+    private let addressBarField = AddressBarField()
     private let tabSearchField = NSSearchField()
 
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
@@ -138,6 +137,7 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.contentView = HorizontalOnlyClipView()
         tabStripScrollView.contentView.drawsBackground = false
         tabStripContainer.addSubview(tabStripScrollView)
+        tabStripContainer.forwardingView = tabStripScrollView
 
         tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
         tabStripDocumentView.wantsLayer = false
@@ -161,19 +161,13 @@ final class MainWindowController: NSWindowController {
 
         rightPanelView.translatesAutoresizingMaskIntoConstraints = false
 
-        addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
-        addressDisplayView.onClick = { [weak self] in
+        addressBarField.translatesAutoresizingMaskIntoConstraints = false
+        addressBarField.delegate = self
+        addressBarField.font = NSFont.systemFont(ofSize: 13.0)
+        addressBarField.focusRingType = .none
+        addressBarField.onActivate = { [weak self] in
             self?.beginAddressEditing()
         }
-
-        addressEditorField.translatesAutoresizingMaskIntoConstraints = false
-        addressEditorField.delegate = self
-        addressEditorField.font = NSFont.systemFont(ofSize: 13.0)
-        addressEditorField.focusRingType = .none
-        addressEditorField.bezelStyle = .roundedBezel
-        addressEditorField.isEditable = true
-        addressEditorField.isSelectable = true
-        addressEditorField.isHidden = true
 
         tabSearchField.translatesAutoresizingMaskIntoConstraints = false
         tabSearchField.font = NSFont.systemFont(ofSize: 12.0)
@@ -188,8 +182,7 @@ final class MainWindowController: NSWindowController {
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
         toolbarContent.addSubview(rightPanelView)
-        rightPanelView.addSubview(addressDisplayView)
-        rightPanelView.addSubview(addressEditorField)
+        rightPanelView.addSubview(addressBarField)
         rightPanelView.addSubview(tabSearchField)
 
         let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
@@ -222,19 +215,14 @@ final class MainWindowController: NSWindowController {
             rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -4),
             rightPanelWidth,
 
-            addressDisplayView.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 2),
-            addressDisplayView.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
-            addressDisplayView.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
-            addressDisplayView.heightAnchor.constraint(equalToConstant: 16),
-
-            addressEditorField.centerYAnchor.constraint(equalTo: addressDisplayView.centerYAnchor),
-            addressEditorField.leadingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor),
-            addressEditorField.trailingAnchor.constraint(equalTo: addressDisplayView.trailingAnchor),
-            addressEditorField.heightAnchor.constraint(equalToConstant: 18),
+            addressBarField.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 1),
+            addressBarField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
+            addressBarField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
+            addressBarField.heightAnchor.constraint(equalToConstant: 18),
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.topAnchor.constraint(equalTo: addressDisplayView.bottomAnchor, constant: 4),
+            tabSearchField.topAnchor.constraint(equalTo: addressBarField.bottomAnchor, constant: 4),
             tabSearchField.heightAnchor.constraint(equalToConstant: 20),
             tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -2)
         ])
@@ -292,11 +280,14 @@ final class MainWindowController: NSWindowController {
         guard !isAddressEditing else { return }
         isAddressEditing = true
 
-        addressDisplayView.isHidden = true
-        addressEditorField.isHidden = false
-        addressEditorField.stringValue = currentAddressURLString
-        window?.makeFirstResponder(addressEditorField)
-        addressEditorField.selectText(nil)
+        applyAddressEditingMode()
+        addressBarField.stringValue = currentAddressURLString
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.addressBarField)
+            self.addressBarField.selectText(nil)
+        }
     }
 
     private func endAddressEditingWithoutSubmit() {
@@ -308,7 +299,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func submitAddressFieldIfNeeded() {
-        let input = addressEditorField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let input = addressBarField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !input.isEmpty {
             actions.openLocationInput(input)
         }
@@ -319,11 +310,34 @@ final class MainWindowController: NSWindowController {
 
     private func applyAddressDisplayMode(display: String) {
         currentAddressURLString = display
-        addressDisplayView.update(text: display)
+        addressBarField.stringValue = display
+        addressBarField.toolTip = display
+        applyAddressReadOnlyMode()
+    }
 
-        addressEditorField.stringValue = display
-        addressEditorField.isHidden = true
-        addressDisplayView.isHidden = false
+    private func applyAddressReadOnlyMode() {
+        addressBarField.isEditable = false
+        addressBarField.isSelectable = false
+        addressBarField.isBezeled = false
+        addressBarField.isBordered = false
+        addressBarField.drawsBackground = false
+        addressBarField.backgroundColor = .clear
+        addressBarField.textColor = NSColor.labelColor.withAlphaComponent(0.94)
+        addressBarField.alignment = .right
+        addressBarField.cell?.lineBreakMode = .byTruncatingMiddle
+    }
+
+    private func applyAddressEditingMode() {
+        addressBarField.isEditable = true
+        addressBarField.isSelectable = true
+        addressBarField.isBezeled = true
+        addressBarField.isBordered = true
+        addressBarField.bezelStyle = .roundedBezel
+        addressBarField.drawsBackground = true
+        addressBarField.backgroundColor = NSColor.textBackgroundColor
+        addressBarField.textColor = NSColor.textColor
+        addressBarField.alignment = .left
+        addressBarField.cell?.lineBreakMode = .byClipping
     }
 
     private func attachWebView(_ webView: WKWebView) {
@@ -739,12 +753,12 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(insertNewline(_:)) {
+        if control == addressBarField, commandSelector == #selector(insertNewline(_:)) {
             submitAddressFieldIfNeeded()
             return true
         }
 
-        if commandSelector == #selector(cancelOperation(_:)) {
+        if control == addressBarField, commandSelector == #selector(cancelOperation(_:)) {
             endAddressEditingWithoutSubmit()
             return true
         }
@@ -753,7 +767,7 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        guard let field = obj.object as? NSTextField, field == addressEditorField else { return }
+        guard let field = obj.object as? NSTextField, field == addressBarField else { return }
         if isAddressEditing {
             endAddressEditingWithoutSubmit()
         }
@@ -880,6 +894,17 @@ private final class NonDraggableVisualEffectView: NSVisualEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
+private final class TabStripContainerView: NonDraggableView {
+    weak var forwardingView: NSView?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        return forwardingView ?? self
+    }
+}
+
 private final class HorizontalOnlyClipView: NSClipView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -916,40 +941,44 @@ private final class TabStripScrollView: NonDraggableScrollView {
     var onDragBegan: ((NSPoint) -> Void)?
     var onDragMoved: ((NSPoint) -> Void)?
     var onDragEnded: ((NSPoint) -> Void)?
+    private var dragStartInWindow: NSPoint?
+    private var dragActive = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        let start = event.locationInWindow
         if event.clickCount >= 2 {
-            onClick?(start, event.clickCount)
+            dragStartInWindow = nil
+            dragActive = false
+            onClick?(event.locationInWindow, event.clickCount)
             return
         }
+        dragStartInWindow = event.locationInWindow
+        dragActive = false
+    }
 
-        var dragging = false
-        while let next = window?.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            if next.type == .leftMouseDragged {
-                let dx = next.locationInWindow.x - start.x
-                let dy = next.locationInWindow.y - start.y
-                if !dragging, hypot(dx, dy) >= 4 {
-                    dragging = true
-                    onDragBegan?(start)
-                }
-                if dragging {
-                    onDragMoved?(next.locationInWindow)
-                }
-                continue
-            }
-
-            if next.type == .leftMouseUp {
-                if dragging {
-                    onDragEnded?(next.locationInWindow)
-                } else {
-                    onClick?(start, 1)
-                }
-                return
-            }
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStartInWindow else { return }
+        let dx = event.locationInWindow.x - start.x
+        let dy = event.locationInWindow.y - start.y
+        if !dragActive, hypot(dx, dy) >= 2.5 {
+            dragActive = true
+            onDragBegan?(start)
         }
+        if dragActive {
+            onDragMoved?(event.locationInWindow)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let start = dragStartInWindow else { return }
+        if dragActive {
+            onDragEnded?(event.locationInWindow)
+        } else {
+            onClick?(start, 1)
+        }
+        dragStartInWindow = nil
+        dragActive = false
     }
 }
 
@@ -957,58 +986,17 @@ private final class PassthroughImageView: NSImageView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-private final class PassthroughLabelField: NSTextField {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-private final class AddressDisplayView: NSView {
-    private let textField = PassthroughLabelField(labelWithString: "")
-    var onClick: (() -> Void)?
+private final class AddressBarField: NSTextField {
+    var onActivate: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setupView()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setupView()
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        return self
-    }
-
-    func update(text: String) {
-        textField.stringValue = text
-        toolTip = text
-    }
-
-    private func setupView() {
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        textField.font = NSFont.systemFont(ofSize: 13.0, weight: .regular)
-        textField.textColor = NSColor.labelColor.withAlphaComponent(0.92)
-        textField.lineBreakMode = .byTruncatingMiddle
-        textField.usesSingleLineMode = true
-        textField.alignment = .right
-
-        addSubview(textField)
-
-        NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-    }
-
     override func mouseDown(with event: NSEvent) {
-        _ = event
-        onClick?()
+        if isEditable {
+            super.mouseDown(with: event)
+            return
+        }
+        onActivate?()
     }
 }
 

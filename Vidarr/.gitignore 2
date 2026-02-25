@@ -1,0 +1,91 @@
+# Xcode
+#
+# Recommended .gitignore for Xcode projects
+#
+
+## Build generated
+build/
+DerivedData/
+
+## User settings
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+## Workspace and schemes
+*.xcscmblueprint
+*.xccheckout
+
+## iOS/macOS specific
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Swift Package Manager
+/.build/
+/Packages/
+.swiftpm/xcode/
+.swiftpm/cache/
+.swiftpm/repositories/
+
+## CocoaPods (uncomment if using CocoaPods)
+# Pods/
+# *.xcworkspace
+
+## Carthage (uncomment if using Carthage)
+# Carthage/Build/
+
+## Accio dependency management
+Dependencies/
+.accio/
+
+## Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/readme.md
+
+## Code coverage
+*.xccovreport
+*.xccovarchive
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+## SwiftPM artifacts
+Artifacts/
+
+## Archives
+*.xcarchive
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk

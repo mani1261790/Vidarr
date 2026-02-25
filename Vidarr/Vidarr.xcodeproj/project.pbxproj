@@ -27,7 +27,6 @@
 		3C233D7A2F4F227E00CB4EE9 /* Vidarr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vidarr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C233D8A2F4F228000CB4EE9 /* VidarrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VidarrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C233D942F4F228000CB4EE9 /* VidarrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VidarrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3CD479CD2F4F2B8A008C15C2 /* Vidarr.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Vidarr.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,13 +88,6 @@
 				3C233D7A2F4F227E00CB4EE9 /* Vidarr.app */,
 				3C233D8A2F4F228000CB4EE9 /* VidarrTests.xctest */,
 				3C233D942F4F228000CB4EE9 /* VidarrUITests.xctest */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		3CD479CF2F4F2B8A008C15C2 /* Products */ = {
-			isa = PBXGroup;
-			children = (
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -206,12 +198,6 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3C233D7B2F4F227E00CB4EE9 /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = 3CD479CF2F4F2B8A008C15C2 /* Products */;
-					ProjectRef = 3CD479CD2F4F2B8A008C15C2 /* Vidarr.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				3C233D792F4F227E00CB4EE9 /* Vidarr */,

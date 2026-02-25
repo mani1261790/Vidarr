@@ -11,7 +11,6 @@ final class MainWindowController: NSWindowController {
     private let rootContainer = NSView()
     private let toolbarContainer = LiquidGlassToolbarView()
     private let webContainer = NSView()
-    private let tabSwitchGapView = NSView()
 
     private let tabStripContainer = NSView()
     private let tabStripScrollView = NSScrollView()
@@ -93,9 +92,7 @@ final class MainWindowController: NSWindowController {
         webContainer.translatesAutoresizingMaskIntoConstraints = false
         webContainer.wantsLayer = true
         webContainer.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.94).cgColor
-        tabSwitchGapView.wantsLayer = true
-        tabSwitchGapView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.98).cgColor
-        tabSwitchGapView.isHidden = true
+        webContainer.layer?.masksToBounds = true
 
         contentView.addSubview(rootContainer)
         rootContainer.addSubview(toolbarContainer)
@@ -327,8 +324,6 @@ final class MainWindowController: NSWindowController {
     private func attachWebView(_ webView: WKWebView) {
         webContainer.subviews.forEach { $0.removeFromSuperview() }
         overlayView = nil
-        tabSwitchGapView.removeFromSuperview()
-        tabSwitchGapView.isHidden = true
 
         webView.navigationDelegate = self
         clearLayoutConstraints(for: webView)
@@ -414,7 +409,7 @@ final class MainWindowController: NSWindowController {
         let startX = direction == .left
             ? bounds.width + UI.tabSwitchGap
             : -(bounds.width + UI.tabSwitchGap)
-        toWebView.frame = bounds.offsetBy(dx: startX, dy: 0)
+        toWebView.frame = bounds.offsetBy(dx: pixelAligned(startX), dy: 0)
 
         if toWebView.superview !== webContainer {
             if let overlay = overlayView {
@@ -431,16 +426,6 @@ final class MainWindowController: NSWindowController {
                 webContainer.addSubview(fromWebView)
             }
         }
-
-        if tabSwitchGapView.superview !== webContainer {
-            webContainer.addSubview(tabSwitchGapView)
-        }
-        tabSwitchGapView.isHidden = false
-        updateTabSwitchGapFrame(
-            fromFrame: fromWebView.frame,
-            toFrame: toWebView.frame,
-            direction: direction
-        )
 
         webContainer.layoutSubtreeIfNeeded()
     }
@@ -460,14 +445,8 @@ final class MainWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.22
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            state.fromWebView.animator().frame.origin.x = fromTargetX
+            state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
             state.toWebView.animator().frame.origin.x = 0
-            let targetGapFrame = gapFrame(
-                fromFrame: state.fromWebView.frame.offsetBy(dx: fromTargetX - state.fromWebView.frame.origin.x, dy: 0),
-                toFrame: state.toWebView.frame.offsetBy(dx: -state.toWebView.frame.origin.x, dy: 0),
-                direction: state.direction
-            )
-            tabSwitchGapView.animator().frame = targetGapFrame
         } completionHandler: { [weak self] in
             self?.tabManager.selectTab(index: state.targetIndex)
         }
@@ -493,18 +472,17 @@ final class MainWindowController: NSWindowController {
         switch state.direction {
         case .left:
             offset = max(-width, min(0, totalX))
-            state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
-            state.toWebView.frame = bounds.offsetBy(dx: width + UI.tabSwitchGap + offset, dy: 0)
+            let fromX = pixelAligned(offset)
+            let toX = pixelAligned(width + UI.tabSwitchGap + offset)
+            state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
         case .right:
             offset = min(width, max(0, totalX))
-            state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
-            state.toWebView.frame = bounds.offsetBy(dx: -width - UI.tabSwitchGap + offset, dy: 0)
+            let fromX = pixelAligned(offset)
+            let toX = pixelAligned(-width - UI.tabSwitchGap + offset)
+            state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
         }
-        updateTabSwitchGapFrame(
-            fromFrame: state.fromWebView.frame,
-            toFrame: state.toWebView.frame,
-            direction: state.direction
-        )
     }
 
     private func finishInteractiveTabSwitch(totalX: CGFloat) {
@@ -548,14 +526,8 @@ final class MainWindowController: NSWindowController {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            state.fromWebView.animator().frame.origin.x = fromTargetX
-            state.toWebView.animator().frame.origin.x = toTargetX
-            let targetGapFrame = gapFrame(
-                fromFrame: state.fromWebView.frame.offsetBy(dx: fromTargetX - state.fromWebView.frame.origin.x, dy: 0),
-                toFrame: state.toWebView.frame.offsetBy(dx: toTargetX - state.toWebView.frame.origin.x, dy: 0),
-                direction: state.direction
-            )
-            tabSwitchGapView.animator().frame = targetGapFrame
+            state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
+            state.toWebView.animator().frame.origin.x = pixelAligned(toTargetX)
         } completionHandler: { [weak self] in
             guard let self else { return }
             if shouldCommit {
@@ -566,27 +538,10 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    private func updateTabSwitchGapFrame(
-        fromFrame: CGRect,
-        toFrame: CGRect,
-        direction: ActionCenter.GestureTabSwitchDirection
-    ) {
-        tabSwitchGapView.frame = gapFrame(fromFrame: fromFrame, toFrame: toFrame, direction: direction)
-    }
-
-    private func gapFrame(
-        fromFrame: CGRect,
-        toFrame: CGRect,
-        direction: ActionCenter.GestureTabSwitchDirection
-    ) -> CGRect {
-        let gapX: CGFloat
-        switch direction {
-        case .left:
-            gapX = fromFrame.maxX
-        case .right:
-            gapX = toFrame.maxX
-        }
-        return CGRect(x: gapX, y: 0, width: UI.tabSwitchGap, height: webContainer.bounds.height)
+    private func pixelAligned(_ value: CGFloat) -> CGFloat {
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        guard scale > 0 else { return value.rounded() }
+        return (value * scale).rounded() / scale
     }
 
     private func captureThumbnail(for webView: WKWebView) {

@@ -31,9 +31,17 @@ final class MainWindowController: NSWindowController {
     private var isAddressEditing = false
     private var currentAddressURLString = ""
     private var pendingTabSwitchAnimation: PendingTabSwitchAnimation?
+    private var interactiveTabSwitchState: InteractiveTabSwitchState?
 
     private struct PendingTabSwitchAnimation {
         weak var fromWebView: WKWebView?
+        let direction: ActionCenter.GestureTabSwitchDirection
+    }
+
+    private struct InteractiveTabSwitchState {
+        let fromWebView: WKWebView
+        let toWebView: WKWebView
+        let targetIndex: Int
         let direction: ActionCenter.GestureTabSwitchDirection
     }
 
@@ -208,6 +216,15 @@ final class MainWindowController: NSWindowController {
         actions.performGestureTabSwitch = { [weak self] direction in
             self?.performGestureTabSwitch(direction: direction)
         }
+        actions.beginInteractiveGestureTabSwitch = { [weak self] direction in
+            self?.beginInteractiveTabSwitch(direction: direction) ?? false
+        }
+        actions.updateInteractiveGestureTabSwitch = { [weak self] totalX in
+            self?.updateInteractiveTabSwitch(totalX: totalX)
+        }
+        actions.finishInteractiveGestureTabSwitch = { [weak self] totalX in
+            self?.finishInteractiveTabSwitch(totalX: totalX)
+        }
     }
 
     private func ensureInitialTabVisible() {
@@ -300,6 +317,8 @@ final class MainWindowController: NSWindowController {
     }
 
     private func performGestureTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) {
+        guard interactiveTabSwitchState == nil else { return }
+
         let count = tabManager.tabCount
         guard count > 1 else { return }
 
@@ -320,6 +339,134 @@ final class MainWindowController: NSWindowController {
             direction: direction
         )
         tabManager.selectTab(index: targetIndex)
+    }
+
+    private func beginInteractiveTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) -> Bool {
+        guard interactiveTabSwitchState == nil else { return true }
+
+        let count = tabManager.tabCount
+        guard count > 1 else { return false }
+
+        let currentIndex = tabManager.currentIndex
+        guard currentIndex >= 0, currentIndex < count else { return false }
+        guard let fromWebView = tabManager.currentWebView else { return false }
+
+        let targetIndex: Int
+        switch direction {
+        case .left:
+            targetIndex = (currentIndex + 1 + count) % count
+        case .right:
+            targetIndex = (currentIndex - 1 + count) % count
+        }
+        guard targetIndex != currentIndex else { return false }
+        guard let toWebView = tabManager.webView(at: targetIndex) else { return false }
+
+        prepareInteractiveTabSwitchViews(from: fromWebView, to: toWebView, direction: direction)
+        interactiveTabSwitchState = InteractiveTabSwitchState(
+            fromWebView: fromWebView,
+            toWebView: toWebView,
+            targetIndex: targetIndex,
+            direction: direction
+        )
+        return true
+    }
+
+    private func prepareInteractiveTabSwitchViews(
+        from fromWebView: WKWebView,
+        to toWebView: WKWebView,
+        direction: ActionCenter.GestureTabSwitchDirection
+    ) {
+        fromWebView.navigationDelegate = self
+        toWebView.navigationDelegate = self
+
+        fromWebView.translatesAutoresizingMaskIntoConstraints = true
+        toWebView.translatesAutoresizingMaskIntoConstraints = true
+
+        let bounds = webContainer.bounds
+        fromWebView.frame = bounds
+        let startX = direction == .left ? bounds.width : -bounds.width
+        toWebView.frame = bounds.offsetBy(dx: startX, dy: 0)
+
+        if toWebView.superview !== webContainer {
+            if let overlay = overlayView {
+                webContainer.addSubview(toWebView, positioned: .below, relativeTo: overlay)
+            } else {
+                webContainer.addSubview(toWebView, positioned: .below, relativeTo: fromWebView)
+            }
+        }
+
+        if fromWebView.superview !== webContainer {
+            if let overlay = overlayView {
+                webContainer.addSubview(fromWebView, positioned: .below, relativeTo: overlay)
+            } else {
+                webContainer.addSubview(fromWebView)
+            }
+        }
+
+        webContainer.layoutSubtreeIfNeeded()
+    }
+
+    private func updateInteractiveTabSwitch(totalX: CGFloat) {
+        guard let state = interactiveTabSwitchState else { return }
+        let bounds = webContainer.bounds
+        let width = bounds.width
+        guard width > 1 else { return }
+
+        let offset: CGFloat
+        switch state.direction {
+        case .left:
+            offset = max(-width, min(0, totalX))
+            state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: width + offset, dy: 0)
+        case .right:
+            offset = min(width, max(0, totalX))
+            state.fromWebView.frame = bounds.offsetBy(dx: offset, dy: 0)
+            state.toWebView.frame = bounds.offsetBy(dx: -width + offset, dy: 0)
+        }
+    }
+
+    private func finishInteractiveTabSwitch(totalX: CGFloat) {
+        guard let state = interactiveTabSwitchState else { return }
+        interactiveTabSwitchState = nil
+
+        let width = webContainer.bounds.width
+        guard width > 1 else {
+            tabManager.selectTab(index: state.targetIndex)
+            return
+        }
+
+        let commitThreshold = max(88, width * 0.22)
+        let shouldCommit: Bool
+        switch state.direction {
+        case .left:
+            shouldCommit = totalX <= -commitThreshold
+        case .right:
+            shouldCommit = totalX >= commitThreshold
+        }
+
+        let fromTargetX: CGFloat
+        let toTargetX: CGFloat
+        if shouldCommit {
+            fromTargetX = state.direction == .left ? -width : width
+            toTargetX = 0
+        } else {
+            fromTargetX = 0
+            toTargetX = state.direction == .left ? width : -width
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            state.fromWebView.animator().frame.origin.x = fromTargetX
+            state.toWebView.animator().frame.origin.x = toTargetX
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            if shouldCommit {
+                self.tabManager.selectTab(index: state.targetIndex)
+            } else {
+                self.attachWebView(state.fromWebView)
+            }
+        }
     }
 
     private func animateTabSwitch(
@@ -497,9 +644,14 @@ extension MainWindowController: TabManagerDelegate {
         guard let webView else {
             webContainer.subviews.forEach { $0.removeFromSuperview() }
             overlayView = nil
+            interactiveTabSwitchState = nil
             applyAddressDisplayMode(display: "")
             rebuildTabStrip()
             return
+        }
+
+        if interactiveTabSwitchState != nil {
+            interactiveTabSwitchState = nil
         }
 
         if let pending = pendingTabSwitchAnimation,

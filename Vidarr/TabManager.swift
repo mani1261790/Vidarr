@@ -101,6 +101,11 @@ final class TabManager {
         }
     }
 
+    func webView(at index: Int) -> WKWebView? {
+        guard index >= 0, index < tabs.count else { return nil }
+        return tabs[index].webView
+    }
+
     func selectPrevTab() {
         performOnMain { [weak self] in
             guard let self, !tabs.isEmpty else { return }

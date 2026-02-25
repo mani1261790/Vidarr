@@ -14,6 +14,9 @@ final class ActionCenter {
     var focusAddressField: (() -> Void)?
     var confirmCloseProtectedTab: (() -> Bool)?
     var performGestureTabSwitch: ((GestureTabSwitchDirection) -> Void)?
+    var beginInteractiveGestureTabSwitch: ((GestureTabSwitchDirection) -> Bool)?
+    var updateInteractiveGestureTabSwitch: ((CGFloat) -> Void)?
+    var finishInteractiveGestureTabSwitch: ((CGFloat) -> Void)?
 
     init(tabManager: TabManager, session: BrowserSession) {
         self.tabManager = tabManager
@@ -47,6 +50,18 @@ final class ActionCenter {
             return
         }
         tabPrev()
+    }
+
+    func beginInteractiveTabSwitch(direction: GestureTabSwitchDirection) -> Bool {
+        beginInteractiveGestureTabSwitch?(direction) ?? false
+    }
+
+    func updateInteractiveTabSwitch(totalX: CGFloat) {
+        updateInteractiveGestureTabSwitch?(totalX)
+    }
+
+    func finishInteractiveTabSwitch(totalX: CGFloat) {
+        finishInteractiveGestureTabSwitch?(totalX)
     }
 
     func tabClose() {

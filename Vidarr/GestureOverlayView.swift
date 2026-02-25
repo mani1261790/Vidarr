@@ -32,6 +32,8 @@ final class GestureOverlayView: NSView {
     private var capturePoints: [CGPoint] = []
     private var lastLiveCandidate: GestureResult?
     private var captureInvalidated = false
+    private var interactiveTabSwipeActive = false
+    private var interactiveTabSwipeTotalX: CGFloat = 0
     private var hudAnchorPoint: CGPoint = .zero
     private let allowedGestureNames: Set<String> = [
         "UpRight", "UpLeft", "DownRight", "DownLeft",
@@ -83,6 +85,12 @@ final class GestureOverlayView: NSView {
 
         case .capturing:
             appendCaptureDelta(dx: dx, dy: dy)
+            if handleInteractiveTabSwipe(dx: dx, dy: dy) {
+                if shouldCommitImmediately(for: event) {
+                    commitCapture()
+                }
+                return
+            }
             updateHUDIfNeeded()
             if shouldCommitImmediately(for: event) {
                 commitCapture()
@@ -150,6 +158,12 @@ final class GestureOverlayView: NSView {
         defer { resetCaptureState() }
 
         guard !capturePoints.isEmpty else {
+            hudView.hideImmediately()
+            return
+        }
+
+        if interactiveTabSwipeActive {
+            actionCenter?.finishInteractiveTabSwitch(totalX: interactiveTabSwipeTotalX)
             hudView.hideImmediately()
             return
         }
@@ -225,6 +239,8 @@ final class GestureOverlayView: NSView {
         capturePoints.removeAll()
         lastLiveCandidate = nil
         captureInvalidated = false
+        interactiveTabSwipeActive = false
+        interactiveTabSwipeTotalX = 0
         recentSamples.removeAll()
     }
 
@@ -267,6 +283,44 @@ final class GestureOverlayView: NSView {
         }
 
         return false
+    }
+
+    private func handleInteractiveTabSwipe(dx: CGFloat, dy _: CGFloat) -> Bool {
+        if interactiveTabSwipeActive {
+            interactiveTabSwipeTotalX += dx
+            actionCenter?.updateInteractiveTabSwitch(totalX: interactiveTabSwipeTotalX)
+            return true
+        }
+
+        guard capturePoints.count >= 4 else { return false }
+
+        let start = capturePoints[0]
+        let end = capturePoints[capturePoints.count - 1]
+        let displacementX = end.x - start.x
+        let displacementY = end.y - start.y
+        let absDX = abs(displacementX)
+        let absDY = abs(displacementY)
+        guard absDX >= 28 else { return false }
+        guard absDX >= absDY * 2.35 else { return false }
+
+        var minY = capturePoints[0].y
+        var maxY = capturePoints[0].y
+        for point in capturePoints {
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+        let verticalExcursion = maxY - minY
+        guard verticalExcursion <= 20 else { return false }
+
+        let direction: ActionCenter.GestureTabSwitchDirection = displacementX < 0 ? .left : .right
+        guard actionCenter?.beginInteractiveTabSwitch(direction: direction) == true else { return false }
+
+        interactiveTabSwipeActive = true
+        interactiveTabSwipeTotalX = displacementX
+        actionCenter?.updateInteractiveTabSwitch(totalX: interactiveTabSwipeTotalX)
+        lastLiveCandidate = nil
+        hudView.hideImmediately()
+        return true
     }
 
     private func pathLength(_ points: [CGPoint]) -> CGFloat {

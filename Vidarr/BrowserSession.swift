@@ -3,7 +3,7 @@ import WebKit
 
 /// 現在タブの WKWebView 操作と共通設定を提供するセッション層。
 final class BrowserSession {
-    static let defaultHomeURL = URL(string: "https://www.google.com")!
+    static let defaultHomeURL = URL(string: "https://search.fenrir-inc.com/")!
 
     private unowned let tabManager: TabManager
 

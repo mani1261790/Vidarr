@@ -134,7 +134,7 @@ final class ActionCenter {
     }
 
     private func searchURL(for query: String) -> URL {
-        var components = URLComponents(string: "https://www.google.com/search")!
+        var components = URLComponents(string: "https://search.fenrir-inc.com/")!
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         return components.url ?? BrowserSession.defaultHomeURL
     }

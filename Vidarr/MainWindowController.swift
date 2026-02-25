@@ -781,49 +781,26 @@ private final class LiquidGlassToolbarView: NSView {
 
         contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
 
-        if #available(macOS 26.0, *) {
-            let glassContainer = NSGlassEffectContainerView()
-            glassContainer.translatesAutoresizingMaskIntoConstraints = false
-            glassContainer.spacing = 0
-            addSubview(glassContainer)
+        let visualEffectView = NSVisualEffectView()
+        visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+        visualEffectView.material = .underWindowBackground
+        visualEffectView.state = .followsWindowActiveState
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.isEmphasized = false
+        visualEffectView.addSubview(contentLayoutView)
+        addSubview(visualEffectView)
 
-            let glassView = NSGlassEffectView()
-            glassView.translatesAutoresizingMaskIntoConstraints = false
-            glassView.style = .clear
-            glassView.cornerRadius = 0
-            glassView.tintColor = NSColor.white.withAlphaComponent(0.012)
-            glassView.contentView = contentLayoutView
+        NSLayoutConstraint.activate([
+            visualEffectView.topAnchor.constraint(equalTo: topAnchor),
+            visualEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            visualEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            visualEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            glassContainer.contentView = glassView
-
-            NSLayoutConstraint.activate([
-                glassContainer.topAnchor.constraint(equalTo: topAnchor),
-                glassContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
-                glassContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
-                glassContainer.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ])
-        } else {
-            let fallback = NSVisualEffectView()
-            fallback.translatesAutoresizingMaskIntoConstraints = false
-            fallback.material = .underWindowBackground
-            fallback.state = .followsWindowActiveState
-            fallback.blendingMode = .behindWindow
-            fallback.isEmphasized = false
-            fallback.addSubview(contentLayoutView)
-            addSubview(fallback)
-
-            NSLayoutConstraint.activate([
-                fallback.topAnchor.constraint(equalTo: topAnchor),
-                fallback.leadingAnchor.constraint(equalTo: leadingAnchor),
-                fallback.trailingAnchor.constraint(equalTo: trailingAnchor),
-                fallback.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-                contentLayoutView.topAnchor.constraint(equalTo: fallback.topAnchor),
-                contentLayoutView.leadingAnchor.constraint(equalTo: fallback.leadingAnchor),
-                contentLayoutView.trailingAnchor.constraint(equalTo: fallback.trailingAnchor),
-                contentLayoutView.bottomAnchor.constraint(equalTo: fallback.bottomAnchor)
-            ])
-        }
+            contentLayoutView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+            contentLayoutView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
+            contentLayoutView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
+            contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
+        ])
     }
 }
 

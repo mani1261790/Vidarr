@@ -1110,7 +1110,11 @@ private final class TabChipView: NSView {
         }
 
         if protectedState {
-            layer?.borderColor = NSColor.systemYellow.withAlphaComponent(isActive ? 0.95 : 0.75).cgColor
+            let protectedOrange = NSColor(calibratedRed: 1.0, green: 0.48, blue: 0.06, alpha: 1.0)
+            layer?.borderColor = protectedOrange.withAlphaComponent(isActive ? 0.95 : 0.82).cgColor
+            layer?.shadowColor = protectedOrange.withAlphaComponent(isActive ? 0.98 : 0.88).cgColor
+            layer?.shadowOpacity = isActive ? 0.62 : 0.36
+            layer?.shadowRadius = isActive ? 9 : 5
         }
     }
 }

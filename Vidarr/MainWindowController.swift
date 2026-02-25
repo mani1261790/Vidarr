@@ -495,9 +495,14 @@ final class MainWindowController: NSWindowController {
                 : -(width + UI.tabSwitchGap)
         }
 
+        let currentFromX = state.fromWebView.frame.origin.x
+        let remaining = abs(fromTargetX - currentFromX)
+        let normalized = min(1.0, max(0.0, remaining / max(width + UI.tabSwitchGap, 1)))
+        let duration = 0.12 + (0.20 * normalized)
+
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             state.fromWebView.animator().frame.origin.x = fromTargetX
             state.toWebView.animator().frame.origin.x = toTargetX
         } completionHandler: { [weak self] in

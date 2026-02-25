@@ -144,6 +144,9 @@ final class GestureRecognizer {
         case "UpLeft":
             return isUpThenHorizontal(raw, horizontalDirection: .left)
 
+        case "DownLeft":
+            return isDownThenHorizontal(raw, horizontalDirection: .left)
+
         case "S":
             return isSLike(raw)
 
@@ -165,6 +168,23 @@ final class GestureRecognizer {
         let second = vector(from: raw[split], to: raw[raw.count - 1])
 
         guard first.dy > 0, abs(first.dy) > abs(first.dx) * dominanceRatio else { return false }
+
+        switch horizontalDirection {
+        case .right:
+            return second.dx > 0 && abs(second.dx) > abs(second.dy) * 1.2
+        case .left:
+            return second.dx < 0 && abs(second.dx) > abs(second.dy) * 1.2
+        }
+    }
+
+    private func isDownThenHorizontal(_ raw: [CGPoint], horizontalDirection: HorizontalDirection) -> Bool {
+        guard raw.count >= 8 else { return false }
+
+        let split = max(2, min(raw.count - 3, Int(Double(raw.count) * 0.55)))
+        let first = vector(from: raw[0], to: raw[split])
+        let second = vector(from: raw[split], to: raw[raw.count - 1])
+
+        guard first.dy < 0, abs(first.dy) > abs(first.dx) * dominanceRatio else { return false }
 
         switch horizontalDirection {
         case .right:
@@ -525,6 +545,12 @@ extension GestureRecognizer {
             CGPoint(x: 30, y: 220)
         ])
 
+        let downLeft = polyline([
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 125, y: 35),
+            CGPoint(x: 30, y: 35)
+        ])
+
         let sShapeA = polyline([
             CGPoint(x: 40, y: 210),
             CGPoint(x: 95, y: 230),
@@ -558,6 +584,7 @@ extension GestureRecognizer {
             GestureTemplate(name: "OO", points: circle(loopCount: 2, clockwise: false)),
             GestureTemplate(name: "UpRight", points: upRight),
             GestureTemplate(name: "UpLeft", points: upLeft),
+            GestureTemplate(name: "DownLeft", points: downLeft),
             GestureTemplate(name: "S", points: sShapeA),
             GestureTemplate(name: "S", points: sShapeB)
         ]

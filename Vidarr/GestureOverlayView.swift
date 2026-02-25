@@ -5,7 +5,7 @@ final class GestureOverlayView: NSView {
         let triggerHorizontalDelta: CGFloat = 6.0
         let triggerDominanceRatio: CGFloat = 2.0
         let triggerWindowMs: TimeInterval = 120
-        let captureEndTimeoutMs: TimeInterval = 180
+        let captureEndTimeoutMs: TimeInterval = 110
         let minPathLength: CGFloat = 120
         let matchScoreThreshold: CGFloat = 0.75
         let upStrokeDominanceRatio: CGFloat = 2.0
@@ -70,6 +70,10 @@ final class GestureOverlayView: NSView {
         case .capturing:
             appendCaptureDelta(dx: dx, dy: dy)
             updateHUDIfNeeded()
+            if shouldCommitImmediately(for: event) {
+                commitCapture()
+                return
+            }
             scheduleCommitTimer()
             // キャプチャ中は WebView 側へスクロールイベントを渡さない。
         }
@@ -160,6 +164,18 @@ final class GestureOverlayView: NSView {
         hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
     }
 
+    private func shouldCommitImmediately(for event: NSEvent) -> Bool {
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            return true
+        }
+
+        if event.phase == [] && event.momentumPhase.contains(.began) {
+            return true
+        }
+
+        return false
+    }
+
     private func pathLength(_ points: [CGPoint]) -> CGFloat {
         guard points.count > 1 else { return 0 }
 
@@ -204,6 +220,8 @@ final class GestureOverlayView: NSView {
             actions.goForward()
         case "S":
             actions.search()
+        case "DownLeft":
+            actions.newTab()
         default:
             break
         }

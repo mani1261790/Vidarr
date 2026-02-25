@@ -20,6 +20,7 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 - `↑→ (UpRight)` : 戻る
 - `↑← (UpLeft)` : 進む
 - `S` : 検索/URL入力用にアドレスバーへフォーカス
+- `↓← (DownLeft)` : 新規タブ
 
 注意:
 - 横ストローク (`Left` / `Right`) はタブ切替専用です。

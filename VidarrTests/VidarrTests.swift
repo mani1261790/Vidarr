@@ -41,6 +41,18 @@ struct GestureRecognizerTests {
         #expect((result?.score ?? 0) >= 0.72)
     }
 
+    @Test func recognizesDownLeftForNewTab() {
+        let points = polyline([
+            CGPoint(x: 190, y: 250),
+            CGPoint(x: 185, y: 70),
+            CGPoint(x: 40, y: 65)
+        ], stepsPerSegment: 24)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "DownLeft", "actual result: \(String(describing: result))")
+        #expect((result?.score ?? 0) >= 0.72)
+    }
+
     @Test func lowConfidenceGestureReturnsNil() {
         let points = polyline([
             CGPoint(x: 12, y: 12),

@@ -151,7 +151,7 @@ final class GestureRecognizer {
                 && dx > 0
 
         case "U":
-            return isUShape(raw)
+            return isDownRightUpUShape(raw)
 
         case "O":
             return isClosedCircular(raw, expectedTurns: 2 * .pi, tolerance: 1.55 * .pi, closeRatioLimit: 0.45)
@@ -341,25 +341,35 @@ final class GestureRecognizer {
         return false
     }
 
-    private func isUShape(_ raw: [CGPoint]) -> Bool {
-        guard raw.count >= 6 else { return false }
+    private func isDownRightUpUShape(_ raw: [CGPoint]) -> Bool {
+        guard raw.count >= 10 else { return false }
 
-        let ys = raw.map(\.y)
-        let xs = raw.map(\.x)
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(20, box.height * 0.28)
+        let minHorizontalTravel = max(20, box.width * 0.28)
 
-        guard let minY = ys.min(), let maxY = ys.max(), let minX = xs.min(), let maxX = xs.max() else {
-            return false
+        for r1 in stride(from: 0.20, through: 0.42, by: 0.04) {
+            let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
+            for r2 in stride(from: 0.56, through: 0.82, by: 0.04) {
+                let i2 = max(i1 + 2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(r2))))
+
+                let v1 = vector(from: raw[0], to: raw[i1])
+                let v2 = vector(from: raw[i1], to: raw[i2])
+                let v3 = vector(from: raw[i2], to: raw[raw.count - 1])
+
+                guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.82 else { continue }
+                guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
+                guard v3.dy > 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.82 else { continue }
+
+                // U の始点と終点は同じ高さ帯に収まりやすい
+                let shoulderGap = abs((raw.first?.y ?? 0) - (raw.last?.y ?? 0))
+                if shoulderGap <= max(26, box.height * 0.38) {
+                    return true
+                }
+            }
         }
 
-        let height = maxY - minY
-        let width = maxX - minX
-        guard height > 10, width > 10 else { return false }
-
-        let shouldersY = max(raw.first?.y ?? 0, raw.last?.y ?? 0)
-        let floorDistance = shouldersY - minY
-        let shoulderGap = abs((raw.first?.y ?? 0) - (raw.last?.y ?? 0))
-
-        return floorDistance > height * 0.45 && shoulderGap < height * 0.35
+        return false
     }
 
     private func isClosedCircular(

@@ -39,7 +39,7 @@ final class GestureOverlayView: NSView {
     private var captureSuppressionUntil: TimeInterval = 0
     private let allowedGestureNames: Set<String> = [
         "UpRight", "UpLeft", "DownRight", "DownLeft",
-        "O", "S", "OO", "DownRightDownRight",
+        "O", "U", "S", "OO", "DownRightDownRight",
         "Right", "Left"
     ]
 
@@ -417,6 +417,8 @@ final class GestureOverlayView: NSView {
             captureSuppressionUntil = latestEventTimestamp + 0.28
         case "O":
             actions.reload()
+        case "U":
+            actions.tabReopenClosed()
         case "OO":
             actions.reloadAll()
         case "UpRight":

@@ -437,16 +437,24 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.layoutSubtreeIfNeeded()
 
         let contentHeight = max(tabStripContainer.bounds.height, UI.tabChipSize.height)
-        let fittingWidth = max(tabStripStackView.fittingSize.width, tabStripContainer.bounds.width)
-        tabStripStackView.frame = CGRect(x: 0, y: 0, width: fittingWidth, height: contentHeight)
+        let chipWidth = tabStripStackView.fittingSize.width
+        let viewportWidth = tabStripContainer.bounds.width
+        let documentWidth = max(chipWidth, viewportWidth)
+        let centeredX = chipWidth < viewportWidth ? (viewportWidth - chipWidth) * 0.5 : 0
+        tabStripStackView.frame = CGRect(x: centeredX, y: 0, width: chipWidth, height: contentHeight)
+        tabStripScrollView.documentView?.frame = CGRect(x: 0, y: 0, width: documentWidth, height: contentHeight)
 
-        if let activeChip = tabStripStackView.arrangedSubviews.first(where: {
+        if chipWidth > viewportWidth,
+           let activeChip = tabStripStackView.arrangedSubviews.first(where: {
             ($0 as? TabChipView)?.isActiveChip == true
         }) {
             var target = activeChip.frame.insetBy(dx: -16, dy: 0)
             target.origin.y = 0
             target.size.height = contentHeight
             clipView.scrollToVisible(target)
+            tabStripScrollView.reflectScrolledClipView(clipView)
+        } else {
+            clipView.scroll(to: .zero)
             tabStripScrollView.reflectScrolledClipView(clipView)
         }
     }

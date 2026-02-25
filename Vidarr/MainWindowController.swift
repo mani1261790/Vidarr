@@ -3,8 +3,8 @@ import WebKit
 
 final class MainWindowController: NSWindowController {
     private enum UI {
-        static let toolbarHeight: CGFloat = 38
-        static let tabChipSize = NSSize(width: 108, height: 26)
+        static let toolbarHeight: CGFloat = 46
+        static let tabChipSize = NSSize(width: 112, height: 30)
     }
 
     private let rootContainer = NSView()
@@ -111,14 +111,14 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.translatesAutoresizingMaskIntoConstraints = false
         tabStripStackView.orientation = .horizontal
         tabStripStackView.alignment = .centerY
-        tabStripStackView.spacing = 4
+        tabStripStackView.spacing = 6
         tabStripContainer.addSubview(tabStripStackView)
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
         newTabButton.action = #selector(didTapNewTab)
         newTabButton.isBordered = false
-        newTabButton.font = NSFont.systemFont(ofSize: 19, weight: .light)
+        newTabButton.font = NSFont.systemFont(ofSize: 20, weight: .regular)
         newTabButton.contentTintColor = NSColor(calibratedWhite: 0.22, alpha: 0.92)
 
         addressDisplayView.translatesAutoresizingMaskIntoConstraints = false
@@ -133,12 +133,13 @@ final class MainWindowController: NSWindowController {
         addressEditorField.bezelStyle = .roundedBezel
         addressEditorField.isHidden = true
 
-        toolbarContainer.addSubview(tabStripContainer)
-        toolbarContainer.addSubview(newTabButton)
-        toolbarContainer.addSubview(addressDisplayView)
-        toolbarContainer.addSubview(addressEditorField)
+        let toolbarContent = toolbarContainer.contentLayoutView
+        toolbarContent.addSubview(tabStripContainer)
+        toolbarContent.addSubview(newTabButton)
+        toolbarContent.addSubview(addressDisplayView)
+        toolbarContent.addSubview(addressEditorField)
 
-        let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContainer.leadingAnchor, constant: 84)
+        let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
         tabStripMinLeadingConstraint = minLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
@@ -148,9 +149,9 @@ final class MainWindowController: NSWindowController {
         NSLayoutConstraint.activate([
             minLeading,
             tabWidth,
-            tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContainer.centerXAnchor),
-            tabStripContainer.topAnchor.constraint(equalTo: toolbarContainer.topAnchor, constant: 5),
-            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContainer.bottomAnchor, constant: -5),
+            tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
+            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 6),
+            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -6),
             tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
             tabStripStackView.centerXAnchor.constraint(equalTo: tabStripContainer.centerXAnchor),
@@ -159,14 +160,14 @@ final class MainWindowController: NSWindowController {
             tabStripStackView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
             tabStripStackView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
-            newTabButton.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
+            newTabButton.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
             newTabButton.trailingAnchor.constraint(equalTo: addressDisplayView.leadingAnchor, constant: -8),
-            newTabButton.widthAnchor.constraint(equalToConstant: 18),
-            newTabButton.heightAnchor.constraint(equalToConstant: 18),
+            newTabButton.widthAnchor.constraint(equalToConstant: 20),
+            newTabButton.heightAnchor.constraint(equalToConstant: 20),
 
-            addressDisplayView.centerYAnchor.constraint(equalTo: toolbarContainer.centerYAnchor),
-            addressDisplayView.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor, constant: -10),
-            addressDisplayView.heightAnchor.constraint(equalToConstant: 22),
+            addressDisplayView.centerYAnchor.constraint(equalTo: toolbarContent.centerYAnchor),
+            addressDisplayView.trailingAnchor.constraint(equalTo: toolbarContent.trailingAnchor, constant: -10),
+            addressDisplayView.heightAnchor.constraint(equalToConstant: 24),
             addressWidth,
 
             addressEditorField.centerYAnchor.constraint(equalTo: addressDisplayView.centerYAnchor),
@@ -394,9 +395,8 @@ extension MainWindowController: WKNavigationDelegate {
     }
 }
 
-private final class LiquidGlassToolbarView: NSVisualEffectView {
-    private let tintLayer = CAGradientLayer()
-    private let shineLayer = CAGradientLayer()
+private final class LiquidGlassToolbarView: NSView {
+    let contentLayoutView = NSView()
     private let separatorLayer = CALayer()
 
     override init(frame frameRect: NSRect) {
@@ -412,42 +412,59 @@ private final class LiquidGlassToolbarView: NSVisualEffectView {
     override func layout() {
         super.layout()
 
-        tintLayer.frame = bounds
-        tintLayer.colors = [
-            NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor,
-            NSColor(calibratedWhite: 0.92, alpha: 0.08).cgColor
-        ]
-        tintLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-        tintLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
-
-        shineLayer.frame = CGRect(x: 0, y: bounds.height * 0.52, width: bounds.width, height: bounds.height * 0.48)
-        shineLayer.colors = [
-            NSColor.white.withAlphaComponent(0.30).cgColor,
-            NSColor.white.withAlphaComponent(0.05).cgColor,
-            NSColor.clear.cgColor
-        ]
-        shineLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-        shineLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
-
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         separatorLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / scale)
     }
 
     private func setupView() {
-        if #available(macOS 10.14, *) {
-            material = .headerView
-        } else {
-            material = .titlebar
-        }
-        blendingMode = .withinWindow
-        state = .followsWindowActiveState
-        isEmphasized = true
-
         wantsLayer = true
-        layer?.addSublayer(tintLayer)
-        layer?.addSublayer(shineLayer)
         layer?.addSublayer(separatorLayer)
-        separatorLayer.backgroundColor = NSColor(calibratedWhite: 0.58, alpha: 0.52).cgColor
+        separatorLayer.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+
+        contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
+
+        if #available(macOS 26.0, *) {
+            let glassContainer = NSGlassEffectContainerView()
+            glassContainer.translatesAutoresizingMaskIntoConstraints = false
+            glassContainer.spacing = 0
+            addSubview(glassContainer)
+
+            let glassView = NSGlassEffectView()
+            glassView.translatesAutoresizingMaskIntoConstraints = false
+            glassView.style = .regular
+            glassView.cornerRadius = 0
+            glassView.tintColor = NSColor.white.withAlphaComponent(0.06)
+            glassView.contentView = contentLayoutView
+
+            glassContainer.contentView = glassView
+
+            NSLayoutConstraint.activate([
+                glassContainer.topAnchor.constraint(equalTo: topAnchor),
+                glassContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
+                glassContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+                glassContainer.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+        } else {
+            let fallback = NSVisualEffectView()
+            fallback.translatesAutoresizingMaskIntoConstraints = false
+            fallback.material = .headerView
+            fallback.state = .followsWindowActiveState
+            fallback.blendingMode = .behindWindow
+            fallback.addSubview(contentLayoutView)
+            addSubview(fallback)
+
+            NSLayoutConstraint.activate([
+                fallback.topAnchor.constraint(equalTo: topAnchor),
+                fallback.leadingAnchor.constraint(equalTo: leadingAnchor),
+                fallback.trailingAnchor.constraint(equalTo: trailingAnchor),
+                fallback.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+                contentLayoutView.topAnchor.constraint(equalTo: fallback.topAnchor),
+                contentLayoutView.leadingAnchor.constraint(equalTo: fallback.leadingAnchor),
+                contentLayoutView.trailingAnchor.constraint(equalTo: fallback.trailingAnchor),
+                contentLayoutView.bottomAnchor.constraint(equalTo: fallback.bottomAnchor)
+            ])
+        }
     }
 }
 
@@ -526,11 +543,11 @@ private final class TabChipView: NSView {
         layer?.masksToBounds = true
         layer?.borderWidth = 1
         layer?.borderColor = isActive
-            ? NSColor.white.withAlphaComponent(0.75).cgColor
-            : NSColor.white.withAlphaComponent(0.46).cgColor
+            ? NSColor.white.withAlphaComponent(0.90).cgColor
+            : NSColor.white.withAlphaComponent(0.56).cgColor
         layer?.backgroundColor = isActive
-            ? NSColor.white.withAlphaComponent(0.42).cgColor
-            : NSColor.white.withAlphaComponent(0.24).cgColor
+            ? NSColor.white.withAlphaComponent(0.52).cgColor
+            : NSColor.white.withAlphaComponent(0.30).cgColor
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailView.imageScaling = .scaleAxesIndependently

@@ -232,9 +232,9 @@ final class MainWindowController: NSWindowController {
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor, constant: -4),
+            tabSearchField.bottomAnchor.constraint(equalTo: rightPanelView.bottomAnchor, constant: -6),
             tabSearchField.heightAnchor.constraint(equalToConstant: 22),
-            tabSearchField.topAnchor.constraint(greaterThanOrEqualTo: addressDisplayView.bottomAnchor, constant: 4)
+            tabSearchField.topAnchor.constraint(equalTo: addressDisplayView.bottomAnchor, constant: 2)
         ])
 
         applyAddressDisplayMode(display: "")
@@ -720,6 +720,7 @@ extension MainWindowController: NSTextFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField, field == addressEditorField else { return }
         if isAddressEditing {
             endAddressEditingWithoutSubmit()
         }

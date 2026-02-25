@@ -4,7 +4,7 @@ import WebKit
 final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 54
-        static let tabChipSize = NSSize(width: 96, height: 34)
+        static let tabChipSize = NSSize(width: 96, height: 48)
         static let tabSwitchGap: CGFloat = 16
     }
 
@@ -25,7 +25,6 @@ final class MainWindowController: NSWindowController {
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
     private var rightPanelWidthConstraint: NSLayoutConstraint?
-    private var tabStripHeightConstraint: NSLayoutConstraint?
 
     private let tabManager: TabManager
     private let session: BrowserSession
@@ -189,17 +188,15 @@ final class MainWindowController: NSWindowController {
         tabStripMinLeadingConstraint = minLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
-        let tabHeight = tabStripContainer.heightAnchor.constraint(equalToConstant: UI.tabChipSize.height + 4)
-        tabStripHeightConstraint = tabHeight
         let rightPanelWidth = rightPanelView.widthAnchor.constraint(equalToConstant: 250)
         rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
             minLeading,
             tabWidth,
-            tabHeight,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
-            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 8),
+            tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 1),
+            tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -1),
             tabStripContainer.trailingAnchor.constraint(equalTo: newTabButton.leadingAnchor, constant: -6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
@@ -629,7 +626,6 @@ final class MainWindowController: NSWindowController {
         let reservedRight = rightPanelWidth + 10 + 20 + 8 + 12
         let available = window.frame.width - (maxButtonX + 10) - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
-        tabStripHeightConstraint?.constant = UI.tabChipSize.height + 6
         layoutTabStripAndRevealActive()
     }
 

@@ -8,6 +8,7 @@ final class GestureOverlayView: NSView {
         let seedHistoryWindowMs: TimeInterval = 240
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
+        let livePreviewScoreThreshold: CGFloat = 0.52
         let upStrokeDominanceRatio: CGFloat = 2.0
     }
 
@@ -30,7 +31,13 @@ final class GestureOverlayView: NSView {
     private var recentSamples: [DeltaSample] = []
     private var capturePoints: [CGPoint] = []
     private var lastLiveCandidate: GestureResult?
+    private var captureInvalidated = false
     private var hudAnchorPoint: CGPoint = .zero
+    private let allowedGestureNames: Set<String> = [
+        "UpRight", "UpLeft", "DownRight", "DownLeft",
+        "O", "S", "OO", "DownRightDownRight",
+        "Right", "Left"
+    ]
 
     private lazy var recognizer = GestureRecognizer(
         matchScoreThreshold: config.matchScoreThreshold,
@@ -121,6 +128,7 @@ final class GestureOverlayView: NSView {
         state = .capturing
         capturePoints = [point]
         lastLiveCandidate = nil
+        captureInvalidated = false
 
         for sample in seed {
             appendCaptureDelta(dx: sample.dx, dy: sample.dy)
@@ -144,11 +152,20 @@ final class GestureOverlayView: NSView {
             return
         }
 
-        let strict = recognizer.recognize(points: capturePoints)
+        guard !captureInvalidated else {
+            hudView.hideImmediately()
+            return
+        }
+
+        let strict = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
         let relaxed: GestureResult? = {
             guard strict == nil else { return nil }
             guard pathLength(capturePoints) >= config.minPathLength * 0.45 else { return nil }
-            return recognizer.bestPassingMatch(points: capturePoints, minimumScore: max(0.58, config.matchScoreThreshold - 0.16))
+            return recognizer.bestPassingMatch(
+                points: capturePoints,
+                minimumScore: max(0.58, config.matchScoreThreshold - 0.16),
+                allowedNames: allowedGestureNames
+            )
         }()
 
         guard let result = strict ?? relaxed else {
@@ -164,22 +181,32 @@ final class GestureOverlayView: NSView {
         state = .idle
         capturePoints.removeAll()
         lastLiveCandidate = nil
+        captureInvalidated = false
         recentSamples.removeAll()
     }
 
     private func updateHUDIfNeeded() {
-        if let best = recognizer.bestMatch(points: capturePoints) {
+        if captureInvalidated {
+            hudView.hideImmediately()
+            return
+        }
+
+        if let best = recognizer.bestPassingMatch(
+            points: capturePoints,
+            minimumScore: config.livePreviewScoreThreshold,
+            allowedNames: allowedGestureNames
+        ) {
             lastLiveCandidate = best
             hudView.showLiveCandidate(name: best.name, score: best.score, at: hudAnchorPoint)
             return
         }
 
-        // 指を離すまで実行しないため、既に候補が出ている間は HUD を維持する。
-        if let lastLiveCandidate {
-            hudView.showLiveCandidate(name: lastLiveCandidate.name, score: lastLiveCandidate.score, at: hudAnchorPoint)
-        } else {
-            hudView.hideImmediately()
+        // 一度候補が出たあとに許可パターンから外れたら、HUDを消して確定実行も無効化する。
+        if lastLiveCandidate != nil {
+            captureInvalidated = true
+            lastLiveCandidate = nil
         }
+        hudView.hideImmediately()
     }
 
     private func shouldCommitImmediately(for event: NSEvent) -> Bool {
@@ -222,12 +249,10 @@ final class GestureOverlayView: NSView {
             actions.tabNext()
         case "Right":
             actions.tabPrev()
-        case "L":
+        case "DownRight":
             actions.tabClose()
-        case "LL":
+        case "DownRightDownRight":
             actions.tabCloseAll()
-        case "U":
-            actions.tabReopenClosed()
         case "O":
             actions.reload()
         case "OO":

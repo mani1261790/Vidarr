@@ -168,12 +168,10 @@ final class GestureHUDView: NSView {
             return Descriptor(actionSymbol: "arrow.right.circle.fill")
         case "Right":
             return Descriptor(actionSymbol: "arrow.left.circle.fill")
-        case "L":
+        case "DownRight":
             return Descriptor(actionSymbol: "xmark.square.fill")
-        case "LL":
+        case "DownRightDownRight":
             return Descriptor(actionSymbol: "trash.circle.fill")
-        case "U":
-            return Descriptor(actionSymbol: "arrow.uturn.backward.circle.fill")
         case "O":
             return Descriptor(actionSymbol: "arrow.clockwise.circle.fill")
         case "OO":
@@ -197,16 +195,12 @@ final class GestureHUDView: NSView {
             return arrowPath(in: rect, from: CGPoint(x: 0.9, y: 0.5), to: CGPoint(x: 0.1, y: 0.5))
         case "Right":
             return arrowPath(in: rect, from: CGPoint(x: 0.1, y: 0.5), to: CGPoint(x: 0.9, y: 0.5))
-        case "L":
-            return polylinePath(in: rect, points: [CGPoint(x: 0.18, y: 0.82), CGPoint(x: 0.18, y: 0.2), CGPoint(x: 0.82, y: 0.2)])
-        case "LL":
+        case "DownRight":
+            return polylinePath(in: rect, points: [CGPoint(x: 0.5, y: 0.82), CGPoint(x: 0.5, y: 0.18), CGPoint(x: 0.84, y: 0.18)])
+        case "DownRightDownRight":
             return polylinePath(in: rect, points: [
-                CGPoint(x: 0.12, y: 0.82), CGPoint(x: 0.12, y: 0.2), CGPoint(x: 0.38, y: 0.2),
-                CGPoint(x: 0.38, y: 0.82), CGPoint(x: 0.38, y: 0.2), CGPoint(x: 0.84, y: 0.2)
-            ])
-        case "U":
-            return polylinePath(in: rect, points: [
-                CGPoint(x: 0.18, y: 0.8), CGPoint(x: 0.18, y: 0.26), CGPoint(x: 0.82, y: 0.26), CGPoint(x: 0.82, y: 0.8)
+                CGPoint(x: 0.18, y: 0.82), CGPoint(x: 0.18, y: 0.5), CGPoint(x: 0.52, y: 0.5),
+                CGPoint(x: 0.52, y: 0.18), CGPoint(x: 0.86, y: 0.18)
             ])
         case "O":
             return circlePath(in: rect, centerX: 0.5, centerY: 0.5, radius: 0.31)

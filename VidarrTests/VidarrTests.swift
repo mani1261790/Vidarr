@@ -71,6 +71,34 @@ struct GestureRecognizerTests {
         #expect((result?.score ?? 0) >= 0.65)
     }
 
+    @Test func recognizesDownRightStroke() {
+        let recognizer = makeRecognizer()
+        let points = polyline([
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 125, y: 35),
+            CGPoint(x: 220, y: 35)
+        ], stepsPerSegment: 24)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "DownRight", "actual result: \(String(describing: result))")
+        #expect((result?.score ?? 0) >= 0.65)
+    }
+
+    @Test func recognizesDownRightDownRightStroke() {
+        let recognizer = makeRecognizer()
+        let points = polyline([
+            CGPoint(x: 80, y: 260),
+            CGPoint(x: 80, y: 150),
+            CGPoint(x: 180, y: 150),
+            CGPoint(x: 180, y: 70),
+            CGPoint(x: 300, y: 70)
+        ], stepsPerSegment: 18)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "DownRightDownRight", "actual result: \(String(describing: result))")
+        #expect((result?.score ?? 0) >= 0.65)
+    }
+
     @Test func prefersUpRightOverSimpleRightWhenVerticalLeadExists() {
         let recognizer = makeRecognizer()
         let points = polyline([
@@ -112,6 +140,14 @@ struct GestureRecognizerTests {
         ], stepsPerSegment: 3)
 
         let result = recognizer.recognize(points: points)
+        #expect(result == nil)
+    }
+
+    @Test func disallowedNamesFilterRejectsLShape() {
+        let recognizer = makeRecognizer()
+        let points = circle(loopCount: 1, center: CGPoint(x: 190, y: 190), radius: 85, segmentsPerLoop: 54)
+        let allowedNames: Set<String> = ["Left"]
+        let result = recognizer.recognize(points: points, allowedNames: allowedNames)
         #expect(result == nil)
     }
 }

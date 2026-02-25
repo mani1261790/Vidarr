@@ -35,7 +35,7 @@ final class GestureRecognizer {
         self.dominanceRatio = dominanceRatio
     }
 
-    func recognize(points raw: [CGPoint]) -> GestureResult? {
+    func recognize(points raw: [CGPoint], allowedNames: Set<String>? = nil) -> GestureResult? {
         guard raw.count >= 10 else { return nil }
         guard pathLength(raw) >= minPathLength else { return nil }
 
@@ -44,33 +44,46 @@ final class GestureRecognizer {
         guard let passing = bestPassingCandidate(
             from: ranked,
             raw: raw,
-            minimumScore: matchScoreThreshold
+            minimumScore: matchScoreThreshold,
+            allowedNames: allowedNames
         ) else { return nil }
         return GestureResult(name: passing.name, score: passing.score)
     }
 
     /// HUD 用。しきい値チェックは行わず現在の最有力候補を返す。
-    func bestMatch(points raw: [CGPoint]) -> GestureResult? {
+    func bestMatch(points raw: [CGPoint], allowedNames: Set<String>? = nil) -> GestureResult? {
         guard raw.count >= 5 else { return nil }
 
         let normalized = normalize(raw)
         let ranked = rankedTemplateMatches(for: normalized)
 
-        if let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: 0) {
+        if let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: 0, allowedNames: allowedNames) {
             return GestureResult(name: passing.name, score: passing.score)
         }
 
-        guard let first = ranked.first else { return nil }
+        let filteredRanked: [(name: String, score: CGFloat)]
+        if let allowedNames {
+            filteredRanked = ranked.filter { allowedNames.contains($0.name) }
+        } else {
+            filteredRanked = ranked
+        }
+
+        guard let first = filteredRanked.first else { return nil }
         return GestureResult(name: first.name, score: first.score)
     }
 
     /// 緩和判定用。距離スコアとヒューリスティックを満たす最上位候補だけ返す。
-    func bestPassingMatch(points raw: [CGPoint], minimumScore: CGFloat) -> GestureResult? {
+    func bestPassingMatch(points raw: [CGPoint], minimumScore: CGFloat, allowedNames: Set<String>? = nil) -> GestureResult? {
         guard raw.count >= 5 else { return nil }
 
         let normalized = normalize(raw)
         let ranked = rankedTemplateMatches(for: normalized)
-        guard let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: minimumScore) else { return nil }
+        guard let passing = bestPassingCandidate(
+            from: ranked,
+            raw: raw,
+            minimumScore: minimumScore,
+            allowedNames: allowedNames
+        ) else { return nil }
         return GestureResult(name: passing.name, score: passing.score)
     }
 
@@ -156,6 +169,13 @@ final class GestureRecognizer {
         case "DownLeft":
             return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .left)
 
+        case "DownRight":
+            return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .right)
+
+        case "DownRightDownRight":
+            return isDoubleDownRight(raw)
+                && pathLength(raw) >= minPathLength * 1.45
+
         case "S":
             return isSLike(raw)
 
@@ -167,16 +187,26 @@ final class GestureRecognizer {
     private func bestPassingCandidate(
         from ranked: [(name: String, score: CGFloat)],
         raw: [CGPoint],
-        minimumScore: CGFloat
+        minimumScore: CGFloat,
+        allowedNames: Set<String>?
     ) -> (name: String, score: CGFloat)? {
         let passing = ranked.filter { candidate in
-            candidate.score >= minimumScore && passesHeuristic(for: candidate.name, raw: raw)
+            if let allowedNames, !allowedNames.contains(candidate.name) {
+                return false
+            }
+            return candidate.score >= minimumScore && passesHeuristic(for: candidate.name, raw: raw)
         }
 
         guard let best = passing.first else { return nil }
 
         if best.name == "Left" || best.name == "Right",
-           let composite = passing.first(where: { $0.name == "UpRight" || $0.name == "UpLeft" || $0.name == "DownLeft" }),
+           let composite = passing.first(where: {
+               $0.name == "UpRight"
+                   || $0.name == "UpLeft"
+                   || $0.name == "DownLeft"
+                   || $0.name == "DownRight"
+                   || $0.name == "DownRightDownRight"
+           }),
            composite.score >= best.score - compositePreferenceSlack {
             return composite
         }
@@ -263,6 +293,38 @@ final class GestureRecognizer {
                 }
             case .left:
                 if second.dx < 0 && abs(second.dx) > abs(second.dy) * 0.7 {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private func isDoubleDownRight(_ raw: [CGPoint]) -> Bool {
+        guard raw.count >= 12 else { return false }
+
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(20, box.height * 0.18)
+        let minHorizontalTravel = max(20, box.width * 0.18)
+
+        for r1 in stride(from: 0.14, through: 0.32, by: 0.04) {
+            let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
+            for r2 in stride(from: 0.34, through: 0.52, by: 0.04) {
+                let i2 = max(i1 + 2, min(raw.count - 4, Int(CGFloat(raw.count - 1) * CGFloat(r2))))
+                for r3 in stride(from: 0.56, through: 0.78, by: 0.04) {
+                    let i3 = max(i2 + 2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(r3))))
+
+                    let v1 = vector(from: raw[0], to: raw[i1])
+                    let v2 = vector(from: raw[i1], to: raw[i2])
+                    let v3 = vector(from: raw[i2], to: raw[i3])
+                    let v4 = vector(from: raw[i3], to: raw[raw.count - 1])
+
+                    guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.78 else { continue }
+                    guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
+                    guard v3.dy < 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.78 else { continue }
+                    guard v4.dx > 0, abs(v4.dx) >= minHorizontalTravel, abs(v4.dx) > abs(v4.dy) * 0.72 else { continue }
+
                     return true
                 }
             }
@@ -633,6 +695,20 @@ extension GestureRecognizer {
             CGPoint(x: 30, y: 35)
         ])
 
+        let downRight = polyline([
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 125, y: 35),
+            CGPoint(x: 220, y: 35)
+        ])
+
+        let downRightDownRight = polyline([
+            CGPoint(x: 70, y: 220),
+            CGPoint(x: 70, y: 120),
+            CGPoint(x: 150, y: 120),
+            CGPoint(x: 150, y: 35),
+            CGPoint(x: 230, y: 35)
+        ])
+
         let sShapeA = polyline([
             CGPoint(x: 40, y: 210),
             CGPoint(x: 95, y: 230),
@@ -667,6 +743,8 @@ extension GestureRecognizer {
             GestureTemplate(name: "UpRight", points: upRight),
             GestureTemplate(name: "UpLeft", points: upLeft),
             GestureTemplate(name: "DownLeft", points: downLeft),
+            GestureTemplate(name: "DownRight", points: downRight),
+            GestureTemplate(name: "DownRightDownRight", points: downRightDownRight),
             GestureTemplate(name: "S", points: sShapeA),
             GestureTemplate(name: "S", points: sShapeB)
         ]

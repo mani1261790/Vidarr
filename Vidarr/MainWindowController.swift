@@ -35,6 +35,8 @@ final class MainWindowController: NSWindowController {
     private var tabSearchQuery = ""
     private var currentAddressURLString = ""
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
+    private var dragFromTabIndex: Int?
+    private var dragToTabIndex: Int?
 
     private struct InteractiveTabSwitchState {
         let fromWebView: WKWebView
@@ -601,6 +603,12 @@ final class MainWindowController: NSWindowController {
             chip.onToggleProtection = { [weak self] index in
                 self?.tabManager.toggleProtection(index: index)
             }
+            chip.onDragMoved = { [weak self] fromIndex, locationInWindow in
+                self?.handleTabDragMoved(fromIndex: fromIndex, locationInWindow: locationInWindow)
+            }
+            chip.onDragEnded = { [weak self] fromIndex, locationInWindow in
+                self?.handleTabDragEnded(fromIndex: fromIndex, locationInWindow: locationInWindow)
+            }
             tabStripStackView.addArrangedSubview(chip)
         }
 
@@ -668,6 +676,45 @@ final class MainWindowController: NSWindowController {
             clipView.scroll(to: .zero)
             tabStripScrollView.reflectScrolledClipView(clipView)
         }
+    }
+
+    private func handleTabDragMoved(fromIndex: Int, locationInWindow: NSPoint) {
+        guard tabSearchQuery.isEmpty else { return }
+        dragFromTabIndex = fromIndex
+        dragToTabIndex = nearestTabIndex(to: locationInWindow) ?? fromIndex
+    }
+
+    private func handleTabDragEnded(fromIndex: Int, locationInWindow: NSPoint) {
+        guard tabSearchQuery.isEmpty else {
+            dragFromTabIndex = nil
+            dragToTabIndex = nil
+            return
+        }
+
+        let source = dragFromTabIndex ?? fromIndex
+        let destination = dragToTabIndex ?? nearestTabIndex(to: locationInWindow) ?? source
+        dragFromTabIndex = nil
+        dragToTabIndex = nil
+
+        guard source != destination else { return }
+        tabManager.moveTab(from: source, to: destination)
+    }
+
+    private func nearestTabIndex(to locationInWindow: NSPoint) -> Int? {
+        let pointInStack = tabStripStackView.convert(locationInWindow, from: nil)
+        let chips = tabStripStackView.arrangedSubviews.compactMap { $0 as? TabChipView }
+        guard !chips.isEmpty else { return nil }
+
+        var nearest = chips[0]
+        var nearestDistance = abs(pointInStack.x - nearest.frame.midX)
+        for chip in chips.dropFirst() {
+            let distance = abs(pointInStack.x - chip.frame.midX)
+            if distance < nearestDistance {
+                nearest = chip
+                nearestDistance = distance
+            }
+        }
+        return nearest.tabIndex
     }
 }
 
@@ -896,7 +943,10 @@ private final class TabChipView: NSView {
 
     var onSelect: ((Int) -> Void)?
     var onToggleProtection: ((Int) -> Void)?
+    var onDragMoved: ((Int, NSPoint) -> Void)?
+    var onDragEnded: ((Int, NSPoint) -> Void)?
     var isActiveChip: Bool { active }
+    var tabIndex: Int { index }
 
     init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
         self.index = index
@@ -913,8 +963,37 @@ private final class TabChipView: NSView {
     override func mouseDown(with event: NSEvent) {
         if event.clickCount >= 2 {
             onToggleProtection?(index)
-        } else {
-            onSelect?(index)
+            return
+        }
+
+        onSelect?(index)
+        guard let window else { return }
+
+        let startPoint = event.locationInWindow
+        var dragging = false
+
+        while let nextEvent = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if nextEvent.type == .leftMouseDragged {
+                let deltaX = nextEvent.locationInWindow.x - startPoint.x
+                let deltaY = nextEvent.locationInWindow.y - startPoint.y
+                if !dragging, hypot(deltaX, deltaY) >= 4 {
+                    dragging = true
+                    alphaValue = 0.72
+                }
+
+                if dragging {
+                    onDragMoved?(index, nextEvent.locationInWindow)
+                }
+                continue
+            }
+
+            if nextEvent.type == .leftMouseUp {
+                if dragging {
+                    alphaValue = 1
+                    onDragEnded?(index, nextEvent.locationInWindow)
+                }
+                return
+            }
         }
     }
 

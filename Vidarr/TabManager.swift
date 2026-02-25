@@ -176,6 +176,29 @@ final class TabManager {
         }
     }
 
+    func moveTab(from fromIndex: Int, to toIndex: Int) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard fromIndex >= 0, fromIndex < tabs.count else { return }
+            guard toIndex >= 0, toIndex < tabs.count else { return }
+            guard fromIndex != toIndex else { return }
+
+            let moved = tabs.remove(at: fromIndex)
+            tabs.insert(moved, at: toIndex)
+
+            if currentIndex == fromIndex {
+                currentIndex = toIndex
+            } else if fromIndex < currentIndex, toIndex >= currentIndex {
+                currentIndex -= 1
+            } else if fromIndex > currentIndex, toIndex <= currentIndex {
+                currentIndex += 1
+            }
+
+            delegate?.tabManager(self, didUpdateTabs: tabs.count)
+            delegate?.tabManager(self, didSelect: tabs[currentIndex].webView)
+        }
+    }
+
     func reopenClosedTab() {
         performOnMain { [weak self] in
             guard let self, let snapshot = closedStack.popLast() else { return }

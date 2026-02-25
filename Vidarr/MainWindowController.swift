@@ -12,8 +12,9 @@ final class MainWindowController: NSWindowController {
     private let toolbarContainer = LiquidGlassToolbarView()
     private let webContainer = NonDraggableView()
 
-    private let tabStripContainer = TabStripContainerView()
-    private let tabStripScrollView = TabStripScrollView()
+    private let tabStripContainer = NonDraggableView()
+    private let tabStripScrollView = NonDraggableScrollView()
+    private let tabInteractionView = TabInteractionView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
@@ -137,7 +138,8 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.contentView = HorizontalOnlyClipView()
         tabStripScrollView.contentView.drawsBackground = false
         tabStripContainer.addSubview(tabStripScrollView)
-        tabStripContainer.forwardingView = tabStripScrollView
+        tabInteractionView.translatesAutoresizingMaskIntoConstraints = false
+        tabStripContainer.addSubview(tabInteractionView)
 
         tabStripDocumentView.translatesAutoresizingMaskIntoConstraints = true
         tabStripDocumentView.wantsLayer = false
@@ -204,6 +206,10 @@ final class MainWindowController: NSWindowController {
             tabStripScrollView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
             tabStripScrollView.trailingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor),
             tabStripScrollView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
+            tabInteractionView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
+            tabInteractionView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
+            tabInteractionView.trailingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor),
+            tabInteractionView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
             newTabButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
             newTabButton.trailingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: -8),
@@ -336,7 +342,7 @@ final class MainWindowController: NSWindowController {
         addressBarField.drawsBackground = true
         addressBarField.backgroundColor = NSColor.textBackgroundColor
         addressBarField.textColor = NSColor.textColor
-        addressBarField.alignment = .left
+        addressBarField.alignment = .right
         addressBarField.cell?.lineBreakMode = .byClipping
     }
 
@@ -674,7 +680,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func setupTabStripInteractions() {
-        tabStripScrollView.onClick = { [weak self] locationInWindow, clickCount in
+        tabInteractionView.onClick = { [weak self] locationInWindow, clickCount in
             guard let self, let index = self.nearestTabIndex(to: locationInWindow) else { return }
             if clickCount >= 2 {
                 self.tabManager.toggleProtection(index: index)
@@ -683,7 +689,7 @@ final class MainWindowController: NSWindowController {
             }
         }
 
-        tabStripScrollView.onDragBegan = { [weak self] startInWindow in
+        tabInteractionView.onDragBegan = { [weak self] startInWindow in
             guard let self else { return }
             self.dragFromTabIndex = self.nearestTabIndex(to: startInWindow)
             self.dragToTabIndex = self.dragFromTabIndex
@@ -692,12 +698,12 @@ final class MainWindowController: NSWindowController {
             }
         }
 
-        tabStripScrollView.onDragMoved = { [weak self] currentInWindow in
+        tabInteractionView.onDragMoved = { [weak self] currentInWindow in
             guard let self, let source = self.dragFromTabIndex else { return }
             self.handleTabDragMoved(fromIndex: source, locationInWindow: currentInWindow)
         }
 
-        tabStripScrollView.onDragEnded = { [weak self] endInWindow in
+        tabInteractionView.onDragEnded = { [weak self] endInWindow in
             guard let self, let source = self.dragFromTabIndex else { return }
             self.handleTabDragEnded(fromIndex: source, locationInWindow: endInWindow)
         }
@@ -894,17 +900,6 @@ private final class NonDraggableVisualEffectView: NSVisualEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
-private final class TabStripContainerView: NonDraggableView {
-    weak var forwardingView: NSView?
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        return forwardingView ?? self
-    }
-}
-
 private final class HorizontalOnlyClipView: NSClipView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -936,7 +931,7 @@ private class NonDraggableScrollView: NSScrollView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
-private final class TabStripScrollView: NonDraggableScrollView {
+private final class TabInteractionView: NonDraggableView {
     var onClick: ((NSPoint, Int) -> Void)?
     var onDragBegan: ((NSPoint) -> Void)?
     var onDragMoved: ((NSPoint) -> Void)?
@@ -945,6 +940,7 @@ private final class TabStripScrollView: NonDraggableScrollView {
     private var dragActive = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount >= 2 {
@@ -961,7 +957,7 @@ private final class TabStripScrollView: NonDraggableScrollView {
         guard let start = dragStartInWindow else { return }
         let dx = event.locationInWindow.x - start.x
         let dy = event.locationInWindow.y - start.y
-        if !dragActive, hypot(dx, dy) >= 2.5 {
+        if !dragActive, hypot(dx, dy) >= 2.0 {
             dragActive = true
             onDragBegan?(start)
         }

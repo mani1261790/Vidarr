@@ -105,9 +105,7 @@ final class TabManager {
             pushClosed(ClosedTabSnapshot(url: removed.webView.url ?? removed.lastKnownURL))
 
             if tabs.isEmpty {
-                currentIndex = -1
-                delegate?.tabManager(self, didUpdateTabs: 0)
-                delegate?.tabManager(self, didSelect: nil)
+                ensureAtLeastOneTab()
                 return
             }
 
@@ -126,9 +124,7 @@ final class TabManager {
             }
 
             tabs.removeAll()
-            currentIndex = -1
-            delegate?.tabManager(self, didUpdateTabs: 0)
-            delegate?.tabManager(self, didSelect: nil)
+            ensureAtLeastOneTab()
         }
     }
 
@@ -177,6 +173,11 @@ final class TabManager {
         if closedStack.count > 20 {
             closedStack.removeFirst(closedStack.count - 20)
         }
+    }
+
+    private func ensureAtLeastOneTab() {
+        guard tabs.isEmpty else { return }
+        newTab(url: BrowserSession.defaultHomeURL)
     }
 
     private func performOnMain(_ work: @escaping () -> Void) {

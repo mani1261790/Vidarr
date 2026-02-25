@@ -3,13 +3,16 @@ import Testing
 @testable import Vidarr
 
 struct GestureRecognizerTests {
-    private let recognizer = GestureRecognizer(
-        matchScoreThreshold: 0.72,
-        minPathLength: 80,
-        dominanceRatio: 1.8
-    )
+    private func makeRecognizer() -> GestureRecognizer {
+        GestureRecognizer(
+            matchScoreThreshold: 0.65,
+            minPathLength: 80,
+            dominanceRatio: 1.8
+        )
+    }
 
     @Test func recognizesLeftStroke() {
+        let recognizer = makeRecognizer()
         let points = polyline([
             CGPoint(x: 320, y: 160),
             CGPoint(x: 220, y: 166),
@@ -18,18 +21,20 @@ struct GestureRecognizerTests {
 
         let result = recognizer.recognize(points: points)
         #expect(result?.name == "Left", "actual result: \(String(describing: result))")
-        #expect((result?.score ?? 0) >= 0.72)
+        #expect((result?.score ?? 0) >= 0.65)
     }
 
     @Test func recognizesDoubleCircleAsOO() {
+        let recognizer = makeRecognizer()
         let points = circle(loopCount: 2, center: CGPoint(x: 180, y: 180), radius: 90, segmentsPerLoop: 56)
         let result = recognizer.recognize(points: points)
 
         #expect(result?.name == "OO", "actual result: \(String(describing: result))")
-        #expect((result?.score ?? 0) >= 0.72)
+        #expect((result?.score ?? 0) >= 0.65)
     }
 
     @Test func recognizesUpRightArrow() {
+        let recognizer = makeRecognizer()
         let points = polyline([
             CGPoint(x: 140, y: 40),
             CGPoint(x: 138, y: 220),
@@ -38,10 +43,23 @@ struct GestureRecognizerTests {
 
         let result = recognizer.recognize(points: points)
         #expect(result?.name == "UpRight", "actual result: \(String(describing: result))")
-        #expect((result?.score ?? 0) >= 0.72)
+        #expect((result?.score ?? 0) >= 0.65)
+    }
+
+    @Test func recognizesUpLeftArrow() {
+        let recognizer = makeRecognizer()
+        let points = polyline([
+            CGPoint(x: 210, y: 40),
+            CGPoint(x: 208, y: 220),
+            CGPoint(x: 60, y: 218)
+        ], stepsPerSegment: 26)
+
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "UpLeft", "actual result: \(String(describing: result))")
     }
 
     @Test func recognizesDownLeftForNewTab() {
+        let recognizer = makeRecognizer()
         let points = polyline([
             CGPoint(x: 190, y: 250),
             CGPoint(x: 185, y: 70),
@@ -50,10 +68,18 @@ struct GestureRecognizerTests {
 
         let result = recognizer.recognize(points: points)
         #expect(result?.name == "DownLeft", "actual result: \(String(describing: result))")
-        #expect((result?.score ?? 0) >= 0.72)
+        #expect((result?.score ?? 0) >= 0.65)
+    }
+
+    @Test func recognizesSingleLoopO() {
+        let recognizer = makeRecognizer()
+        let points = circle(loopCount: 1, center: CGPoint(x: 190, y: 190), radius: 85, segmentsPerLoop: 54)
+        let result = recognizer.recognize(points: points)
+        #expect(result?.name == "O", "actual result: \(String(describing: result))")
     }
 
     @Test func lowConfidenceGestureReturnsNil() {
+        let recognizer = makeRecognizer()
         let points = polyline([
             CGPoint(x: 12, y: 12),
             CGPoint(x: 14, y: 16),

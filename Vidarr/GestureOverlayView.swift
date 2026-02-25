@@ -6,8 +6,8 @@ final class GestureOverlayView: NSView {
         let triggerDominanceRatio: CGFloat = 2.0
         let triggerWindowMs: TimeInterval = 120
         let captureEndTimeoutMs: TimeInterval = 110
-        let minPathLength: CGFloat = 120
-        let matchScoreThreshold: CGFloat = 0.75
+        let minPathLength: CGFloat = 90
+        let matchScoreThreshold: CGFloat = 0.68
         let upStrokeDominanceRatio: CGFloat = 2.0
     }
 
@@ -53,9 +53,9 @@ final class GestureOverlayView: NSView {
     override var isOpaque: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
-        let directionSign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
-        let dx = event.scrollingDeltaX * directionSign
-        let dy = event.scrollingDeltaY * directionSign
+        let directionSignX: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+        let dx = event.scrollingDeltaX * directionSignX
+        let dy = event.scrollingDeltaY
         hudAnchorPoint = convert(event.locationInWindow, from: nil)
 
         switch state {
@@ -91,8 +91,18 @@ final class GestureOverlayView: NSView {
     private func shouldStartCapture() -> Bool {
         guard !recentSamples.isEmpty else { return false }
 
-        let sumX = recentSamples.reduce(CGFloat.zero) { $0 + $1.dx }
-        let sumY = recentSamples.reduce(CGFloat.zero) { $0 + $1.dy }
+        if recentSamples.contains(where: { sample in
+            abs(sample.dx) > abs(sample.dy) * config.triggerDominanceRatio
+                && abs(sample.dx) > config.triggerHorizontalDelta
+        }) {
+            return true
+        }
+
+        let lastSamples = recentSamples.suffix(4)
+        guard !lastSamples.isEmpty else { return false }
+
+        let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }
+        let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
 
         return abs(sumX) > abs(sumY) * config.triggerDominanceRatio
             && abs(sumX) > config.triggerHorizontalDelta
@@ -136,8 +146,8 @@ final class GestureOverlayView: NSView {
         let strict = recognizer.recognize(points: capturePoints)
         let relaxed: GestureResult? = {
             guard strict == nil else { return nil }
-            guard pathLength(capturePoints) >= config.minPathLength * 0.62 else { return nil }
-            return recognizer.bestPassingMatch(points: capturePoints, minimumScore: max(0.82, config.matchScoreThreshold))
+            guard pathLength(capturePoints) >= config.minPathLength * 0.45 else { return nil }
+            return recognizer.bestPassingMatch(points: capturePoints, minimumScore: max(0.58, config.matchScoreThreshold - 0.16))
         }()
 
         guard let result = strict ?? relaxed else {

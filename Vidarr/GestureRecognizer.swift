@@ -123,29 +123,35 @@ final class GestureRecognizer {
             return dx > 0 && abs(dx) > abs(dy) * 1.6
 
         case "L":
-            return corners >= 1 && corners <= 2
+            return corners >= 1
+                && corners <= 2
+                && dx > 0
+                && dy < 0
+                && abs(dy) > minPathLength * 0.12
 
         case "LL":
-            return corners >= 3 && pathLength(raw) >= minPathLength * 1.5
+            return corners >= 3
+                && pathLength(raw) >= minPathLength * 1.5
+                && dx > 0
 
         case "U":
             return isUShape(raw)
 
         case "O":
-            return isClosedCircular(raw, expectedTurns: 2 * .pi, tolerance: .pi)
+            return isClosedCircular(raw, expectedTurns: 2 * .pi, tolerance: 1.55 * .pi, closeRatioLimit: 0.45)
 
         case "OO":
-            return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 1.4 * .pi)
-                && pathLength(raw) >= minPathLength * 1.8
+            return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 2.0 * .pi, closeRatioLimit: 0.56)
+                && pathLength(raw) >= minPathLength * 1.45
 
         case "UpRight":
-            return isUpThenHorizontal(raw, horizontalDirection: .right)
+            return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right)
 
         case "UpLeft":
-            return isUpThenHorizontal(raw, horizontalDirection: .left)
+            return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .left)
 
         case "DownLeft":
-            return isDownThenHorizontal(raw, horizontalDirection: .left)
+            return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .left)
 
         case "S":
             return isSLike(raw)
@@ -160,37 +166,34 @@ final class GestureRecognizer {
         case right
     }
 
-    private func isUpThenHorizontal(_ raw: [CGPoint], horizontalDirection: HorizontalDirection) -> Bool {
-        guard raw.count >= 8 else { return false }
-
-        let split = max(2, min(raw.count - 3, Int(Double(raw.count) * 0.55)))
-        let first = vector(from: raw[0], to: raw[split])
-        let second = vector(from: raw[split], to: raw[raw.count - 1])
-
-        guard first.dy > 0, abs(first.dy) > abs(first.dx) * dominanceRatio else { return false }
-
-        switch horizontalDirection {
-        case .right:
-            return second.dx > 0 && abs(second.dx) > abs(second.dy) * 1.2
-        case .left:
-            return second.dx < 0 && abs(second.dx) > abs(second.dy) * 1.2
-        }
+    private enum VerticalDirection {
+        case up
+        case down
     }
 
-    private func isDownThenHorizontal(_ raw: [CGPoint], horizontalDirection: HorizontalDirection) -> Bool {
+    private func isVerticalThenHorizontal(
+        _ raw: [CGPoint],
+        verticalDirection: VerticalDirection,
+        horizontalDirection: HorizontalDirection
+    ) -> Bool {
         guard raw.count >= 8 else { return false }
 
-        let split = max(2, min(raw.count - 3, Int(Double(raw.count) * 0.55)))
+        let split = max(2, min(raw.count - 3, Int(Double(raw.count) * 0.58)))
         let first = vector(from: raw[0], to: raw[split])
         let second = vector(from: raw[split], to: raw[raw.count - 1])
 
-        guard first.dy < 0, abs(first.dy) > abs(first.dx) * dominanceRatio else { return false }
+        switch verticalDirection {
+        case .up:
+            guard first.dy > 0, abs(first.dy) > abs(first.dx) * 1.08 else { return false }
+        case .down:
+            guard first.dy < 0, abs(first.dy) > abs(first.dx) * 1.08 else { return false }
+        }
 
         switch horizontalDirection {
         case .right:
-            return second.dx > 0 && abs(second.dx) > abs(second.dy) * 1.2
+            return second.dx > 0 && abs(second.dx) > abs(second.dy) * 0.95
         case .left:
-            return second.dx < 0 && abs(second.dx) > abs(second.dy) * 1.2
+            return second.dx < 0 && abs(second.dx) > abs(second.dy) * 0.95
         }
     }
 
@@ -215,7 +218,12 @@ final class GestureRecognizer {
         return floorDistance > height * 0.45 && shoulderGap < height * 0.35
     }
 
-    private func isClosedCircular(_ raw: [CGPoint], expectedTurns: CGFloat, tolerance: CGFloat) -> Bool {
+    private func isClosedCircular(
+        _ raw: [CGPoint],
+        expectedTurns: CGFloat,
+        tolerance: CGFloat,
+        closeRatioLimit: CGFloat
+    ) -> Bool {
         guard raw.count >= 10 else { return false }
 
         let totalTurn = totalTurningAngle(raw)
@@ -224,7 +232,7 @@ final class GestureRecognizer {
         let box = boundingBox(raw)
         let diagonal = sqrt(box.width * box.width + box.height * box.height)
         let closeRatio = diagonal > 0 ? distance(raw[0], raw[raw.count - 1]) / diagonal : 1
-        let isClosed = closeRatio < 0.28
+        let isClosed = closeRatio < closeRatioLimit
 
         let aspect = box.height > 0 ? box.width / box.height : 999
         let validAspect = aspect > 0.35 && aspect < 2.8

@@ -12,6 +12,10 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 
 注意:
 - 現在の配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。
+- もし `“Vidarr.app” is damaged and can’t be opened.` が出る場合:
+```bash
+xattr -dr com.apple.quarantine /Applications/Vidarr.app
+```
 
 ## ジェスチャー一覧 (実装)
 - `← (Left)` : 前タブ

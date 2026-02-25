@@ -33,6 +33,10 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# Re-sign ad-hoc so Gatekeeper does not treat the bundle as malformed/damaged.
+codesign --force --deep --sign - "$APP_PATH"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
 rm -f "$DMG_PATH"
 hdiutil create \
   -volname "Vidarr" \

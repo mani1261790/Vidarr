@@ -184,6 +184,9 @@ final class MainWindowController: NSWindowController {
         actions.focusAddressField = { [weak self] in
             self?.beginAddressEditing()
         }
+        actions.confirmCloseProtectedTab = { [weak self] in
+            self?.confirmCloseProtectedTab() ?? false
+        }
     }
 
     private func ensureInitialTabVisible() {
@@ -301,13 +304,29 @@ final class MainWindowController: NSWindowController {
                 title: item.title,
                 thumbnail: item.thumbnail,
                 size: UI.tabChipSize,
-                isActive: item.isActive
+                isActive: item.isActive,
+                isProtected: item.isProtected
             )
             chip.onSelect = { [weak self] index in
                 self?.tabManager.selectTab(index: index)
             }
+            chip.onToggleProtection = { [weak self] index in
+                self?.tabManager.toggleProtection(index: index)
+            }
             tabStripStackView.addArrangedSubview(chip)
         }
+    }
+
+    private func confirmCloseProtectedTab() -> Bool {
+        guard let window else { return false }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "保護タブを閉じますか？"
+        alert.informativeText = "このタブは保護されています。閉じるには確認が必要です。"
+        alert.addButton(withTitle: "閉じる")
+        alert.addButton(withTitle: "キャンセル")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func syncToolbarLayout() {
@@ -541,16 +560,20 @@ private final class AddressDisplayView: NSView {
 private final class TabChipView: NSView {
     private let index: Int
     private let thumbnailView = NSImageView()
+    private let protectedIconView = NSImageView()
     private let activeAccentLayer = CAGradientLayer()
     private let active: Bool
+    private let protectedState: Bool
 
     var onSelect: ((Int) -> Void)?
+    var onToggleProtection: ((Int) -> Void)?
 
-    init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool) {
+    init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
         self.index = index
         self.active = isActive
+        protectedState = isProtected
         super.init(frame: .zero)
-        setupView(title: title, thumbnail: thumbnail, size: size, isActive: isActive)
+        setupView(title: title, thumbnail: thumbnail, size: size, isActive: isActive, isProtected: isProtected)
     }
 
     required init?(coder: NSCoder) {
@@ -558,7 +581,11 @@ private final class TabChipView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onSelect?(index)
+        if event.clickCount >= 2 {
+            onToggleProtection?(index)
+        } else {
+            onSelect?(index)
+        }
     }
 
     override func layout() {
@@ -567,7 +594,7 @@ private final class TabChipView: NSView {
         activeAccentLayer.frame = CGRect(x: 2, y: bounds.height - 3, width: bounds.width - 4, height: 2)
     }
 
-    private func setupView(title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool) {
+    private func setupView(title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = title
         wantsLayer = true
@@ -594,6 +621,14 @@ private final class TabChipView: NSView {
         thumbnailView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.68).cgColor
         addSubview(thumbnailView)
 
+        protectedIconView.translatesAutoresizingMaskIntoConstraints = false
+        protectedIconView.imageScaling = .scaleProportionallyUpOrDown
+        protectedIconView.isHidden = !isProtected
+        let icon = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil)
+        protectedIconView.image = icon?.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+        protectedIconView.contentTintColor = NSColor.white.withAlphaComponent(0.95)
+        addSubview(protectedIconView)
+
         if isActive {
             activeAccentLayer.colors = [
                 NSColor.systemCyan.withAlphaComponent(0.95).cgColor,
@@ -611,11 +646,20 @@ private final class TabChipView: NSView {
             thumbnailView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
             thumbnailView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
             thumbnailView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            thumbnailView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
+            thumbnailView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+
+            protectedIconView.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            protectedIconView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            protectedIconView.widthAnchor.constraint(equalToConstant: 12),
+            protectedIconView.heightAnchor.constraint(equalToConstant: 12)
         ])
 
         if isActive {
             activeAccentLayer.cornerRadius = 1
+        }
+
+        if protectedState {
+            layer?.borderColor = NSColor.systemYellow.withAlphaComponent(isActive ? 0.95 : 0.75).cgColor
         }
     }
 }

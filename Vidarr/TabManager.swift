@@ -11,6 +11,7 @@ struct TabStripItem {
     let index: Int
     let title: String
     let isActive: Bool
+    let isProtected: Bool
     let thumbnail: NSImage?
 }
 
@@ -21,6 +22,7 @@ final class TabManager {
         let webView: WKWebView
         var lastKnownURL: URL?
         var thumbnail: NSImage?
+        var isProtected: Bool
     }
 
     private struct ClosedTabSnapshot {
@@ -41,13 +43,24 @@ final class TabManager {
 
     var canReopenClosedTab: Bool { !closedStack.isEmpty }
 
+    var isCurrentTabProtected: Bool {
+        guard currentIndex >= 0, currentIndex < tabs.count else { return false }
+        return tabs[currentIndex].isProtected
+    }
+
     var tabStripItems: [TabStripItem] {
         tabs.enumerated().map { index, tab in
             let resolvedURL = tab.webView.url ?? tab.lastKnownURL
             let fallbackTitle = resolvedURL?.host ?? resolvedURL?.absoluteString ?? "New Tab"
             let resolvedTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
             let title = (resolvedTitle?.isEmpty == false) ? resolvedTitle! : fallbackTitle
-            return TabStripItem(index: index, title: title, isActive: index == currentIndex, thumbnail: tab.thumbnail)
+            return TabStripItem(
+                index: index,
+                title: title,
+                isActive: index == currentIndex,
+                isProtected: tab.isProtected,
+                thumbnail: tab.thumbnail
+            )
         }
     }
 
@@ -56,7 +69,7 @@ final class TabManager {
             guard let self else { return }
 
             let webView = BrowserSession.makeConfiguredWebView()
-            var tab = Tab(webView: webView, lastKnownURL: nil, thumbnail: nil)
+            var tab = Tab(webView: webView, lastKnownURL: nil, thumbnail: nil, isProtected: false)
             tabs.append(tab)
             currentIndex = tabs.count - 1
 
@@ -119,12 +132,40 @@ final class TabManager {
         performOnMain { [weak self] in
             guard let self else { return }
 
+            let selectedWebView = currentWebView
+            var retained: [Tab] = []
             for tab in tabs {
-                pushClosed(ClosedTabSnapshot(url: tab.webView.url ?? tab.lastKnownURL))
+                if tab.isProtected {
+                    retained.append(tab)
+                } else {
+                    pushClosed(ClosedTabSnapshot(url: tab.webView.url ?? tab.lastKnownURL))
+                }
             }
 
-            tabs.removeAll()
-            ensureAtLeastOneTab()
+            tabs = retained
+
+            if tabs.isEmpty {
+                ensureAtLeastOneTab()
+                return
+            }
+
+            if let selectedWebView,
+               let retainedIndex = tabs.firstIndex(where: { $0.webView === selectedWebView }) {
+                currentIndex = retainedIndex
+            } else {
+                currentIndex = 0
+            }
+            delegate?.tabManager(self, didUpdateTabs: tabs.count)
+            delegate?.tabManager(self, didSelect: tabs[currentIndex].webView)
+        }
+    }
+
+    func toggleProtection(index: Int) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard index >= 0, index < tabs.count else { return }
+            tabs[index].isProtected.toggle()
+            delegate?.tabManager(self, didUpdateTabs: tabs.count)
         }
     }
 

@@ -7,6 +7,7 @@ final class ActionCenter {
     private let session: BrowserSession
 
     var focusAddressField: (() -> Void)?
+    var confirmCloseProtectedTab: (() -> Bool)?
 
     init(tabManager: TabManager, session: BrowserSession) {
         self.tabManager = tabManager
@@ -27,6 +28,12 @@ final class ActionCenter {
     }
 
     func tabClose() {
+        if tabManager.isCurrentTabProtected {
+            let confirmed = confirmCloseProtectedTab?() ?? false
+            if !confirmed {
+                return
+            }
+        }
         tabManager.closeCurrentTab()
     }
 

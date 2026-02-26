@@ -33,6 +33,7 @@ final class GestureOverlayView: NSView {
     private var capturePoints: [CGPoint] = []
     private var lastLiveCandidate: GestureResult?
     private var captureInvalidated = false
+    private var captureHasStrongVerticalComponent = false
     private var interactiveTabSwipeActive = false
     private var interactiveTabSwipeTotalX: CGFloat = 0
     private var hudAnchorPoint: CGPoint = .zero
@@ -211,6 +212,7 @@ final class GestureOverlayView: NSView {
         capturePoints = [point]
         lastLiveCandidate = nil
         captureInvalidated = false
+        captureHasStrongVerticalComponent = false
 
         for sample in seed {
             appendCaptureDelta(dx: sample.dx, dy: sample.dy)
@@ -223,7 +225,20 @@ final class GestureOverlayView: NSView {
     private func appendCaptureDelta(dx: CGFloat, dy: CGFloat) {
         guard !capturePoints.isEmpty else { return }
         let last = capturePoints[capturePoints.count - 1]
-        capturePoints.append(CGPoint(x: last.x + dx, y: last.y + dy))
+        let next = CGPoint(x: last.x + dx, y: last.y + dy)
+        capturePoints.append(next)
+        updateVerticalComponentFlagIfNeeded()
+    }
+
+    private func updateVerticalComponentFlagIfNeeded() {
+        guard capturePoints.count >= 3 else { return }
+        let start = capturePoints[0]
+        let end = capturePoints[capturePoints.count - 1]
+        let absDX = abs(end.x - start.x)
+        let absDY = abs(end.y - start.y)
+        if absDY >= 18, absDY >= max(10, absDX * 0.42) {
+            captureHasStrongVerticalComponent = true
+        }
     }
 
     private func commitCapture() {
@@ -279,7 +294,9 @@ final class GestureOverlayView: NSView {
         }
 
         // テンプレート不成立時のみ水平スワイプへフォールバックする。
-        if let horizontal = recognizeHorizontalSwipe(points: capturePoints) {
+        if !captureHasStrongVerticalComponent,
+           let horizontal = recognizeHorizontalSwipe(points: capturePoints)
+        {
             performAction(for: horizontal.name)
             hudView.hideImmediately()
             return
@@ -324,6 +341,7 @@ final class GestureOverlayView: NSView {
         capturePoints.removeAll()
         lastLiveCandidate = nil
         captureInvalidated = false
+        captureHasStrongVerticalComponent = false
         interactiveTabSwipeActive = false
         interactiveTabSwipeTotalX = 0
         recentSamples.removeAll()
@@ -371,6 +389,10 @@ final class GestureOverlayView: NSView {
     }
 
     private func handleInteractiveTabSwipe(dx: CGFloat, dy _: CGFloat) -> Bool {
+        if captureHasStrongVerticalComponent {
+            return false
+        }
+
         if interactiveTabSwipeActive {
             interactiveTabSwipeTotalX += dx
             actionCenter?.updateInteractiveTabSwitch(totalX: interactiveTabSwipeTotalX)

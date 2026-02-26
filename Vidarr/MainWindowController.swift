@@ -950,12 +950,15 @@ final class MainWindowController: NSWindowController {
     private func handleTabDragMoved(fromIndex: Int, locationInWindow: NSPoint) {
         guard tabSearchQuery.isEmpty else { return }
         dragFromTabIndex = fromIndex
-        dragToTabIndex = nearestTabIndex(to: locationInWindow) ?? fromIndex
+        let destination = nearestTabIndex(to: locationInWindow) ?? fromIndex
+        dragToTabIndex = destination
         updateTabDragPreview(locationInWindow: locationInWindow)
+        updateTabReorderGapAnimation(sourceIndex: fromIndex, destinationIndex: destination)
     }
 
     private func handleTabDragEnded(fromIndex: Int, locationInWindow: NSPoint) {
         defer {
+            clearTabReorderGapAnimation()
             endTabDragPreview()
         }
         guard tabSearchQuery.isEmpty else {
@@ -1012,6 +1015,52 @@ final class MainWindowController: NSWindowController {
         dragPreviewOffsetX = 0
         dragSourceChipView?.alphaValue = 1.0
         dragSourceChipView = nil
+    }
+
+    private func updateTabReorderGapAnimation(sourceIndex: Int, destinationIndex: Int) {
+        let chips = tabStripStackView.arrangedSubviews.compactMap { $0 as? TabChipView }
+        let shift = UI.tabChipSize.width + tabStripStackView.spacing
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.11
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+            for chip in chips {
+                guard chip.tabIndex != sourceIndex else {
+                    chip.animator().layer?.transform = CATransform3DIdentity
+                    continue
+                }
+
+                let dx: CGFloat
+                if destinationIndex > sourceIndex {
+                    if chip.tabIndex > sourceIndex && chip.tabIndex <= destinationIndex {
+                        dx = -shift
+                    } else {
+                        dx = 0
+                    }
+                } else if destinationIndex < sourceIndex {
+                    if chip.tabIndex >= destinationIndex && chip.tabIndex < sourceIndex {
+                        dx = shift
+                    } else {
+                        dx = 0
+                    }
+                } else {
+                    dx = 0
+                }
+                chip.animator().layer?.transform = CATransform3DMakeTranslation(dx, 0, 0)
+            }
+        }
+    }
+
+    private func clearTabReorderGapAnimation() {
+        let chips = tabStripStackView.arrangedSubviews.compactMap { $0 as? TabChipView }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            for chip in chips {
+                chip.animator().layer?.transform = CATransform3DIdentity
+            }
+        }
     }
 
     private func tabChipView(for index: Int) -> TabChipView? {

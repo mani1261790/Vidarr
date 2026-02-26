@@ -20,8 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.regular)
         configureMainMenu()
-        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let iconImage = NSImage(contentsOf: iconURL) {
+        if let iconImage = NSImage(named: NSImage.applicationIconName) {
             NSApp.applicationIconImage = iconImage
         }
 

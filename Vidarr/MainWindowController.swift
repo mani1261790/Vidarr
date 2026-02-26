@@ -849,8 +849,20 @@ final class MainWindowController: NSWindowController {
 
     private func performGestureTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) {
         guard interactiveTabSwitchState == nil else { return }
-        guard beginInteractiveTabSwitch(direction: direction), let state = interactiveTabSwitchState else { return }
+        guard beginInteractiveTabSwitch(direction: direction), let state = interactiveTabSwitchState else {
+            if shouldOpenNewTabAtRightEdge(for: direction) {
+                actions.newTab()
+            }
+            return
+        }
         completeProgrammaticTabSwitch(state)
+    }
+
+    private func shouldOpenNewTabAtRightEdge(for direction: ActionCenter.GestureTabSwitchDirection) -> Bool {
+        guard direction == .left else { return false }
+        let count = tabManager.tabCount
+        guard count > 0 else { return false }
+        return tabManager.currentIndex == (count - 1)
     }
 
     private func beginInteractiveTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) -> Bool {

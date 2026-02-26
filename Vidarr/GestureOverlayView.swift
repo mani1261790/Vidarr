@@ -10,6 +10,7 @@ final class GestureOverlayView: NSView {
         let matchScoreThreshold: CGFloat = 0.68
         let livePreviewScoreThreshold: CGFloat = 0.52
         let upStrokeDominanceRatio: CGFloat = 2.0
+        let closeActionSuppressionSeconds: TimeInterval = 0.55
     }
 
     weak var actionCenter: ActionCenter?
@@ -473,10 +474,10 @@ final class GestureOverlayView: NSView {
             actions.gestureTabSwitchRight()
         case "DownRight":
             actions.tabClose()
-            captureSuppressionUntil = latestEventTimestamp + 0.28
+            captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
         case "DownRightDownRight":
             actions.tabCloseAll()
-            captureSuppressionUntil = latestEventTimestamp + 0.28
+            captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
         case "O":
             actions.reload()
         case "U":

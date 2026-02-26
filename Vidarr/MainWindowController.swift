@@ -54,6 +54,7 @@ final class MainWindowController: NSWindowController {
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
     ]
     private static let longPressLinkMessageName = "vidarrLongPressLink"
+    private static let selectionSearchMessageName = "vidarrSelectionSearch"
 
     private struct InteractiveTabSwitchState {
         let fromWebView: WKWebView
@@ -575,7 +576,9 @@ final class MainWindowController: NSWindowController {
         let handlerBox = WeakScriptMessageHandler(target: self)
         longPressHandlerBoxes[controllerID] = handlerBox
         contentController.removeScriptMessageHandler(forName: Self.longPressLinkMessageName)
+        contentController.removeScriptMessageHandler(forName: Self.selectionSearchMessageName)
         contentController.add(handlerBox, name: Self.longPressLinkMessageName)
+        contentController.add(handlerBox, name: Self.selectionSearchMessageName)
 
         let source = """
         (() => {
@@ -584,10 +587,106 @@ final class MainWindowController: NSWindowController {
 
             const HOLD_MS = 380;
             const MOVE_TOLERANCE = 14;
+            const SELECTION_MIN_LENGTH = 1;
             var timer = null;
             var activeAnchor = null;
             var startX = 0;
             var startY = 0;
+            var selectionButton = null;
+
+            function ensureSelectionButton() {
+                if (selectionButton) { return selectionButton; }
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.setAttribute('aria-label', 'Search selection');
+                button.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="6.75" cy="6.75" r="4.75" stroke="rgba(255,255,255,0.95)" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="rgba(255,255,255,0.95)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+                button.style.position = 'fixed';
+                button.style.display = 'none';
+                button.style.alignItems = 'center';
+                button.style.justifyContent = 'center';
+                button.style.width = '34px';
+                button.style.height = '34px';
+                button.style.border = '1px solid rgba(255,255,255,0.3)';
+                button.style.borderRadius = '10px';
+                button.style.background = 'rgba(26,28,32,0.82)';
+                button.style.backdropFilter = 'blur(10px)';
+                button.style.boxShadow = '0 8px 20px rgba(0,0,0,0.28)';
+                button.style.padding = '0';
+                button.style.margin = '0';
+                button.style.cursor = 'pointer';
+                button.style.zIndex = '2147483647';
+                button.style.opacity = '0';
+                button.style.transition = 'opacity 120ms ease';
+
+                button.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }, true);
+
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const text = (window.getSelection ? window.getSelection().toString() : '').trim();
+                    hideSelectionButton();
+                    if (!text) { return; }
+                    window.webkit.messageHandlers.\(Self.selectionSearchMessageName).postMessage({
+                        query: text
+                    });
+                }, true);
+
+                document.documentElement.appendChild(button);
+                selectionButton = button;
+                return button;
+            }
+
+            function hideSelectionButton() {
+                if (!selectionButton) { return; }
+                selectionButton.style.opacity = '0';
+                selectionButton.style.display = 'none';
+            }
+
+            function showSelectionButtonAt(x, y) {
+                const button = ensureSelectionButton();
+                button.style.left = `${x}px`;
+                button.style.top = `${y}px`;
+                button.style.display = 'flex';
+                requestAnimationFrame(() => {
+                    button.style.opacity = '1';
+                });
+            }
+
+            function updateSelectionButton() {
+                const selection = window.getSelection ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    hideSelectionButton();
+                    return;
+                }
+
+                const selectedText = selection.toString().trim();
+                if (selectedText.length < SELECTION_MIN_LENGTH) {
+                    hideSelectionButton();
+                    return;
+                }
+
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                if (!rect || (rect.width === 0 && rect.height === 0)) {
+                    hideSelectionButton();
+                    return;
+                }
+
+                const buttonSize = 34;
+                const margin = 8;
+                const maxX = Math.max(margin, window.innerWidth - buttonSize - margin);
+                const x = Math.min(maxX, Math.max(margin, rect.right - buttonSize));
+                const preferredY = rect.top - buttonSize - margin;
+                const fallbackY = rect.bottom + margin;
+                const y = preferredY > margin
+                    ? preferredY
+                    : Math.min(window.innerHeight - buttonSize - margin, Math.max(margin, fallbackY));
+
+                showSelectionButtonAt(x, y);
+            }
 
             function clearTimer() {
                 if (timer !== null) {
@@ -648,10 +747,12 @@ final class MainWindowController: NSWindowController {
 
             document.addEventListener('mouseup', () => {
                 resetState();
+                setTimeout(updateSelectionButton, 0);
             }, true);
 
             document.addEventListener('dragstart', () => {
                 resetState();
+                hideSelectionButton();
             }, true);
 
             document.addEventListener('click', (event) => {
@@ -664,6 +765,24 @@ final class MainWindowController: NSWindowController {
             window.addEventListener('blur', () => {
                 resetState();
                 window.__vidarrSuppressLongPressClick = false;
+                hideSelectionButton();
+            }, true);
+
+            document.addEventListener('selectionchange', () => {
+                if (window.__vidarrSuppressLongPressClick) { return; }
+                setTimeout(updateSelectionButton, 0);
+            }, true);
+
+            document.addEventListener('scroll', () => {
+                hideSelectionButton();
+            }, true);
+
+            document.addEventListener('mousedown', (event) => {
+                if (!selectionButton) { return; }
+                if (event.target === selectionButton || selectionButton.contains(event.target)) {
+                    return;
+                }
+                hideSelectionButton();
             }, true);
         })();
         """
@@ -1437,13 +1556,22 @@ extension MainWindowController: WKUIDelegate {
 
 extension MainWindowController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == Self.longPressLinkMessageName else { return }
         guard let body = message.body as? [String: Any] else { return }
-        guard let href = body["href"] as? String else { return }
-        guard let url = URL(string: href) else { return }
 
-        let group = message.webView.flatMap { tabManager.group(for: $0) } ?? tabManager.currentGroup
-        tabManager.openBackgroundTab(url: url, in: group)
+        if message.name == Self.longPressLinkMessageName {
+            guard let href = body["href"] as? String else { return }
+            guard let url = URL(string: href) else { return }
+            let group = message.webView.flatMap { tabManager.group(for: $0) } ?? tabManager.currentGroup
+            tabManager.openBackgroundTab(url: url, in: group)
+            return
+        }
+
+        if message.name == Self.selectionSearchMessageName {
+            guard let query = body["query"] as? String else { return }
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            actions.openLocationInput(trimmed)
+        }
     }
 }
 

@@ -39,6 +39,9 @@ final class MainWindowController: NSWindowController {
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
     private var dragFromTabIndex: Int?
     private var dragToTabIndex: Int?
+    private var dragPreviewView: NSImageView?
+    private weak var dragSourceChipView: TabChipView?
+    private var dragPreviewOffsetX: CGFloat = 0
     private var preferenceObserver: NSObjectProtocol?
     private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
@@ -914,6 +917,7 @@ final class MainWindowController: NSWindowController {
             self.dragToTabIndex = self.dragFromTabIndex
             if let source = self.dragFromTabIndex {
                 self.tabManager.selectTab(index: source)
+                self.beginTabDragPreview(fromIndex: source, startLocationInWindow: startInWindow)
             }
         }
 
@@ -932,9 +936,13 @@ final class MainWindowController: NSWindowController {
         guard tabSearchQuery.isEmpty else { return }
         dragFromTabIndex = fromIndex
         dragToTabIndex = nearestTabIndex(to: locationInWindow) ?? fromIndex
+        updateTabDragPreview(locationInWindow: locationInWindow)
     }
 
     private func handleTabDragEnded(fromIndex: Int, locationInWindow: NSPoint) {
+        defer {
+            endTabDragPreview()
+        }
         guard tabSearchQuery.isEmpty else {
             dragFromTabIndex = nil
             dragToTabIndex = nil
@@ -948,6 +956,75 @@ final class MainWindowController: NSWindowController {
 
         guard source != destination else { return }
         tabManager.moveTab(from: source, to: destination)
+    }
+
+    private func beginTabDragPreview(fromIndex: Int, startLocationInWindow: NSPoint) {
+        endTabDragPreview()
+        guard let chip = tabChipView(for: fromIndex) else { return }
+        guard let image = snapshotImage(for: chip) else { return }
+
+        let chipRectInContainer = chip.convert(chip.bounds, to: tabStripContainer)
+        let startInContainer = tabStripContainer.convert(startLocationInWindow, from: nil)
+        dragPreviewOffsetX = startInContainer.x - chipRectInContainer.origin.x
+
+        let preview = NSImageView(frame: chipRectInContainer)
+        preview.image = image
+        preview.imageScaling = .scaleAxesIndependently
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = chip.layer?.cornerRadius ?? 2
+        preview.layer?.masksToBounds = true
+        preview.alphaValue = 0.92
+        tabStripContainer.addSubview(preview)
+        dragPreviewView = preview
+        dragSourceChipView = chip
+        chip.alphaValue = 0.28
+        updateTabDragPreview(locationInWindow: startLocationInWindow)
+    }
+
+    private func updateTabDragPreview(locationInWindow: NSPoint) {
+        guard let preview = dragPreviewView else { return }
+        let point = tabStripContainer.convert(locationInWindow, from: nil)
+        var targetX = point.x - dragPreviewOffsetX
+        let minX: CGFloat = 0
+        let maxX = max(0, tabStripContainer.bounds.width - preview.frame.width)
+        targetX = min(maxX, max(minX, targetX))
+        preview.frame.origin.x = targetX
+    }
+
+    private func endTabDragPreview() {
+        dragPreviewView?.removeFromSuperview()
+        dragPreviewView = nil
+        dragPreviewOffsetX = 0
+        dragSourceChipView?.alphaValue = 1.0
+        dragSourceChipView = nil
+    }
+
+    private func tabChipView(for index: Int) -> TabChipView? {
+        tabStripStackView.arrangedSubviews
+            .compactMap { $0 as? TabChipView }
+            .first { $0.tabIndex == index }
+    }
+
+    private func snapshotImage(for view: NSView) -> NSImage? {
+        guard view.bounds.width > 1, view.bounds.height > 1 else { return nil }
+        let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) ?? NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(view.bounds.width),
+            pixelsHigh: Int(view.bounds.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )
+        guard let rep else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let image = NSImage(size: view.bounds.size)
+        image.addRepresentation(rep)
+        return image
     }
 
     private func nearestTabIndex(to locationInWindow: NSPoint) -> Int? {
@@ -1287,11 +1364,16 @@ private final class TabInteractionView: NonDraggableView {
     var onDragEnded: ((NSPoint) -> Void)?
     private var dragStartInWindow: NSPoint?
     private var dragActive = false
+    private var previousWindowMovableState: Bool?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
 
     override func mouseDown(with event: NSEvent) {
+        if let window {
+            previousWindowMovableState = window.isMovable
+            window.isMovable = false
+        }
         if event.clickCount >= 2 {
             dragStartInWindow = nil
             dragActive = false
@@ -1306,7 +1388,7 @@ private final class TabInteractionView: NonDraggableView {
         guard let start = dragStartInWindow else { return }
         let dx = event.locationInWindow.x - start.x
         let dy = event.locationInWindow.y - start.y
-        if !dragActive, hypot(dx, dy) >= 2.0 {
+        if !dragActive, hypot(dx, dy) >= 1.0 {
             dragActive = true
             onDragBegan?(start)
         }
@@ -1316,6 +1398,10 @@ private final class TabInteractionView: NonDraggableView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let window, let previousWindowMovableState {
+            window.isMovable = previousWindowMovableState
+        }
+        previousWindowMovableState = nil
         guard let start = dragStartInWindow else { return }
         if dragActive {
             onDragEnded?(event.locationInWindow)

@@ -37,6 +37,10 @@ final class MainWindowController: NSWindowController {
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
     private var dragFromTabIndex: Int?
     private var dragToTabIndex: Int?
+    private let trackingQueryKeys: Set<String> = [
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+        "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
+    ]
 
     private struct InteractiveTabSwitchState {
         let fromWebView: WKWebView
@@ -814,6 +818,33 @@ extension MainWindowController: TabManagerDelegate {
 }
 
 extension MainWindowController: WKNavigationDelegate {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard BrowserPreferences.shared.antiTrackingEnabled else {
+            decisionHandler(.allow)
+            return
+        }
+
+        guard navigationAction.targetFrame?.isMainFrame ?? true else {
+            decisionHandler(.allow)
+            return
+        }
+
+        guard (navigationAction.request.httpMethod ?? "GET").uppercased() == "GET",
+              let url = navigationAction.request.url,
+              let sanitized = sanitizedURLByRemovingTrackingParams(from: url),
+              sanitized != url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        decisionHandler(.cancel)
+        webView.load(URLRequest(url: sanitized))
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         tabManager.updateMetadata(for: webView)
         captureThumbnail(for: webView)
@@ -822,6 +853,20 @@ extension MainWindowController: WKNavigationDelegate {
             applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
             rebuildTabStrip()
         }
+    }
+
+    private func sanitizedURLByRemovingTrackingParams(from url: URL) -> URL? {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems, !items.isEmpty else {
+            return nil
+        }
+        let filtered = items.filter { !trackingQueryKeys.contains($0.name.lowercased()) }
+        guard filtered.count != items.count else { return nil }
+        components.queryItems = filtered.isEmpty ? nil : filtered
+        return components.url
     }
 }
 

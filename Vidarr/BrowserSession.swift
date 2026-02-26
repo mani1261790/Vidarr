@@ -18,10 +18,25 @@ final class BrowserSession {
     }
 
     static func makeConfiguredWebView() -> WKWebView {
+        let prefs = BrowserPreferences.shared
         let config = WKWebViewConfiguration()
         config.allowsAirPlayForMediaPlayback = true
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        config.websiteDataStore = prefs.ephemeralModeEnabled ? .nonPersistent() : .default()
+
+        if prefs.sendDoNotTrack {
+            let source = """
+            Object.defineProperty(navigator, 'doNotTrack', { get: () => '1' });
+            Object.defineProperty(navigator, 'globalPrivacyControl', { get: () => true });
+            """
+            let script = WKUserScript(
+                source: source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(script)
+        }
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = false

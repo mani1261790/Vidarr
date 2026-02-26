@@ -133,11 +133,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
+    private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
+    private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
+    private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 290),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 380),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -196,6 +199,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         updatesCheckbox.target = self
         updatesCheckbox.action = #selector(updatesChanged(_:))
 
+        antiTrackingCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        antiTrackingCheckbox.target = self
+        antiTrackingCheckbox.action = #selector(antiTrackingChanged(_:))
+
+        ephemeralModeCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        ephemeralModeCheckbox.target = self
+        ephemeralModeCheckbox.action = #selector(ephemeralModeChanged(_:))
+
+        doNotTrackCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        doNotTrackCheckbox.target = self
+        doNotTrackCheckbox.action = #selector(doNotTrackChanged(_:))
+
         let resetButton = NSButton(title: "デフォルトに戻す", target: self, action: #selector(resetDefaults))
         resetButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -206,6 +221,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         root.addSubview(sensitivityLabel)
         root.addSubview(sensitivityPopup)
         root.addSubview(updatesCheckbox)
+        root.addSubview(antiTrackingCheckbox)
+        root.addSubview(ephemeralModeCheckbox)
+        root.addSubview(doNotTrackCheckbox)
         root.addSubview(resetButton)
 
         NSLayoutConstraint.activate([
@@ -235,6 +253,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             updatesCheckbox.topAnchor.constraint(equalTo: sensitivityLabel.bottomAnchor, constant: 16),
             updatesCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
+            antiTrackingCheckbox.topAnchor.constraint(equalTo: updatesCheckbox.bottomAnchor, constant: 10),
+            antiTrackingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            ephemeralModeCheckbox.topAnchor.constraint(equalTo: antiTrackingCheckbox.bottomAnchor, constant: 8),
+            ephemeralModeCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            doNotTrackCheckbox.topAnchor.constraint(equalTo: ephemeralModeCheckbox.bottomAnchor, constant: 8),
+            doNotTrackCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
             resetButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             resetButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18)
         ])
@@ -244,6 +271,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         homePageField.stringValue = prefs.homePageURLString
         searchTemplateField.stringValue = prefs.searchTemplate
         updatesCheckbox.state = prefs.updatesEnabled ? .on : .off
+        antiTrackingCheckbox.state = prefs.antiTrackingEnabled ? .on : .off
+        ephemeralModeCheckbox.state = prefs.ephemeralModeEnabled ? .on : .off
+        doNotTrackCheckbox.state = prefs.sendDoNotTrack ? .on : .off
 
         let sensitivity = prefs.gestureSensitivity
         if let index = BrowserPreferences.GestureSensitivity.allCases.firstIndex(of: sensitivity) {
@@ -264,6 +294,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func updatesChanged(_ sender: NSButton) {
         prefs.updatesEnabled = (sender.state == .on)
+    }
+
+    @objc private func antiTrackingChanged(_ sender: NSButton) {
+        prefs.antiTrackingEnabled = (sender.state == .on)
+    }
+
+    @objc private func ephemeralModeChanged(_ sender: NSButton) {
+        prefs.ephemeralModeEnabled = (sender.state == .on)
+    }
+
+    @objc private func doNotTrackChanged(_ sender: NSButton) {
+        prefs.sendDoNotTrack = (sender.state == .on)
     }
 
     @objc private func sensitivityChanged(_ sender: NSPopUpButton) {

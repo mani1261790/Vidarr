@@ -32,6 +32,9 @@ final class BrowserPreferences {
         static let searchTemplate = "prefs.searchTemplate"
         static let updatesEnabled = "prefs.updatesEnabled"
         static let gestureSensitivity = "prefs.gestureSensitivity"
+        static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
+        static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
+        static let sendDoNotTrack = "prefs.sendDoNotTrack"
     }
 
     private let defaults: UserDefaults
@@ -42,7 +45,10 @@ final class BrowserPreferences {
             Key.homePageURL: "https://search.fenrir-inc.com/",
             Key.searchTemplate: "https://search.fenrir-inc.com/?q={query}",
             Key.updatesEnabled: true,
-            Key.gestureSensitivity: GestureSensitivity.normal.rawValue
+            Key.gestureSensitivity: GestureSensitivity.normal.rawValue,
+            Key.antiTrackingEnabled: true,
+            Key.ephemeralModeEnabled: false,
+            Key.sendDoNotTrack: true
         ])
     }
 
@@ -77,6 +83,30 @@ final class BrowserPreferences {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.gestureSensitivity)
+            notifyChanged()
+        }
+    }
+
+    var antiTrackingEnabled: Bool {
+        get { defaults.bool(forKey: Key.antiTrackingEnabled) }
+        set {
+            defaults.set(newValue, forKey: Key.antiTrackingEnabled)
+            notifyChanged()
+        }
+    }
+
+    var ephemeralModeEnabled: Bool {
+        get { defaults.bool(forKey: Key.ephemeralModeEnabled) }
+        set {
+            defaults.set(newValue, forKey: Key.ephemeralModeEnabled)
+            notifyChanged()
+        }
+    }
+
+    var sendDoNotTrack: Bool {
+        get { defaults.bool(forKey: Key.sendDoNotTrack) }
+        set {
+            defaults.set(newValue, forKey: Key.sendDoNotTrack)
             notifyChanged()
         }
     }
@@ -119,6 +149,9 @@ final class BrowserPreferences {
         searchTemplate = "https://search.fenrir-inc.com/?q={query}"
         updatesEnabled = true
         gestureSensitivity = .normal
+        antiTrackingEnabled = true
+        ephemeralModeEnabled = false
+        sendDoNotTrack = true
         notifyChanged()
     }
 

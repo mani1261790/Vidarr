@@ -1009,7 +1009,41 @@ final class MainWindowController: NSWindowController {
             direction: .left
         )
         interactiveTabSwitchState = state
-        completeProgrammaticTabSwitch(state)
+        completeRightEdgeNewTabTransition(state)
+    }
+
+    private func completeRightEdgeNewTabTransition(_ state: InteractiveTabSwitchState) {
+        interactiveTabSwitchState = nil
+        let width = webContainer.bounds.width
+        guard width > 1 else {
+            tabManager.selectTab(index: state.targetIndex)
+            return
+        }
+
+        let fullTravel = width + UI.tabSwitchGap
+        let fromFinalX = -fullTravel
+        let fromOvershootX = fromFinalX - max(10, min(24, width * 0.022))
+        let toOvershootX = -max(12, min(28, width * 0.024))
+
+        state.toWebView.alphaValue = 0.94
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            state.fromWebView.animator().frame.origin.x = pixelAligned(fromOvershootX)
+            state.toWebView.animator().frame.origin.x = pixelAligned(toOvershootX)
+            state.toWebView.animator().alphaValue = 1.0
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.14
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
+                state.toWebView.animator().frame.origin.x = 0
+            } completionHandler: {
+                self.tabManager.selectTab(index: state.targetIndex)
+            }
+        }
     }
 
     private func beginInteractiveTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) -> Bool {

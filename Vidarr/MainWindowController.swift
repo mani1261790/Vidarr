@@ -17,6 +17,7 @@ final class MainWindowController: NSWindowController {
     private let tabInteractionView = TabInteractionView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
+    private let groupSelectorPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
     private let addressBarField = AddressBarField()
@@ -167,6 +168,15 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.spacing = 6
         tabStripDocumentView.addSubview(tabStripStackView)
 
+        groupSelectorPopup.translatesAutoresizingMaskIntoConstraints = false
+        groupSelectorPopup.removeAllItems()
+        groupSelectorPopup.addItems(withTitles: BrowserTabGroup.allCases.map(\.displayName))
+        groupSelectorPopup.target = self
+        groupSelectorPopup.action = #selector(groupSelectionDidChange(_:))
+        groupSelectorPopup.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        groupSelectorPopup.bezelStyle = .rounded
+        groupSelectorPopup.selectItem(at: 0)
+
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
         newTabButton.action = #selector(didTapNewTab)
@@ -197,6 +207,7 @@ final class MainWindowController: NSWindowController {
         tabSearchField.delegate = self
 
         let toolbarContent = toolbarContainer.contentLayoutView
+        toolbarContent.addSubview(groupSelectorPopup)
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
         toolbarContent.addSubview(rightPanelView)
@@ -211,6 +222,11 @@ final class MainWindowController: NSWindowController {
         rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
+            groupSelectorPopup.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 12),
+            groupSelectorPopup.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
+            groupSelectorPopup.widthAnchor.constraint(equalToConstant: 156),
+            groupSelectorPopup.heightAnchor.constraint(equalToConstant: 24),
+
             minLeading,
             tabWidth,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
@@ -251,6 +267,7 @@ final class MainWindowController: NSWindowController {
 
         setupTabStripInteractions()
         applyAddressDisplayMode(display: "")
+        syncGroupSelectorSelection()
     }
 
     private func configureBindings() {
@@ -315,6 +332,13 @@ final class MainWindowController: NSWindowController {
 
     @objc private func didTapNewTab() {
         actions.newTab()
+    }
+
+    @objc private func groupSelectionDidChange(_ sender: NSPopUpButton) {
+        let selectedIndex = sender.indexOfSelectedItem
+        guard selectedIndex >= 0, selectedIndex < BrowserTabGroup.allCases.count else { return }
+        let group = BrowserTabGroup.allCases[selectedIndex]
+        tabManager.switchGroup(group)
     }
 
     // MARK: - Menu Actions
@@ -741,6 +765,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func rebuildTabStrip() {
+        syncGroupSelectorSelection()
         tabStripStackView.arrangedSubviews.forEach {
             tabStripStackView.removeArrangedSubview($0)
             $0.removeFromSuperview()
@@ -762,7 +787,8 @@ final class MainWindowController: NSWindowController {
                 thumbnail: item.thumbnail,
                 size: UI.tabChipSize,
                 isActive: item.isActive,
-                isProtected: item.isProtected
+                isProtected: item.isProtected,
+                activeAccentColor: accentColorForCurrentGroup()
             )
             tabStripStackView.addArrangedSubview(chip)
         }
@@ -792,7 +818,8 @@ final class MainWindowController: NSWindowController {
             return rect.maxX
         }.max() ?? 74
 
-        tabStripMinLeadingConstraint?.constant = maxButtonX + 10
+        let groupSelectorRequiredLeading: CGFloat = 12 + 156 + 12
+        tabStripMinLeadingConstraint?.constant = max(maxButtonX + 10, groupSelectorRequiredLeading)
 
         let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
         rightPanelWidthConstraint?.constant = rightPanelWidth
@@ -801,6 +828,22 @@ final class MainWindowController: NSWindowController {
         let available = window.frame.width - (maxButtonX + 10) - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
         layoutTabStripAndRevealActive()
+    }
+
+    private func syncGroupSelectorSelection() {
+        let index = BrowserTabGroup.allCases.firstIndex(of: tabManager.currentGroup) ?? 0
+        if groupSelectorPopup.indexOfSelectedItem != index {
+            groupSelectorPopup.selectItem(at: index)
+        }
+    }
+
+    private func accentColorForCurrentGroup() -> NSColor {
+        switch tabManager.currentGroup {
+        case .regular:
+            return NSColor.systemBlue
+        case .privateMode:
+            return NSColor.systemOrange
+        }
     }
 
     private func layoutTabStripAndRevealActive() {
@@ -1092,10 +1135,12 @@ extension MainWindowController: WKUIDelegate {
             popupWebView.uiDelegate = self
 
             let initialURL = navigationAction.request.url
+            let targetGroup = tabManager.group(for: webView) ?? tabManager.currentGroup
             return tabManager.addTab(
                 webView: popupWebView,
                 initialURL: initialURL,
-                shouldLoadInitialURL: false
+                shouldLoadInitialURL: false,
+                group: targetGroup
             )
         }
         return nil
@@ -1296,12 +1341,27 @@ private final class TabChipView: NSView {
     var isActiveChip: Bool { active }
     var tabIndex: Int { index }
 
-    init(index: Int, title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
+    init(
+        index: Int,
+        title: String,
+        thumbnail: NSImage?,
+        size: NSSize,
+        isActive: Bool,
+        isProtected: Bool,
+        activeAccentColor: NSColor
+    ) {
         self.index = index
         self.active = isActive
         protectedState = isProtected
         super.init(frame: .zero)
-        setupView(title: title, thumbnail: thumbnail, size: size, isActive: isActive, isProtected: isProtected)
+        setupView(
+            title: title,
+            thumbnail: thumbnail,
+            size: size,
+            isActive: isActive,
+            isProtected: isProtected,
+            activeAccentColor: activeAccentColor
+        )
     }
 
     required init?(coder: NSCoder) {
@@ -1318,7 +1378,14 @@ private final class TabChipView: NSView {
         activeAccentLayer.frame = CGRect(x: 2, y: bounds.height - 3, width: bounds.width - 4, height: 2)
     }
 
-    private func setupView(title: String, thumbnail: NSImage?, size: NSSize, isActive: Bool, isProtected: Bool) {
+    private func setupView(
+        title: String,
+        thumbnail: NSImage?,
+        size: NSSize,
+        isActive: Bool,
+        isProtected: Bool,
+        activeAccentColor: NSColor
+    ) {
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = title
         wantsLayer = true
@@ -1326,12 +1393,12 @@ private final class TabChipView: NSView {
         layer?.masksToBounds = false
         layer?.borderWidth = 1
         layer?.borderColor = isActive
-            ? NSColor.systemCyan.withAlphaComponent(0.90).cgColor
+            ? activeAccentColor.withAlphaComponent(0.90).cgColor
             : NSColor.white.withAlphaComponent(0.56).cgColor
         layer?.backgroundColor = isActive
-            ? NSColor.systemBlue.withAlphaComponent(0.24).cgColor
+            ? activeAccentColor.withAlphaComponent(0.24).cgColor
             : NSColor.white.withAlphaComponent(0.30).cgColor
-        layer?.shadowColor = NSColor.systemBlue.withAlphaComponent(0.92).cgColor
+        layer?.shadowColor = activeAccentColor.withAlphaComponent(0.92).cgColor
         layer?.shadowOpacity = isActive ? 0.52 : 0
         layer?.shadowRadius = isActive ? 8 : 0
         layer?.shadowOffset = CGSize(width: 0, height: -1)
@@ -1355,8 +1422,8 @@ private final class TabChipView: NSView {
 
         if isActive {
             activeAccentLayer.colors = [
-                NSColor.systemCyan.withAlphaComponent(0.95).cgColor,
-                NSColor.systemBlue.withAlphaComponent(0.65).cgColor
+                activeAccentColor.withAlphaComponent(0.95).cgColor,
+                activeAccentColor.withAlphaComponent(0.65).cgColor
             ]
             activeAccentLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
             activeAccentLayer.endPoint = CGPoint(x: 1.0, y: 0.5)

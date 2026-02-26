@@ -17,14 +17,15 @@ final class BrowserSession {
         tabManager.currentWebView
     }
 
-    static func makeConfiguredWebView() -> WKWebView {
+    static func makeConfiguredWebView(for group: BrowserTabGroup = .regular) -> WKWebView {
         let prefs = BrowserPreferences.shared
         let config = WKWebViewConfiguration()
         config.allowsAirPlayForMediaPlayback = true
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
-        config.websiteDataStore = prefs.ephemeralModeEnabled ? .nonPersistent() : .default()
+        let useEphemeralStore = (group == .privateMode) || prefs.ephemeralModeEnabled
+        config.websiteDataStore = useEphemeralStore ? .nonPersistent() : .default()
 
         if prefs.sendDoNotTrack {
             let source = """

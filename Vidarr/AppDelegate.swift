@@ -122,6 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         fileMenu.addItem(makeMenuItem("New Tab", action: #selector(menuNewTab), key: "t"))
         fileMenu.addItem(makeMenuItem("Close Tab", action: #selector(menuCloseTab), key: "w"))
+        fileMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(makeMenuItem("Close Window", action: #selector(menuCloseWindow), key: "w", modifiers: [.command, .shift]))
 
@@ -146,7 +147,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(makeMenuItem("Reload", action: #selector(menuReload), key: "r"))
         viewMenu.addItem(makeMenuItem("Reload All Tabs", action: #selector(menuReloadAll), key: "r", modifiers: [.command, .shift]))
         viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(makeMenuItem("Next Tab", action: #selector(menuNextTab), key: "]", modifiers: [.command, .shift]))
+        viewMenu.addItem(makeMenuItem("Previous Tab", action: #selector(menuPreviousTab), key: "[", modifiers: [.command, .shift]))
+        viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Focus Address Bar", action: #selector(menuFocusAddressBar), key: "l"))
+        viewMenu.addItem(makeMenuItem("Focus Tab Search", action: #selector(menuFocusTabSearch), key: "f", modifiers: [.command, .shift]))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Enter Full Screen", action: #selector(menuToggleFullScreen), key: "f", modifiers: [.command, .control]))
 
@@ -158,7 +163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         historyMenu.addItem(makeMenuItem("Back", action: #selector(menuGoBack), key: "["))
         historyMenu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
         historyMenu.addItem(NSMenuItem.separator())
-        historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
+        historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
 
         let developMenu = NSMenu(title: "Develop")
         let developMenuItem = NSMenuItem(title: "Develop", action: nil, keyEquivalent: "")
@@ -223,6 +228,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuFocusAddressBar() {
         mainWindowController?.menuFocusAddressBar()
+    }
+
+    @objc private func menuFocusTabSearch() {
+        mainWindowController?.menuFocusTabSearch()
+    }
+
+    @objc private func menuNextTab() {
+        mainWindowController?.menuSelectNextTab()
+    }
+
+    @objc private func menuPreviousTab() {
+        mainWindowController?.menuSelectPreviousTab()
     }
 
     @objc private func menuToggleFullScreen() {

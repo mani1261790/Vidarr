@@ -346,6 +346,18 @@ final class MainWindowController: NSWindowController {
         beginAddressEditing()
     }
 
+    func menuFocusTabSearch() {
+        window?.makeFirstResponder(tabSearchField)
+    }
+
+    func menuSelectNextTab() {
+        actions.tabNext()
+    }
+
+    func menuSelectPreviousTab() {
+        actions.tabPrev()
+    }
+
     func menuToggleWebInspector() {
         guard let webView = tabManager.currentWebView else { return }
         let selector = NSSelectorFromString("_toggleWebInspector:")

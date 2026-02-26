@@ -175,11 +175,7 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.image = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Tab Group")
         groupSelectorButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
         groupSelectorButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.88)
-        groupSelectorButton.wantsLayer = true
-        groupSelectorButton.layer?.cornerRadius = 4
-        groupSelectorButton.layer?.borderWidth = 1
-        groupSelectorButton.layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
-        groupSelectorButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        groupSelectorButton.wantsLayer = false
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
@@ -848,8 +844,6 @@ final class MainWindowController: NSWindowController {
 
     private func syncGroupSelectorSelection() {
         let accent = accentColorForCurrentGroup()
-        groupSelectorButton.layer?.borderColor = accent.withAlphaComponent(0.52).cgColor
-        groupSelectorButton.layer?.backgroundColor = accent.withAlphaComponent(0.20).cgColor
         groupSelectorButton.contentTintColor = accent.withAlphaComponent(0.96)
         groupSelectorButton.toolTip = tabManager.currentGroup.displayName
     }

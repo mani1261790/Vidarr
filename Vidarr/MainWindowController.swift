@@ -47,10 +47,13 @@ final class MainWindowController: NSWindowController {
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
     private var temporarilyAllowedHosts: Set<String> = []
+    private var configuredLongPressControllers: Set<ObjectIdentifier> = []
+    private var longPressHandlerBoxes: [ObjectIdentifier: WeakScriptMessageHandler] = [:]
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
     ]
+    private static let longPressLinkMessageName = "vidarrLongPressLink"
 
     private struct InteractiveTabSwitchState {
         let fromWebView: WKWebView
@@ -563,10 +566,120 @@ final class MainWindowController: NSWindowController {
         }
     }
 
+    private func installLongPressOpenInBackgroundIfNeeded(for webView: WKWebView) {
+        let contentController = webView.configuration.userContentController
+        let controllerID = ObjectIdentifier(contentController)
+        guard !configuredLongPressControllers.contains(controllerID) else { return }
+        configuredLongPressControllers.insert(controllerID)
+
+        let handlerBox = WeakScriptMessageHandler(target: self)
+        longPressHandlerBoxes[controllerID] = handlerBox
+        contentController.removeScriptMessageHandler(forName: Self.longPressLinkMessageName)
+        contentController.add(handlerBox, name: Self.longPressLinkMessageName)
+
+        let source = """
+        (() => {
+            if (window.__vidarrLongPressInstalled) { return; }
+            window.__vidarrLongPressInstalled = true;
+
+            const HOLD_MS = 380;
+            const MOVE_TOLERANCE = 14;
+            var timer = null;
+            var activeAnchor = null;
+            var startX = 0;
+            var startY = 0;
+
+            function clearTimer() {
+                if (timer !== null) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+            }
+
+            function anchorFromEvent(event) {
+                const path = event.composedPath ? event.composedPath() : [];
+                for (const node of path) {
+                    if (node && node.tagName && node.tagName.toLowerCase() === 'a' && node.href) {
+                        return node;
+                    }
+                }
+                if (event.target && event.target.closest) {
+                    const found = event.target.closest('a[href]');
+                    if (found && found.href) { return found; }
+                }
+                return null;
+            }
+
+            function resetState() {
+                clearTimer();
+                activeAnchor = null;
+                startX = 0;
+                startY = 0;
+            }
+
+            document.addEventListener('mousedown', (event) => {
+                if (event.button !== 0) { return; }
+                const anchor = anchorFromEvent(event);
+                if (!anchor) {
+                    resetState();
+                    return;
+                }
+                activeAnchor = anchor;
+                startX = event.clientX;
+                startY = event.clientY;
+                clearTimer();
+                timer = setTimeout(() => {
+                    if (!activeAnchor || !activeAnchor.href) { return; }
+                    window.__vidarrSuppressLongPressClick = true;
+                    window.webkit.messageHandlers.\(Self.longPressLinkMessageName).postMessage({
+                        href: activeAnchor.href
+                    });
+                }, HOLD_MS);
+            }, true);
+
+            document.addEventListener('mousemove', (event) => {
+                if (!activeAnchor) { return; }
+                const dx = event.clientX - startX;
+                const dy = event.clientY - startY;
+                if (Math.hypot(dx, dy) > MOVE_TOLERANCE) {
+                    resetState();
+                }
+            }, true);
+
+            document.addEventListener('mouseup', () => {
+                resetState();
+            }, true);
+
+            document.addEventListener('dragstart', () => {
+                resetState();
+            }, true);
+
+            document.addEventListener('click', (event) => {
+                if (!window.__vidarrSuppressLongPressClick) { return; }
+                window.__vidarrSuppressLongPressClick = false;
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
+
+            window.addEventListener('blur', () => {
+                resetState();
+                window.__vidarrSuppressLongPressClick = false;
+            }, true);
+        })();
+        """
+        let script = WKUserScript(
+            source: source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        contentController.addUserScript(script)
+    }
+
     private func attachWebView(_ webView: WKWebView) {
         webContainer.subviews.forEach { $0.removeFromSuperview() }
         overlayView = nil
 
+        installLongPressOpenInBackgroundIfNeeded(for: webView)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         clearLayoutConstraints(for: webView)
@@ -1314,10 +1427,23 @@ extension MainWindowController: WKUIDelegate {
                 webView: popupWebView,
                 initialURL: initialURL,
                 shouldLoadInitialURL: false,
-                group: targetGroup
+                group: targetGroup,
+                activate: true
             )
         }
         return nil
+    }
+}
+
+extension MainWindowController: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.longPressLinkMessageName else { return }
+        guard let body = message.body as? [String: Any] else { return }
+        guard let href = body["href"] as? String else { return }
+        guard let url = URL(string: href) else { return }
+
+        let group = message.webView.flatMap { tabManager.group(for: $0) } ?? tabManager.currentGroup
+        tabManager.openBackgroundTab(url: url, in: group)
     }
 }
 
@@ -1397,6 +1523,19 @@ private final class LiquidGlassToolbarView: NSView {
 
 private final class NonDraggableVisualEffectView: NSVisualEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
+}
+
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(target: WKScriptMessageHandler) {
+        self.target = target
+        super.init()
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
+    }
 }
 
 private final class HorizontalOnlyClipView: NSClipView {

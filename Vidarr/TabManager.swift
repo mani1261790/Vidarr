@@ -129,7 +129,25 @@ final class TabManager {
 
     func newTab(url: URL?, in group: BrowserTabGroup) {
         let webView = BrowserSession.makeConfiguredWebView(for: group)
-        addTab(webView: webView, initialURL: url, shouldLoadInitialURL: true, group: group)
+        addTab(
+            webView: webView,
+            initialURL: url,
+            shouldLoadInitialURL: true,
+            group: group,
+            activate: true
+        )
+    }
+
+    func openBackgroundTab(url: URL?, in group: BrowserTabGroup? = nil) {
+        let targetGroup = group ?? currentGroup
+        let webView = BrowserSession.makeConfiguredWebView(for: targetGroup)
+        addTab(
+            webView: webView,
+            initialURL: url,
+            shouldLoadInitialURL: true,
+            group: targetGroup,
+            activate: false
+        )
     }
 
     @discardableResult
@@ -137,7 +155,8 @@ final class TabManager {
         webView: WKWebView,
         initialURL: URL?,
         shouldLoadInitialURL: Bool,
-        group: BrowserTabGroup? = nil
+        group: BrowserTabGroup? = nil,
+        activate: Bool = true
     ) -> WKWebView {
         let work = { [weak self] in
             guard let self else { return }
@@ -145,17 +164,24 @@ final class TabManager {
             var state = self.state(for: targetGroup)
             var tab = Tab(webView: webView, lastKnownURL: initialURL, thumbnail: nil, isProtected: false)
             state.tabs.append(tab)
-            state.currentIndex = state.tabs.count - 1
+            let insertedIndex = state.tabs.count - 1
+            if activate || state.currentIndex < 0 {
+                state.currentIndex = insertedIndex
+            }
 
             if shouldLoadInitialURL, let targetURL = initialURL {
                 webView.load(URLRequest(url: targetURL))
                 tab.lastKnownURL = targetURL
-                state.tabs[state.currentIndex] = tab
+                state.tabs[insertedIndex] = tab
             }
 
             self.setState(state, for: targetGroup)
-            self.switchGroupInternal(targetGroup, ensureTab: false)
-            self.notifyCurrentGroupUpdated(selectCurrent: true)
+            if activate {
+                self.switchGroupInternal(targetGroup, ensureTab: false)
+                self.notifyCurrentGroupUpdated(selectCurrent: true)
+            } else if targetGroup == self.currentGroup {
+                self.delegate?.tabManager(self, didUpdateTabs: state.tabs.count)
+            }
         }
 
         if Thread.isMainThread {

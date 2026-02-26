@@ -964,7 +964,7 @@ final class MainWindowController: NSWindowController {
         guard interactiveTabSwitchState == nil else { return }
         guard beginInteractiveTabSwitch(direction: direction), let state = interactiveTabSwitchState else {
             if shouldOpenNewTabAtRightEdge(for: direction) {
-                actions.newTab()
+                animateNewTabOpenFromRightEdge()
             }
             return
         }
@@ -976,6 +976,39 @@ final class MainWindowController: NSWindowController {
         let count = tabManager.tabCount
         guard count > 0 else { return false }
         return tabManager.currentIndex == (count - 1)
+    }
+
+    private func animateNewTabOpenFromRightEdge() {
+        guard interactiveTabSwitchState == nil else { return }
+        guard let fromWebView = tabManager.currentWebView else {
+            actions.newTab()
+            return
+        }
+
+        let group = tabManager.currentGroup
+        let newWebView = BrowserSession.makeConfiguredWebView(for: group)
+        _ = tabManager.addTab(
+            webView: newWebView,
+            initialURL: BrowserSession.defaultHomeURL,
+            shouldLoadInitialURL: true,
+            group: group,
+            activate: false
+        )
+        let targetIndex = tabManager.tabCount - 1
+        guard targetIndex >= 0 else {
+            actions.newTab()
+            return
+        }
+
+        prepareInteractiveTabSwitchViews(from: fromWebView, to: newWebView, direction: .left)
+        let state = InteractiveTabSwitchState(
+            fromWebView: fromWebView,
+            toWebView: newWebView,
+            targetIndex: targetIndex,
+            direction: .left
+        )
+        interactiveTabSwitchState = state
+        completeProgrammaticTabSwitch(state)
     }
 
     private func beginInteractiveTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) -> Bool {

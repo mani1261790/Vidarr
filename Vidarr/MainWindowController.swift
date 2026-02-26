@@ -91,6 +91,9 @@ final class MainWindowController: NSWindowController {
         if #available(macOS 11.0, *) {
             window.titlebarSeparatorStyle = .none
         }
+        if let appIcon = NSImage(named: NSImage.applicationIconName) {
+            window.miniwindowImage = appIcon
+        }
         window.isReleasedWhenClosed = false
         window.center()
 

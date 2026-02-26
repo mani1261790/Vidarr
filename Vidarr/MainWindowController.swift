@@ -1214,6 +1214,15 @@ private final class AddressBarField: NSTextField {
             return
         }
         onActivate?()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.isEditable else { return }
+            self.window?.makeFirstResponder(self)
+            if let editor = self.currentEditor() {
+                let end = self.stringValue.count
+                editor.selectedRange = NSRange(location: end, length: 0)
+            }
+        }
     }
 }
 

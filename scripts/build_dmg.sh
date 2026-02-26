@@ -14,9 +14,11 @@ VERSION_TAG="${1:-local}"
 OUTPUT_DIR="$ROOT_DIR/build/dist"
 DMG_NAME="Vidarr-${VERSION_TAG}.dmg"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
+STAGING_DIR="$ROOT_DIR/build/dmg-root"
 
 mkdir -p "$OUTPUT_DIR"
 rm -rf "$DERIVED_DATA_PATH"
+rm -rf "$STAGING_DIR"
 
 xcodebuild \
   -project "$PROJECT_PATH" \
@@ -37,12 +39,32 @@ fi
 codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+# Prepare DMG root: app + Applications link.
+mkdir -p "$STAGING_DIR"
+cp -R "$APP_PATH" "$STAGING_DIR/$APP_NAME"
+ln -s /Applications "$STAGING_DIR/Applications"
+
 rm -f "$DMG_PATH"
-hdiutil create \
-  -volname "Vidarr" \
-  -srcfolder "$APP_PATH" \
-  -ov \
-  -format UDZO \
-  "$DMG_PATH"
+if command -v create-dmg >/dev/null 2>&1; then
+  create-dmg \
+    --volname "Vidarr" \
+    --window-pos 200 120 \
+    --window-size 720 420 \
+    --icon-size 120 \
+    --icon "$APP_NAME" 200 220 \
+    --icon "Applications" 520 220 \
+    --app-drop-link 520 220 \
+    --hide-extension "$APP_NAME" \
+    --no-internet-enable \
+    "$DMG_PATH" \
+    "$STAGING_DIR"
+else
+  hdiutil create \
+    -volname "Vidarr" \
+    -srcfolder "$STAGING_DIR" \
+    -ov \
+    -format UDZO \
+    "$DMG_PATH"
+fi
 
 echo "Created: $DMG_PATH"

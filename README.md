@@ -6,17 +6,21 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 
 ### インストール手順
 1. [Releases](https://github.com/mani1261790/Vidarr/releases) から最新版の `Vidarr-*.dmg` をダウンロード
-2. `.dmg` を開いて `Vidarr.app` を `Applications` にドラッグ
+2. `.dmg` を開き、`Vidarr.app` を同梱の `Applications` フォルダへドラッグ
 3. 初回起動時に警告が出る場合は `Vidarr.app` を右クリックして `開く`
 4. 確認ダイアログでもう一度 `開く` を選択
 
 注意:
 - 現在の配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。
+- Appleの公証（notarization）なしでは、この警告を完全になくすことはできません。
 - もし `“Vidarr.app” is damaged and can’t be opened.` が出る場合:
 ```bash
 xattr -dr com.apple.quarantine /Applications/Vidarr.app
 ```
 - もし `“Vidarr.app” Not Opened` / `Apple could not verify ...` が出る場合も同様に上記コマンドで解除できます。
+- それでも `Move to Trash` のみが出る場合:
+  - `システム設定 > プライバシーとセキュリティ` で Vidarr の実行許可を有効化
+  - もう一度起動する
 
 ## ジェスチャー一覧 (実装)
 - `← (Left)` : 前タブ

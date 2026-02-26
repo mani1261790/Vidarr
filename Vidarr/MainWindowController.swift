@@ -218,7 +218,7 @@ final class MainWindowController: NSWindowController {
         rightPanelView.addSubview(addressBarField)
         rightPanelView.addSubview(tabSearchField)
 
-        let minLeading = tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
+        let minLeading = groupSelectorButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
         tabStripMinLeadingConstraint = minLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
@@ -226,8 +226,8 @@ final class MainWindowController: NSWindowController {
         rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
-            groupSelectorButton.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 12),
             groupSelectorButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
+            groupSelectorButton.trailingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor, constant: -6),
             groupSelectorButton.widthAnchor.constraint(equalToConstant: 28),
             groupSelectorButton.heightAnchor.constraint(equalToConstant: 24),
 
@@ -236,7 +236,7 @@ final class MainWindowController: NSWindowController {
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 1),
             tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -1),
-            tabStripContainer.trailingAnchor.constraint(lessThanOrEqualTo: newTabButton.leadingAnchor, constant: -6),
+            tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: groupSelectorButton.trailingAnchor, constant: 6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
             tabStripScrollView.leadingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor),
@@ -248,7 +248,8 @@ final class MainWindowController: NSWindowController {
             tabInteractionView.bottomAnchor.constraint(equalTo: tabStripContainer.bottomAnchor),
 
             newTabButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
-            newTabButton.trailingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: -8),
+            newTabButton.leadingAnchor.constraint(equalTo: tabStripContainer.trailingAnchor, constant: 6),
+            newTabButton.trailingAnchor.constraint(lessThanOrEqualTo: rightPanelView.leadingAnchor, constant: -8),
             newTabButton.widthAnchor.constraint(equalToConstant: 24),
             newTabButton.heightAnchor.constraint(equalToConstant: 24),
 

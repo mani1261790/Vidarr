@@ -42,6 +42,9 @@ final class GestureOverlayView: NSView {
         "O", "U", "S", "OO", "DownRightDownRight",
         "Right", "Left"
     ]
+    private var sensitivityMultiplier: CGFloat {
+        BrowserPreferences.shared.gestureSensitivity.multiplier
+    }
 
     private lazy var recognizer = GestureRecognizer(
         matchScoreThreshold: config.matchScoreThreshold,
@@ -120,6 +123,7 @@ final class GestureOverlayView: NSView {
     private func shouldStartCapture() -> Bool {
         guard !recentSamples.isEmpty else { return false }
         guard let latestTimestamp = recentSamples.last?.timestamp else { return false }
+        let triggerHorizontalDelta = config.triggerHorizontalDelta / max(0.75, sensitivityMultiplier)
 
         let triggerAge = config.triggerWindowMs / 1000
         let triggerThreshold = latestTimestamp - triggerAge
@@ -128,7 +132,7 @@ final class GestureOverlayView: NSView {
 
         if triggerSamples.contains(where: { sample in
             abs(sample.dx) > abs(sample.dy) * config.triggerDominanceRatio
-                && abs(sample.dx) > config.triggerHorizontalDelta
+                && abs(sample.dx) > triggerHorizontalDelta
         }) {
             return true
         }
@@ -140,7 +144,7 @@ final class GestureOverlayView: NSView {
         let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
 
         return abs(sumX) > abs(sumY) * config.triggerDominanceRatio
-            && abs(sumX) > config.triggerHorizontalDelta
+            && abs(sumX) > triggerHorizontalDelta
     }
 
     private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
@@ -185,7 +189,7 @@ final class GestureOverlayView: NSView {
         let strict = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
         let relaxed: GestureResult? = {
             guard strict == nil else { return nil }
-            guard pathLength(capturePoints) >= config.minPathLength * 0.45 else { return nil }
+            guard pathLength(capturePoints) >= (config.minPathLength * 0.45) / max(0.75, sensitivityMultiplier) else { return nil }
             return recognizer.bestPassingMatch(
                 points: capturePoints,
                 minimumScore: max(0.58, config.matchScoreThreshold - 0.16),

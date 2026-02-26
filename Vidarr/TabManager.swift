@@ -32,6 +32,7 @@ struct TabStripItem {
     let title: String
     let isActive: Bool
     let isProtected: Bool
+    let isBookmarked: Bool
     let thumbnail: NSImage?
 }
 
@@ -43,6 +44,7 @@ final class TabManager {
         var lastKnownURL: URL?
         var thumbnail: NSImage?
         var isProtected: Bool
+        var isBookmarked: Bool
     }
 
     private struct GroupState {
@@ -88,6 +90,12 @@ final class TabManager {
         return state.tabs[state.currentIndex].isProtected
     }
 
+    var isCurrentTabBookmarked: Bool {
+        let state = state(for: currentGroup)
+        guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return false }
+        return state.tabs[state.currentIndex].isBookmarked
+    }
+
     var tabStripItems: [TabStripItem] {
         let state = state(for: currentGroup)
         return state.tabs.enumerated().map { index, tab in
@@ -100,6 +108,7 @@ final class TabManager {
                 title: title,
                 isActive: index == state.currentIndex,
                 isProtected: tab.isProtected,
+                isBookmarked: tab.isBookmarked,
                 thumbnail: tab.thumbnail
             )
         }
@@ -162,7 +171,13 @@ final class TabManager {
             guard let self else { return }
             let targetGroup = group ?? self.currentGroup
             var state = self.state(for: targetGroup)
-            var tab = Tab(webView: webView, lastKnownURL: initialURL, thumbnail: nil, isProtected: false)
+            var tab = Tab(
+                webView: webView,
+                lastKnownURL: initialURL,
+                thumbnail: nil,
+                isProtected: false,
+                isBookmarked: false
+            )
             state.tabs.append(tab)
             let insertedIndex = state.tabs.count - 1
             if activate || state.currentIndex < 0 {
@@ -298,6 +313,17 @@ final class TabManager {
         }
     }
 
+    func toggleCurrentTabBookmark() {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            var state = state(for: currentGroup)
+            guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return }
+            state.tabs[state.currentIndex].isBookmarked.toggle()
+            setState(state, for: currentGroup)
+            notifyCurrentGroupUpdated(selectCurrent: false)
+        }
+    }
+
     func moveTab(from fromIndex: Int, to toIndex: Int) {
         performOnMain { [weak self] in
             guard let self else { return }
@@ -391,7 +417,8 @@ final class TabManager {
         let snapshots = state.tabs.map { tab in
             (
                 url: tab.webView.url ?? tab.lastKnownURL,
-                isProtected: tab.isProtected
+                isProtected: tab.isProtected,
+                isBookmarked: tab.isBookmarked
             )
         }
 
@@ -404,7 +431,8 @@ final class TabManager {
                 webView: webView,
                 lastKnownURL: snapshot.url,
                 thumbnail: nil,
-                isProtected: snapshot.isProtected
+                isProtected: snapshot.isProtected,
+                isBookmarked: snapshot.isBookmarked
             )
         }
         state.currentIndex = min(max(0, selectedIndex), state.tabs.count - 1)

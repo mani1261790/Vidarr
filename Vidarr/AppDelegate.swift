@@ -122,6 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         fileMenu.addItem(makeMenuItem("New Tab", action: #selector(menuNewTab), key: "t"))
         fileMenu.addItem(makeMenuItem("Close Tab", action: #selector(menuCloseTab), key: "w"))
+        fileMenu.addItem(makeMenuItem("Toggle Bookmark", action: #selector(menuToggleBookmark), key: "d"))
         fileMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(makeMenuItem("Close Window", action: #selector(menuCloseWindow), key: "w", modifiers: [.command, .shift]))
@@ -215,6 +216,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuCloseTab() {
         mainWindowController?.menuCloseTab()
+    }
+
+    @objc private func menuToggleBookmark() {
+        mainWindowController?.menuToggleBookmark()
     }
 
     @objc private func menuCloseWindow() {

@@ -495,6 +495,10 @@ final class MainWindowController: NSWindowController {
         }
     }
 
+    func menuToggleBookmark() {
+        tabManager.toggleCurrentTabBookmark()
+    }
+
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
         tabSearchQuery = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         rebuildTabStrip()
@@ -1062,6 +1066,7 @@ final class MainWindowController: NSWindowController {
                 size: UI.tabChipSize,
                 isActive: item.isActive,
                 isProtected: item.isProtected,
+                isBookmarked: item.isBookmarked,
                 activeAccentColor: accentColorForCurrentGroup()
             )
             tabStripStackView.addArrangedSubview(chip)
@@ -1770,10 +1775,12 @@ private final class ClickableLabelField: NSTextField {
 private final class TabChipView: NSView {
     private let index: Int
     private let thumbnailView = PassthroughImageView()
-    private let protectedIconView = PassthroughImageView()
+    private let statusBadgeView = NSView()
+    private let statusIconView = PassthroughImageView()
     private let activeAccentLayer = CAGradientLayer()
     private let active: Bool
     private let protectedState: Bool
+    private let bookmarkedState: Bool
 
     var isActiveChip: Bool { active }
     var tabIndex: Int { index }
@@ -1785,11 +1792,13 @@ private final class TabChipView: NSView {
         size: NSSize,
         isActive: Bool,
         isProtected: Bool,
+        isBookmarked: Bool,
         activeAccentColor: NSColor
     ) {
         self.index = index
         self.active = isActive
         protectedState = isProtected
+        bookmarkedState = isBookmarked
         super.init(frame: .zero)
         setupView(
             title: title,
@@ -1797,6 +1806,7 @@ private final class TabChipView: NSView {
             size: size,
             isActive: isActive,
             isProtected: isProtected,
+            isBookmarked: isBookmarked,
             activeAccentColor: activeAccentColor
         )
     }
@@ -1821,6 +1831,7 @@ private final class TabChipView: NSView {
         size: NSSize,
         isActive: Bool,
         isProtected: Bool,
+        isBookmarked: Bool,
         activeAccentColor: NSColor
     ) {
         translatesAutoresizingMaskIntoConstraints = false
@@ -1849,13 +1860,32 @@ private final class TabChipView: NSView {
         thumbnailView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.68).cgColor
         addSubview(thumbnailView)
 
-        protectedIconView.translatesAutoresizingMaskIntoConstraints = false
-        protectedIconView.imageScaling = .scaleProportionallyUpOrDown
-        protectedIconView.isHidden = !isProtected
-        let icon = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil)
-        protectedIconView.image = icon?.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-        protectedIconView.contentTintColor = NSColor.white.withAlphaComponent(0.95)
-        addSubview(protectedIconView)
+        statusBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        statusBadgeView.wantsLayer = true
+        statusBadgeView.layer?.cornerRadius = 7
+        statusBadgeView.layer?.masksToBounds = true
+        addSubview(statusBadgeView)
+
+        statusIconView.translatesAutoresizingMaskIntoConstraints = false
+        statusIconView.imageScaling = .scaleProportionallyUpOrDown
+        statusBadgeView.addSubview(statusIconView)
+
+        let markerImageName: String
+        let markerColor: NSColor
+        if isProtected {
+            markerImageName = "pin.fill"
+            markerColor = NSColor(calibratedRed: 0.29, green: 0.67, blue: 1.0, alpha: 0.96)
+        } else if isBookmarked {
+            markerImageName = "star.fill"
+            markerColor = NSColor(calibratedRed: 1.0, green: 0.80, blue: 0.15, alpha: 0.96)
+        } else {
+            markerImageName = "xmark"
+            markerColor = NSColor.black.withAlphaComponent(0.78)
+        }
+        let markerImage = NSImage(systemSymbolName: markerImageName, accessibilityDescription: nil)
+        statusIconView.image = markerImage?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+        statusIconView.contentTintColor = NSColor.white.withAlphaComponent(0.96)
+        statusBadgeView.layer?.backgroundColor = markerColor.cgColor
 
         if isActive {
             activeAccentLayer.colors = [
@@ -1876,10 +1906,15 @@ private final class TabChipView: NSView {
             thumbnailView.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             thumbnailView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
 
-            protectedIconView.topAnchor.constraint(equalTo: topAnchor, constant: 5),
-            protectedIconView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
-            protectedIconView.widthAnchor.constraint(equalToConstant: 12),
-            protectedIconView.heightAnchor.constraint(equalToConstant: 12)
+            statusBadgeView.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+            statusBadgeView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            statusBadgeView.widthAnchor.constraint(equalToConstant: 14),
+            statusBadgeView.heightAnchor.constraint(equalToConstant: 14),
+
+            statusIconView.centerXAnchor.constraint(equalTo: statusBadgeView.centerXAnchor),
+            statusIconView.centerYAnchor.constraint(equalTo: statusBadgeView.centerYAnchor),
+            statusIconView.widthAnchor.constraint(equalToConstant: 8.5),
+            statusIconView.heightAnchor.constraint(equalToConstant: 8.5)
         ])
 
         if isActive {
@@ -1892,6 +1927,9 @@ private final class TabChipView: NSView {
             layer?.shadowColor = protectedOrange.withAlphaComponent(isActive ? 0.98 : 0.88).cgColor
             layer?.shadowOpacity = isActive ? 0.62 : 0.36
             layer?.shadowRadius = isActive ? 9 : 5
+        } else if bookmarkedState {
+            let bookmarkYellow = NSColor(calibratedRed: 1.0, green: 0.80, blue: 0.16, alpha: 1.0)
+            layer?.borderColor = bookmarkYellow.withAlphaComponent(isActive ? 0.90 : 0.78).cgColor
         }
     }
 }

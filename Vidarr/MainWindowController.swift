@@ -369,6 +369,65 @@ final class MainWindowController: NSWindowController {
         webView.perform(selector, with: nil)
     }
 
+    func menuPreparePasswordAutoFill() {
+        guard let webView = tabManager.currentWebView else { return }
+
+        if BrowserPreferences.shared.ephemeralModeEnabled {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "一時モードではログイン保持が弱くなります"
+            alert.informativeText = "Appleの標準オートフィルは使えますが、再起動後の保持を重視するならフットプリント最小化をOFFにしてください。"
+            alert.addButton(withTitle: "OK")
+            if let window {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
+        }
+
+        let script = """
+        (() => {
+          const isVisible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0 && !el.disabled && !el.readOnly;
+          };
+
+          const password = Array.from(document.querySelectorAll('input[type="password"]')).find(isVisible);
+          if (!password) { return false; }
+
+          const fields = password.form ? Array.from(password.form.querySelectorAll("input")) : Array.from(document.querySelectorAll("input"));
+          const user = fields.find((el) => {
+            if (!isVisible(el) || el === password) { return false; }
+            const t = (el.type || "").toLowerCase();
+            const ac = (el.autocomplete || "").toLowerCase();
+            return t === "text" || t === "email" || ac.includes("username") || ac.includes("email");
+          });
+
+          if (user) { user.focus(); }
+          password.focus();
+          return true;
+        })();
+        """
+
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self else { return }
+            guard let found = result as? Bool, found else {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = "ログインフォームが見つかりません"
+                alert.informativeText = "ログイン欄をクリックしてから、もう一度 AutoFill Password を実行してください。"
+                alert.addButton(withTitle: "OK")
+                if let window = self.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+                return
+            }
+        }
+    }
+
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
         tabSearchQuery = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         rebuildTabStrip()

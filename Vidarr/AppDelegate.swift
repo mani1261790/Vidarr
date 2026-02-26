@@ -138,6 +138,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(makeMenuItem("AutoFill Password", action: #selector(menuAutoFillPassword), key: "\\"))
+        editMenu.addItem(makeMenuItem("Open Passwords App", action: #selector(menuOpenPasswordsApp), key: "\\", modifiers: [.command, .option]))
 
         let viewMenu = NSMenu(title: "View")
         let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
@@ -240,6 +243,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuPreviousTab() {
         mainWindowController?.menuSelectPreviousTab()
+    }
+
+    @objc private func menuAutoFillPassword() {
+        mainWindowController?.menuPreparePasswordAutoFill()
+    }
+
+    @objc private func menuOpenPasswordsApp() {
+        let systemPath = "/System/Applications/Passwords.app"
+        if FileManager.default.fileExists(atPath: systemPath) {
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: systemPath), configuration: .init(), completionHandler: nil)
+            return
+        }
+        if let fallback = URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension") {
+            NSWorkspace.shared.open(fallback)
+        }
     }
 
     @objc private func menuToggleFullScreen() {

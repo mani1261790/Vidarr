@@ -15,6 +15,7 @@ OUTPUT_DIR="$ROOT_DIR/build/dist"
 DMG_NAME="Vidarr-${VERSION_TAG}.dmg"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 STAGING_DIR="$ROOT_DIR/build/dmg-root"
+FIRST_LAUNCH_HELPER_NAME="2) First Launch Fix.command"
 
 mkdir -p "$OUTPUT_DIR"
 rm -rf "$DERIVED_DATA_PATH"
@@ -44,6 +45,23 @@ mkdir -p "$STAGING_DIR"
 cp -R "$APP_PATH" "$STAGING_DIR/$APP_NAME"
 ln -s /Applications "$STAGING_DIR/Applications"
 
+cat > "$STAGING_DIR/$FIRST_LAUNCH_HELPER_NAME" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+APP_PATH="/Applications/Vidarr.app"
+
+if [[ ! -d "$APP_PATH" ]]; then
+  osascript -e 'display dialog "Vidarr.app が /Applications に見つかりません。先にDMGから Applications へコピーしてください。" buttons {"OK"} default button "OK" with title "Vidarr"'
+  exit 1
+fi
+
+xattr -dr com.apple.quarantine "$APP_PATH"
+open "$APP_PATH"
+osascript -e 'display dialog "初回保護解除を実行しました。Vidarr を起動します。" buttons {"OK"} default button "OK" with title "Vidarr"'
+EOF
+chmod +x "$STAGING_DIR/$FIRST_LAUNCH_HELPER_NAME"
+
 rm -f "$DMG_PATH"
 if command -v create-dmg >/dev/null 2>&1; then
   create-dmg \
@@ -53,6 +71,7 @@ if command -v create-dmg >/dev/null 2>&1; then
     --icon-size 120 \
     --icon "$APP_NAME" 200 220 \
     --icon "Applications" 520 220 \
+    --icon "$FIRST_LAUNCH_HELPER_NAME" 360 335 \
     --app-drop-link 520 220 \
     --hide-extension "$APP_NAME" \
     --no-internet-enable \

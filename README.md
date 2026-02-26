@@ -7,8 +7,8 @@ AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで�
 ### インストール手順
 1. [Releases](https://github.com/mani1261790/Vidarr/releases) から最新版の `Vidarr-*.dmg` をダウンロード
 2. `.dmg` を開き、`Vidarr.app` を同梱の `Applications` フォルダへドラッグ
-3. 初回起動時に警告が出る場合は `Vidarr.app` を右クリックして `開く`
-4. 確認ダイアログでもう一度 `開く` を選択
+3. 初回起動時の保護解除が必要な場合は、DMG内の `2) First Launch Fix.command` を実行
+4. その後 `Vidarr.app` を起動（必要なら右クリック -> `開く`）
 
 注意:
 - 現在の配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。

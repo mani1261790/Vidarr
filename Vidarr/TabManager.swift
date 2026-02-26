@@ -65,23 +65,34 @@ final class TabManager {
     }
 
     func newTab(url: URL?) {
-        performOnMain { [weak self] in
+        let webView = BrowserSession.makeConfiguredWebView()
+        addTab(webView: webView, initialURL: url, shouldLoadInitialURL: true)
+    }
+
+    @discardableResult
+    func addTab(webView: WKWebView, initialURL: URL?, shouldLoadInitialURL: Bool) -> WKWebView {
+        let work = { [weak self] in
             guard let self else { return }
+            var tab = Tab(webView: webView, lastKnownURL: initialURL, thumbnail: nil, isProtected: false)
+            self.tabs.append(tab)
+            self.currentIndex = self.tabs.count - 1
 
-            let webView = BrowserSession.makeConfiguredWebView()
-            var tab = Tab(webView: webView, lastKnownURL: nil, thumbnail: nil, isProtected: false)
-            tabs.append(tab)
-            currentIndex = tabs.count - 1
+            self.delegate?.tabManager(self, didUpdateTabs: self.tabs.count)
+            self.delegate?.tabManager(self, didSelect: webView)
 
-            delegate?.tabManager(self, didUpdateTabs: tabs.count)
-            delegate?.tabManager(self, didSelect: webView)
-
-            if let targetURL = url {
-                tab.lastKnownURL = targetURL
+            if shouldLoadInitialURL, let targetURL = initialURL {
                 webView.load(URLRequest(url: targetURL))
-                tabs[currentIndex] = tab
+                tab.lastKnownURL = targetURL
+                self.tabs[self.currentIndex] = tab
             }
         }
+
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.sync(execute: work)
+        }
+        return webView
     }
 
     func selectTab(index: Int) {

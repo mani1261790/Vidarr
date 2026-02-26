@@ -832,19 +832,23 @@ extension MainWindowController: WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        _ = configuration
+        _ = webView
         _ = windowFeatures
 
-        // Handle target="_blank" / window.open in the same tab.
-        // Returning the existing webView avoids getting stuck on the initial
-        // about:blank popup bootstrap request.
+        // Browser-like behavior: open target="_blank" / window.open in a new tab.
         if navigationAction.targetFrame == nil {
-            if let url = navigationAction.request.url,
-               let scheme = url.scheme?.lowercased(),
-               scheme != "about" {
-                webView.load(navigationAction.request)
-            }
-            return webView
+            let popupWebView = WKWebView(frame: .zero, configuration: configuration)
+            popupWebView.translatesAutoresizingMaskIntoConstraints = false
+            popupWebView.allowsBackForwardNavigationGestures = false
+            popupWebView.navigationDelegate = self
+            popupWebView.uiDelegate = self
+
+            let initialURL = navigationAction.request.url
+            return tabManager.addTab(
+                webView: popupWebView,
+                initialURL: initialURL,
+                shouldLoadInitialURL: false
+            )
         }
         return nil
     }

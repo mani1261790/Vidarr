@@ -216,9 +216,9 @@ final class MainWindowController: NSWindowController {
         addressBarEditorField.font = NSFont.systemFont(ofSize: 13.0)
         addressBarEditorField.focusRingType = .none
         addressBarEditorField.alignment = .right
-        addressBarEditorField.isBezeled = true
-        addressBarEditorField.isBordered = true
-        addressBarEditorField.bezelStyle = .roundedBezel
+        addressBarEditorField.isBezeled = false
+        addressBarEditorField.isBordered = false
+        addressBarEditorField.drawsBackground = false
         addressBarEditorField.cell?.lineBreakMode = .byClipping
         addressBarEditorField.isHidden = true
 
@@ -1407,6 +1407,10 @@ extension MainWindowController: NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         syncToolbarLayout()
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        endAddressEditingWithoutSubmit()
     }
 }
 

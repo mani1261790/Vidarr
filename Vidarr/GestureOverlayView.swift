@@ -37,6 +37,7 @@ final class GestureOverlayView: NSView {
     private var hudAnchorPoint: CGPoint = .zero
     private var latestEventTimestamp: TimeInterval = 0
     private var captureSuppressionUntil: TimeInterval = 0
+    private var rightDragLastPointInWindow: NSPoint?
     private let allowedGestureNames: Set<String> = [
         "UpRight", "UpLeft", "DownRight", "DownLeft",
         "O", "U", "S", "OO", "DownRightDownRight",
@@ -69,42 +70,99 @@ final class GestureOverlayView: NSView {
     override var isOpaque: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
-        latestEventTimestamp = event.timestamp
-
-        if event.timestamp < captureSuppressionUntil {
-            super.scrollWheel(with: event)
-            return
-        }
-
         // Normalize to stroke direction. X and Y use independent signs.
         let xSign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         let ySign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
         let dx = event.scrollingDeltaX * xSign
         let dy = event.scrollingDeltaY * ySign
-        hudAnchorPoint = convert(event.locationInWindow, from: nil)
+        handleGestureInput(
+            dx: dx,
+            dy: dy,
+            timestamp: event.timestamp,
+            anchorInWindow: event.locationInWindow,
+            shouldCommit: shouldCommitImmediately(for: event),
+            passthrough: { [weak self] in
+                self?.superScrollWheel(event)
+            }
+        )
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        rightDragLastPointInWindow = event.locationInWindow
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        guard let last = rightDragLastPointInWindow else {
+            rightDragLastPointInWindow = event.locationInWindow
+            return
+        }
+        let current = event.locationInWindow
+        rightDragLastPointInWindow = current
+
+        let dx = current.x - last.x
+        let dy = current.y - last.y
+        if abs(dx) < 0.01, abs(dy) < 0.01 { return }
+
+        handleGestureInput(
+            dx: dx,
+            dy: dy,
+            timestamp: event.timestamp,
+            anchorInWindow: current,
+            shouldCommit: false,
+            passthrough: {}
+        )
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        rightDragLastPointInWindow = nil
+        if state == .capturing {
+            commitCapture()
+        }
+    }
+
+    private func superScrollWheel(_ event: NSEvent) {
+        super.scrollWheel(with: event)
+    }
+
+    private func handleGestureInput(
+        dx: CGFloat,
+        dy: CGFloat,
+        timestamp: TimeInterval,
+        anchorInWindow: NSPoint,
+        shouldCommit: Bool,
+        passthrough: () -> Void
+    ) {
+        latestEventTimestamp = timestamp
+
+        if timestamp < captureSuppressionUntil {
+            passthrough()
+            return
+        }
+
+        hudAnchorPoint = convert(anchorInWindow, from: nil)
 
         switch state {
         case .idle:
-            trackRecent(dx: dx, dy: dy, timestamp: event.timestamp)
+            trackRecent(dx: dx, dy: dy, timestamp: timestamp)
             if shouldStartCapture() {
                 startCapture(at: hudAnchorPoint, withSeed: recentSamples)
-                if shouldCommitImmediately(for: event) {
+                if shouldCommit {
                     commitCapture()
                 }
                 return
             }
-            super.scrollWheel(with: event)
+            passthrough()
 
         case .capturing:
             appendCaptureDelta(dx: dx, dy: dy)
             if handleInteractiveTabSwipe(dx: dx, dy: dy) {
-                if shouldCommitImmediately(for: event) {
+                if shouldCommit {
                     commitCapture()
                 }
                 return
             }
             updateHUDIfNeeded()
-            if shouldCommitImmediately(for: event) {
+            if shouldCommit {
                 commitCapture()
                 return
             }

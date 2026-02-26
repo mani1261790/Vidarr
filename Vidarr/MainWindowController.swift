@@ -6,6 +6,7 @@ final class MainWindowController: NSWindowController {
         static let toolbarHeight: CGFloat = 54
         static let tabChipSize = NSSize(width: 96, height: 48)
         static let tabSwitchGap: CGFloat = 16
+        static let navButtonRowTop: CGFloat = 27
     }
 
     private let rootContainer = NonDraggableView()
@@ -1239,15 +1240,9 @@ final class MainWindowController: NSWindowController {
             let rect = contentView.convert(button.frame, from: superview)
             return rect.maxX
         }.max() ?? 74
-        let maxButtonY = trafficButtons.compactMap { button -> CGFloat? in
-            guard let superview = button.superview else { return nil }
-            let rect = contentView.convert(button.frame, from: superview)
-            return rect.maxY
-        }.max() ?? 16
-
         leftButtonRowLeadingConstraint?.constant = max(10, minButtonX - 1)
-        let topInsetFromTraffic = contentView.bounds.height - maxButtonY
-        leftButtonRowTopConstraint?.constant = max(2, topInsetFromTraffic + 5)
+        // Keep the row consistently below window controls; avoid overlap jitter.
+        leftButtonRowTopConstraint?.constant = UI.navButtonRowTop
 
         let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
         rightPanelWidthConstraint?.constant = rightPanelWidth

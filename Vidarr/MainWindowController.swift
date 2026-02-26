@@ -17,6 +17,13 @@ final class MainWindowController: NSWindowController {
     private let tabInteractionView = TabInteractionView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
+    private let navigationButtonRow = NSStackView()
+    private let backButton = NSButton(title: "", target: nil, action: nil)
+    private let forwardButton = NSButton(title: "", target: nil, action: nil)
+    private let reloadButton = NSButton(title: "", target: nil, action: nil)
+    private let bookmarkButton = NSButton(title: "", target: nil, action: nil)
+    private let shareButton = NSButton(title: "", target: nil, action: nil)
+    private let rowMenuButton = NSButton(title: "", target: nil, action: nil)
     private let groupSelectorButton = NSButton(title: "", target: nil, action: nil)
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
@@ -24,7 +31,7 @@ final class MainWindowController: NSWindowController {
     private let addressBarEditorField = NSTextField()
     private let tabSearchField = NSSearchField()
 
-    private var tabStripMinLeadingConstraint: NSLayoutConstraint?
+    private var leftButtonRowLeadingConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
     private var rightPanelWidthConstraint: NSLayoutConstraint?
 
@@ -176,6 +183,59 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.spacing = 6
         tabStripDocumentView.addSubview(tabStripStackView)
 
+        navigationButtonRow.translatesAutoresizingMaskIntoConstraints = false
+        navigationButtonRow.orientation = .horizontal
+        navigationButtonRow.alignment = .centerY
+        navigationButtonRow.distribution = .fill
+        navigationButtonRow.spacing = 4
+
+        configureToolbarSymbolButton(
+            backButton,
+            symbolName: "chevron.left",
+            pointSize: 13,
+            weight: .semibold,
+            action: #selector(didTapBackButton)
+        )
+        configureToolbarSymbolButton(
+            forwardButton,
+            symbolName: "chevron.right",
+            pointSize: 13,
+            weight: .semibold,
+            action: #selector(didTapForwardButton)
+        )
+        configureToolbarSymbolButton(
+            reloadButton,
+            symbolName: "arrow.clockwise",
+            pointSize: 13,
+            weight: .semibold,
+            action: #selector(didTapReloadButton)
+        )
+        configureToolbarSymbolButton(
+            bookmarkButton,
+            symbolName: "star",
+            pointSize: 13,
+            weight: .semibold,
+            action: #selector(didTapBookmarkButton)
+        )
+        configureToolbarSymbolButton(
+            shareButton,
+            symbolName: "square.and.arrow.up",
+            pointSize: 13,
+            weight: .semibold,
+            action: #selector(didTapShareButton)
+        )
+        configureToolbarSymbolButton(
+            rowMenuButton,
+            symbolName: "chevron.down",
+            pointSize: 11,
+            weight: .semibold,
+            action: #selector(didTapToolbarMenuButton)
+        )
+
+        [backButton, forwardButton, reloadButton, bookmarkButton, shareButton, rowMenuButton].forEach { button in
+            navigationButtonRow.addArrangedSubview(button)
+        }
+
         groupSelectorButton.translatesAutoresizingMaskIntoConstraints = false
         groupSelectorButton.target = self
         groupSelectorButton.action = #selector(didTapGroupSelector)
@@ -232,6 +292,7 @@ final class MainWindowController: NSWindowController {
         tabSearchField.delegate = self
 
         let toolbarContent = toolbarContainer.contentLayoutView
+        toolbarContent.addSubview(navigationButtonRow)
         toolbarContent.addSubview(groupSelectorButton)
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
@@ -240,24 +301,28 @@ final class MainWindowController: NSWindowController {
         rightPanelView.addSubview(addressBarEditorField)
         rightPanelView.addSubview(tabSearchField)
 
-        let minLeading = groupSelectorButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
-        tabStripMinLeadingConstraint = minLeading
+        let leftLeading = navigationButtonRow.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 84)
+        leftButtonRowLeadingConstraint = leftLeading
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
         let rightPanelWidth = rightPanelView.widthAnchor.constraint(equalToConstant: 250)
         rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
+            leftLeading,
+            navigationButtonRow.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 20),
+            navigationButtonRow.heightAnchor.constraint(equalToConstant: 22),
+
             groupSelectorButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
             groupSelectorButton.trailingAnchor.constraint(equalTo: tabStripContainer.leadingAnchor, constant: -6),
             groupSelectorButton.widthAnchor.constraint(equalToConstant: 28),
             groupSelectorButton.heightAnchor.constraint(equalToConstant: 24),
 
-            minLeading,
             tabWidth,
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 1),
             tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -1),
+            groupSelectorButton.leadingAnchor.constraint(greaterThanOrEqualTo: navigationButtonRow.trailingAnchor, constant: 10),
             tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: groupSelectorButton.trailingAnchor, constant: 6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
@@ -300,6 +365,7 @@ final class MainWindowController: NSWindowController {
         setupTabStripInteractions()
         applyAddressDisplayMode(display: "")
         syncGroupSelectorSelection()
+        refreshNavigationButtons()
     }
 
     private func configureBindings() {
@@ -362,8 +428,79 @@ final class MainWindowController: NSWindowController {
         actions.newTab()
     }
 
+    private func configureToolbarSymbolButton(
+        _ button: NSButton,
+        symbolName: String,
+        pointSize: CGFloat,
+        weight: NSFont.Weight,
+        action: Selector
+    ) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.target = self
+        button.action = action
+        button.isBordered = false
+        button.title = ""
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
+        button.contentTintColor = NSColor.labelColor.withAlphaComponent(0.82)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 22),
+            button.heightAnchor.constraint(equalToConstant: 22)
+        ])
+    }
+
     @objc private func didTapNewTab() {
         actions.newTab()
+    }
+
+    @objc private func didTapBackButton() {
+        actions.goBack()
+        refreshNavigationButtons()
+    }
+
+    @objc private func didTapForwardButton() {
+        actions.goForward()
+        refreshNavigationButtons()
+    }
+
+    @objc private func didTapReloadButton() {
+        actions.reload()
+    }
+
+    @objc private func didTapBookmarkButton() {
+        menuToggleBookmark()
+        refreshNavigationButtons()
+    }
+
+    @objc private func didTapShareButton() {
+        guard let url = tabManager.currentWebView?.url else { return }
+        let picker = NSSharingServicePicker(items: [url])
+        picker.show(relativeTo: shareButton.bounds, of: shareButton, preferredEdge: .maxY)
+    }
+
+    @objc private func didTapToolbarMenuButton() {
+        let menu = NSMenu()
+        let newTabItem = NSMenuItem(title: "新規タブ", action: #selector(didTapNewTab), keyEquivalent: "")
+        newTabItem.target = self
+        menu.addItem(newTabItem)
+        menu.addItem(NSMenuItem.separator())
+        let reloadAllItem = NSMenuItem(title: "すべてリロード", action: #selector(didTapReloadAllFromRowMenu), keyEquivalent: "")
+        reloadAllItem.target = self
+        menu.addItem(reloadAllItem)
+        let reopenItem = NSMenuItem(title: "閉じたタブを復元", action: #selector(didTapReopenClosedFromRowMenu), keyEquivalent: "")
+        reopenItem.target = self
+        reopenItem.isEnabled = tabManager.canReopenClosedTab
+        menu.addItem(reopenItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: rowMenuButton.bounds.height + 4), in: rowMenuButton)
+    }
+
+    @objc private func didTapReloadAllFromRowMenu() {
+        actions.reloadAll()
+    }
+
+    @objc private func didTapReopenClosedFromRowMenu() {
+        actions.tabReopenClosed()
     }
 
     @objc private func didTapGroupSelector() {
@@ -845,6 +982,7 @@ final class MainWindowController: NSWindowController {
         overlayView = overlay
         applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
         rebuildTabStrip()
+        refreshNavigationButtons()
     }
 
     private func performGestureTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) {
@@ -1123,14 +1261,14 @@ final class MainWindowController: NSWindowController {
             return rect.maxX
         }.max() ?? 74
 
-        let groupSelectorRequiredLeading: CGFloat = 12 + 28 + 12
-        tabStripMinLeadingConstraint?.constant = max(maxButtonX + 10, groupSelectorRequiredLeading)
+        leftButtonRowLeadingConstraint?.constant = maxButtonX + 8
 
         let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
         rightPanelWidthConstraint?.constant = rightPanelWidth
 
         let reservedRight = rightPanelWidth + 10 + 20 + 8 + 12
-        let available = window.frame.width - (maxButtonX + 10) - reservedRight
+        let leftReserved = (maxButtonX + 8) + 160
+        let available = window.frame.width - leftReserved - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
         layoutTabStripAndRevealActive()
     }
@@ -1139,6 +1277,15 @@ final class MainWindowController: NSWindowController {
         let accent = accentColorForCurrentGroup()
         groupSelectorButton.contentTintColor = accent.withAlphaComponent(0.96)
         groupSelectorButton.toolTip = tabManager.currentGroup.displayName
+    }
+
+    private func refreshNavigationButtons() {
+        let current = tabManager.currentWebView
+        backButton.isEnabled = current?.canGoBack ?? false
+        forwardButton.isEnabled = current?.canGoForward ?? false
+
+        let bookmarkSymbol = tabManager.isCurrentTabBookmarked ? "star.fill" : "star"
+        bookmarkButton.image = NSImage(systemSymbolName: bookmarkSymbol, accessibilityDescription: nil)
     }
 
     private func accentColorForCurrentGroup() -> NSColor {
@@ -1451,6 +1598,7 @@ extension MainWindowController: TabManagerDelegate {
             interactiveTabSwitchState = nil
             applyAddressDisplayMode(display: "")
             rebuildTabStrip()
+            refreshNavigationButtons()
             return
         }
 
@@ -1460,6 +1608,7 @@ extension MainWindowController: TabManagerDelegate {
 
     func tabManager(_ manager: TabManager, didUpdateTabs count: Int) {
         rebuildTabStrip()
+        refreshNavigationButtons()
     }
 }
 
@@ -1525,6 +1674,7 @@ extension MainWindowController: WKNavigationDelegate {
             applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
             rebuildTabStrip()
         }
+        refreshNavigationButtons()
     }
 
     private func sanitizedURLByRemovingTrackingParams(from url: URL) -> URL? {

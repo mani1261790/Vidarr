@@ -1137,8 +1137,14 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
 
     func controlTextDidEndEditing(_ obj: Notification) {
         guard let field = obj.object as? NSTextField, field == addressBarEditorField else { return }
-        if isAddressEditing {
-            endAddressEditingWithoutSubmit()
+        guard isAddressEditing else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isAddressEditing else { return }
+            if let editor = self.addressBarEditorField.currentEditor(),
+               self.window?.firstResponder === editor {
+                return
+            }
+            self.endAddressEditingWithoutSubmit()
         }
     }
 }

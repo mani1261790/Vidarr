@@ -40,6 +40,8 @@ final class MainWindowController: NSWindowController {
     private var preferenceObserver: NSObjectProtocol?
     private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
+    private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
+    private var temporarilyAllowedHosts: Set<String> = []
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -287,9 +289,11 @@ final class MainWindowController: NSWindowController {
         let prefs = BrowserPreferences.shared
         let shouldReconfigureTabs = (prefs.ephemeralModeEnabled != lastEphemeralMode)
             || (prefs.sendDoNotTrack != lastDoNotTrack)
+            || (prefs.contentBlockingEnabled != lastContentBlockingEnabled)
 
         lastEphemeralMode = prefs.ephemeralModeEnabled
         lastDoNotTrack = prefs.sendDoNotTrack
+        lastContentBlockingEnabled = prefs.contentBlockingEnabled
 
         guard shouldReconfigureTabs else { return }
         tabManager.reconfigureAllTabsForCurrentPreferences()
@@ -905,18 +909,37 @@ extension MainWindowController: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard BrowserPreferences.shared.antiTrackingEnabled else {
-            decisionHandler(.allow)
-            return
-        }
-
         guard navigationAction.targetFrame?.isMainFrame ?? true else {
             decisionHandler(.allow)
             return
         }
 
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        if BrowserPreferences.shared.harmfulSiteWarningEnabled,
+           let host = url.host?.lowercased(),
+           !temporarilyAllowedHosts.contains(host),
+           let warning = HarmfulSiteGuard.warning(for: url) {
+            decisionHandler(.cancel)
+            presentHarmfulSiteWarning(
+                warning: warning,
+                url: url,
+                host: host,
+                webView: webView,
+                originalRequest: navigationAction.request
+            )
+            return
+        }
+
+        guard BrowserPreferences.shared.antiTrackingEnabled else {
+            decisionHandler(.allow)
+            return
+        }
+
         guard (navigationAction.request.httpMethod ?? "GET").uppercased() == "GET",
-              let url = navigationAction.request.url,
               let sanitized = sanitizedURLByRemovingTrackingParams(from: url),
               sanitized != url else {
             decisionHandler(.allow)
@@ -949,6 +972,45 @@ extension MainWindowController: WKNavigationDelegate {
         guard filtered.count != items.count else { return nil }
         components.queryItems = filtered.isEmpty ? nil : filtered
         return components.url
+    }
+
+    private func presentHarmfulSiteWarning(
+        warning: HarmfulSiteWarning,
+        url: URL,
+        host: String,
+        webView: WKWebView,
+        originalRequest: URLRequest
+    ) {
+        let show = {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = warning.title
+            alert.informativeText = warning.message
+            alert.addButton(withTitle: "戻る")
+            alert.addButton(withTitle: "続行")
+
+            let proceed: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+                guard let self else { return }
+                guard response == .alertSecondButtonReturn else { return }
+                self.temporarilyAllowedHosts.insert(host)
+                var request = originalRequest
+                request.url = url
+                webView.load(request)
+            }
+
+            if let window = self.window {
+                alert.beginSheetModal(for: window, completionHandler: proceed)
+            } else {
+                let response = alert.runModal()
+                proceed(response)
+            }
+        }
+
+        if Thread.isMainThread {
+            show()
+        } else {
+            DispatchQueue.main.async(execute: show)
+        }
     }
 }
 

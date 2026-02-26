@@ -315,6 +315,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let searchTemplateField = NSTextField()
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
     private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
+    private let contentBlockingCheckbox = NSButton(checkboxWithTitle: "広告/追跡スクリプトをブロック", target: nil, action: nil)
+    private let harmfulSiteWarningCheckbox = NSButton(checkboxWithTitle: "有害サイト警告を表示", target: nil, action: nil)
     private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
@@ -322,7 +324,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -385,6 +387,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         antiTrackingCheckbox.target = self
         antiTrackingCheckbox.action = #selector(antiTrackingChanged(_:))
 
+        contentBlockingCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        contentBlockingCheckbox.target = self
+        contentBlockingCheckbox.action = #selector(contentBlockingChanged(_:))
+
+        harmfulSiteWarningCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        harmfulSiteWarningCheckbox.target = self
+        harmfulSiteWarningCheckbox.action = #selector(harmfulSiteWarningChanged(_:))
+
         ephemeralModeCheckbox.translatesAutoresizingMaskIntoConstraints = false
         ephemeralModeCheckbox.target = self
         ephemeralModeCheckbox.action = #selector(ephemeralModeChanged(_:))
@@ -408,6 +418,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         root.addSubview(sensitivityPopup)
         root.addSubview(updatesCheckbox)
         root.addSubview(antiTrackingCheckbox)
+        root.addSubview(contentBlockingCheckbox)
+        root.addSubview(harmfulSiteWarningCheckbox)
         root.addSubview(ephemeralModeCheckbox)
         root.addSubview(doNotTrackCheckbox)
         root.addSubview(clearDataButton)
@@ -443,7 +455,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             antiTrackingCheckbox.topAnchor.constraint(equalTo: updatesCheckbox.bottomAnchor, constant: 10),
             antiTrackingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
-            ephemeralModeCheckbox.topAnchor.constraint(equalTo: antiTrackingCheckbox.bottomAnchor, constant: 8),
+            contentBlockingCheckbox.topAnchor.constraint(equalTo: antiTrackingCheckbox.bottomAnchor, constant: 8),
+            contentBlockingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            harmfulSiteWarningCheckbox.topAnchor.constraint(equalTo: contentBlockingCheckbox.bottomAnchor, constant: 8),
+            harmfulSiteWarningCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            ephemeralModeCheckbox.topAnchor.constraint(equalTo: harmfulSiteWarningCheckbox.bottomAnchor, constant: 8),
             ephemeralModeCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
             doNotTrackCheckbox.topAnchor.constraint(equalTo: ephemeralModeCheckbox.bottomAnchor, constant: 8),
@@ -462,6 +480,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         searchTemplateField.stringValue = prefs.searchTemplate
         updatesCheckbox.state = prefs.updatesEnabled ? .on : .off
         antiTrackingCheckbox.state = prefs.antiTrackingEnabled ? .on : .off
+        contentBlockingCheckbox.state = prefs.contentBlockingEnabled ? .on : .off
+        harmfulSiteWarningCheckbox.state = prefs.harmfulSiteWarningEnabled ? .on : .off
         ephemeralModeCheckbox.state = prefs.ephemeralModeEnabled ? .on : .off
         doNotTrackCheckbox.state = prefs.sendDoNotTrack ? .on : .off
 
@@ -488,6 +508,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func antiTrackingChanged(_ sender: NSButton) {
         prefs.antiTrackingEnabled = (sender.state == .on)
+    }
+
+    @objc private func contentBlockingChanged(_ sender: NSButton) {
+        prefs.contentBlockingEnabled = (sender.state == .on)
+    }
+
+    @objc private func harmfulSiteWarningChanged(_ sender: NSButton) {
+        prefs.harmfulSiteWarningEnabled = (sender.state == .on)
     }
 
     @objc private func ephemeralModeChanged(_ sender: NSButton) {

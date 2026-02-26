@@ -39,6 +39,8 @@ final class BrowserSession {
             config.userContentController.addUserScript(script)
         }
 
+        WebContentBlocker.shared.applyIfEnabled(to: config.userContentController)
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = false
         webView.translatesAutoresizingMaskIntoConstraints = false

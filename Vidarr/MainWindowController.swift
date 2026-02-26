@@ -20,7 +20,8 @@ final class MainWindowController: NSWindowController {
     private let groupSelectorButton = NSButton(title: "", target: nil, action: nil)
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
-    private let addressBarField = AddressBarField()
+    private let addressBarDisplayLabel = ClickableLabelField()
+    private let addressBarEditorField = NSTextField()
     private let tabSearchField = NSSearchField()
 
     private var tabStripMinLeadingConstraint: NSLayoutConstraint?
@@ -189,13 +190,29 @@ final class MainWindowController: NSWindowController {
 
         rightPanelView.translatesAutoresizingMaskIntoConstraints = false
 
-        addressBarField.translatesAutoresizingMaskIntoConstraints = false
-        addressBarField.delegate = self
-        addressBarField.font = NSFont.systemFont(ofSize: 13.0)
-        addressBarField.focusRingType = .none
-        addressBarField.onActivate = { [weak self] in
+        addressBarDisplayLabel.translatesAutoresizingMaskIntoConstraints = false
+        addressBarDisplayLabel.font = NSFont.systemFont(ofSize: 13.0)
+        addressBarDisplayLabel.isEditable = false
+        addressBarDisplayLabel.isSelectable = true
+        addressBarDisplayLabel.isBezeled = false
+        addressBarDisplayLabel.isBordered = false
+        addressBarDisplayLabel.drawsBackground = false
+        addressBarDisplayLabel.alignment = .right
+        addressBarDisplayLabel.textColor = NSColor.labelColor.withAlphaComponent(0.94)
+        addressBarDisplayLabel.lineBreakMode = .byTruncatingMiddle
+        addressBarDisplayLabel.onActivate = { [weak self] in
             self?.beginAddressEditing()
         }
+
+        addressBarEditorField.translatesAutoresizingMaskIntoConstraints = false
+        addressBarEditorField.delegate = self
+        addressBarEditorField.font = NSFont.systemFont(ofSize: 13.0)
+        addressBarEditorField.focusRingType = .none
+        addressBarEditorField.alignment = .right
+        addressBarEditorField.isBezeled = true
+        addressBarEditorField.isBordered = true
+        addressBarEditorField.bezelStyle = .roundedBezel
+        addressBarEditorField.isHidden = true
 
         tabSearchField.translatesAutoresizingMaskIntoConstraints = false
         tabSearchField.font = NSFont.systemFont(ofSize: 12.0)
@@ -211,7 +228,8 @@ final class MainWindowController: NSWindowController {
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
         toolbarContent.addSubview(rightPanelView)
-        rightPanelView.addSubview(addressBarField)
+        rightPanelView.addSubview(addressBarDisplayLabel)
+        rightPanelView.addSubview(addressBarEditorField)
         rightPanelView.addSubview(tabSearchField)
 
         let minLeading = groupSelectorButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolbarContent.leadingAnchor, constant: 84)
@@ -254,14 +272,19 @@ final class MainWindowController: NSWindowController {
             rightPanelView.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -4),
             rightPanelWidth,
 
-            addressBarField.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 1),
-            addressBarField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
-            addressBarField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
-            addressBarField.heightAnchor.constraint(equalToConstant: 18),
+            addressBarDisplayLabel.topAnchor.constraint(equalTo: rightPanelView.topAnchor, constant: 1),
+            addressBarDisplayLabel.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 6),
+            addressBarDisplayLabel.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -6),
+            addressBarDisplayLabel.heightAnchor.constraint(equalToConstant: 18),
+
+            addressBarEditorField.topAnchor.constraint(equalTo: addressBarDisplayLabel.topAnchor),
+            addressBarEditorField.leadingAnchor.constraint(equalTo: addressBarDisplayLabel.leadingAnchor),
+            addressBarEditorField.trailingAnchor.constraint(equalTo: addressBarDisplayLabel.trailingAnchor),
+            addressBarEditorField.heightAnchor.constraint(equalTo: addressBarDisplayLabel.heightAnchor),
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.topAnchor.constraint(equalTo: addressBarField.bottomAnchor, constant: 4),
+            tabSearchField.topAnchor.constraint(equalTo: addressBarDisplayLabel.bottomAnchor, constant: 4),
             tabSearchField.heightAnchor.constraint(equalToConstant: 20),
             tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -2)
         ])
@@ -474,12 +497,12 @@ final class MainWindowController: NSWindowController {
         isAddressEditing = true
 
         applyAddressEditingMode()
-        addressBarField.stringValue = currentAddressURLString
+        addressBarEditorField.stringValue = currentAddressURLString
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.window?.makeFirstResponder(self.addressBarField)
-            self.addressBarField.selectText(nil)
+            self.window?.makeFirstResponder(self.addressBarEditorField)
+            self.addressBarEditorField.selectText(nil)
         }
     }
 
@@ -492,7 +515,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func submitAddressFieldIfNeeded() {
-        let input = addressBarField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let input = addressBarEditorField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !input.isEmpty {
             actions.openLocationInput(input)
         }
@@ -503,34 +526,20 @@ final class MainWindowController: NSWindowController {
 
     private func applyAddressDisplayMode(display: String) {
         currentAddressURLString = display
-        addressBarField.stringValue = display
-        addressBarField.toolTip = display
+        addressBarDisplayLabel.stringValue = display
+        addressBarDisplayLabel.toolTip = display
+        addressBarEditorField.stringValue = display
         applyAddressReadOnlyMode()
     }
 
     private func applyAddressReadOnlyMode() {
-        addressBarField.isEditable = false
-        addressBarField.isSelectable = false
-        addressBarField.isBezeled = false
-        addressBarField.isBordered = false
-        addressBarField.drawsBackground = false
-        addressBarField.backgroundColor = .clear
-        addressBarField.textColor = NSColor.labelColor.withAlphaComponent(0.94)
-        addressBarField.alignment = .right
-        addressBarField.cell?.lineBreakMode = .byTruncatingMiddle
+        addressBarEditorField.isHidden = true
+        addressBarDisplayLabel.isHidden = false
     }
 
     private func applyAddressEditingMode() {
-        addressBarField.isEditable = true
-        addressBarField.isSelectable = true
-        addressBarField.isBezeled = true
-        addressBarField.isBordered = true
-        addressBarField.bezelStyle = .roundedBezel
-        addressBarField.drawsBackground = true
-        addressBarField.backgroundColor = NSColor.textBackgroundColor
-        addressBarField.textColor = NSColor.textColor
-        addressBarField.alignment = .right
-        addressBarField.cell?.lineBreakMode = .byClipping
+        addressBarDisplayLabel.isHidden = true
+        addressBarEditorField.isHidden = false
     }
 
     private func attachWebView(_ webView: WKWebView) {
@@ -969,12 +978,12 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if control == addressBarField, commandSelector == #selector(insertNewline(_:)) {
+        if control == addressBarEditorField, commandSelector == #selector(insertNewline(_:)) {
             submitAddressFieldIfNeeded()
             return true
         }
 
-        if control == addressBarField, commandSelector == #selector(cancelOperation(_:)) {
+        if control == addressBarEditorField, commandSelector == #selector(cancelOperation(_:)) {
             endAddressEditingWithoutSubmit()
             return true
         }
@@ -983,7 +992,7 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        guard let field = obj.object as? NSTextField, field == addressBarField else { return }
+        guard let field = obj.object as? NSTextField, field == addressBarEditorField else { return }
         if isAddressEditing {
             endAddressEditingWithoutSubmit()
         }
@@ -1322,26 +1331,13 @@ private final class PassthroughImageView: NSImageView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-private final class AddressBarField: NSTextField {
+private final class ClickableLabelField: NSTextField {
     var onActivate: (() -> Void)?
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        if isEditable {
-            super.mouseDown(with: event)
-            return
-        }
         onActivate?()
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            guard self.isEditable else { return }
-            self.window?.makeFirstResponder(self)
-            if let editor = self.currentEditor() {
-                let end = self.stringValue.count
-                editor.selectedRange = NSRange(location: end, length: 0)
-            }
-        }
     }
 }
 

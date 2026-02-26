@@ -835,9 +835,16 @@ extension MainWindowController: WKUIDelegate {
         _ = configuration
         _ = windowFeatures
 
-        // Handle target="_blank" / window.open by loading in the current tab.
-        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
-            webView.load(URLRequest(url: url))
+        // Handle target="_blank" / window.open in the same tab.
+        // Returning the existing webView avoids getting stuck on the initial
+        // about:blank popup bootstrap request.
+        if navigationAction.targetFrame == nil {
+            if let url = navigationAction.request.url,
+               let scheme = url.scheme?.lowercased(),
+               scheme != "about" {
+                webView.load(navigationAction.request)
+            }
+            return webView
         }
         return nil
     }

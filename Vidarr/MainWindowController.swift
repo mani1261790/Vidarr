@@ -6,6 +6,7 @@ final class MainWindowController: NSWindowController {
         static let toolbarHeight: CGFloat = 54
         static let tabChipSize = NSSize(width: 96, height: 48)
         static let tabSwitchGap: CGFloat = 16
+        static let tabSwitchInteractiveMaxProgress: CGFloat = 0.82
         static let navButtonRowTop: CGFloat = 27
     }
 
@@ -1121,17 +1122,18 @@ final class MainWindowController: NSWindowController {
         let width = bounds.width
         guard width > 1 else { return }
         let fullTravel = width + UI.tabSwitchGap
+        let interactiveLimit = fullTravel * UI.tabSwitchInteractiveMaxProgress
 
         let offset: CGFloat
         switch state.direction {
         case .left:
-            offset = max(-fullTravel, min(0, totalX))
+            offset = max(-interactiveLimit, min(0, totalX))
             let fromX = pixelAligned(offset)
             let toX = pixelAligned(fullTravel + offset)
             state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
             state.toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
         case .right:
-            offset = min(fullTravel, max(0, totalX))
+            offset = min(interactiveLimit, max(0, totalX))
             let fromX = pixelAligned(offset)
             let toX = pixelAligned(-fullTravel + offset)
             state.fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)

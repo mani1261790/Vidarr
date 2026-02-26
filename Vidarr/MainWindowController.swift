@@ -1173,6 +1173,13 @@ final class MainWindowController: NSWindowController {
     private func setupTabStripInteractions() {
         tabInteractionView.onClick = { [weak self] locationInWindow, clickCount in
             guard let self, let index = self.nearestTabIndex(to: locationInWindow) else { return }
+            if clickCount == 1, let closeIndex = self.tabIndexForCloseBadge(at: locationInWindow) {
+                if self.tabManager.currentIndex != closeIndex {
+                    self.tabManager.selectTab(index: closeIndex)
+                }
+                self.actions.tabClose()
+                return
+            }
             if clickCount >= 2 {
                 self.tabManager.toggleProtection(index: index)
             } else {
@@ -1321,6 +1328,16 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.arrangedSubviews
             .compactMap { $0 as? TabChipView }
             .first { $0.tabIndex == index }
+    }
+
+    private func tabIndexForCloseBadge(at locationInWindow: NSPoint) -> Int? {
+        let chips = tabStripStackView.arrangedSubviews.compactMap { $0 as? TabChipView }
+        for chip in chips {
+            if chip.containsCloseBadge(at: locationInWindow) {
+                return chip.tabIndex
+            }
+        }
+        return nil
     }
 
     private func snapshotImage(for view: NSView) -> NSImage? {
@@ -1798,6 +1815,13 @@ private final class ClickableLabelField: NSTextField {
 }
 
 private final class TabChipView: NSView {
+    private enum BadgeKind {
+        case none
+        case close
+        case pin
+        case bookmark
+    }
+
     private let index: Int
     private let thumbnailView = PassthroughImageView()
     private let statusBadgeView = NSView()
@@ -1806,6 +1830,7 @@ private final class TabChipView: NSView {
     private let active: Bool
     private let protectedState: Bool
     private let bookmarkedState: Bool
+    private let badgeKind: BadgeKind
 
     var isActiveChip: Bool { active }
     var tabIndex: Int { index }
@@ -1824,6 +1849,15 @@ private final class TabChipView: NSView {
         self.active = isActive
         protectedState = isProtected
         bookmarkedState = isBookmarked
+        if isProtected {
+            badgeKind = .pin
+        } else if isBookmarked {
+            badgeKind = .bookmark
+        } else if isActive {
+            badgeKind = .close
+        } else {
+            badgeKind = .none
+        }
         super.init(frame: .zero)
         setupView(
             title: title,
@@ -1843,6 +1877,12 @@ private final class TabChipView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func containsCloseBadge(at locationInWindow: NSPoint) -> Bool {
+        guard badgeKind == .close, !statusBadgeView.isHidden else { return false }
+        let localPoint = convert(locationInWindow, from: nil)
+        return statusBadgeView.frame.insetBy(dx: -2, dy: -2).contains(localPoint)
+    }
 
     override func layout() {
         super.layout()
@@ -1895,22 +1935,28 @@ private final class TabChipView: NSView {
         statusIconView.imageScaling = .scaleProportionallyUpOrDown
         statusBadgeView.addSubview(statusIconView)
 
-        let markerImageName: String
-        let markerColor: NSColor
-        if isProtected {
-            markerImageName = "pin.fill"
-            markerColor = NSColor(calibratedRed: 0.29, green: 0.67, blue: 1.0, alpha: 0.96)
-        } else if isBookmarked {
-            markerImageName = "star.fill"
-            markerColor = NSColor(calibratedRed: 1.0, green: 0.80, blue: 0.15, alpha: 0.96)
-        } else {
-            markerImageName = "xmark"
-            markerColor = NSColor.black.withAlphaComponent(0.78)
+        switch badgeKind {
+        case .close:
+            let markerImage = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
+            statusIconView.image = markerImage?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+            statusIconView.contentTintColor = NSColor.white.withAlphaComponent(0.96)
+            statusBadgeView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.78).cgColor
+            statusBadgeView.isHidden = false
+        case .pin:
+            let markerImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: nil)
+            statusIconView.image = markerImage?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+            statusIconView.contentTintColor = NSColor.white.withAlphaComponent(0.96)
+            statusBadgeView.layer?.backgroundColor = NSColor(calibratedRed: 0.29, green: 0.67, blue: 1.0, alpha: 0.96).cgColor
+            statusBadgeView.isHidden = false
+        case .bookmark:
+            let markerImage = NSImage(systemSymbolName: "star.fill", accessibilityDescription: nil)
+            statusIconView.image = markerImage?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+            statusIconView.contentTintColor = NSColor.white.withAlphaComponent(0.96)
+            statusBadgeView.layer?.backgroundColor = NSColor(calibratedRed: 1.0, green: 0.80, blue: 0.15, alpha: 0.96).cgColor
+            statusBadgeView.isHidden = false
+        case .none:
+            statusBadgeView.isHidden = true
         }
-        let markerImage = NSImage(systemSymbolName: markerImageName, accessibilityDescription: nil)
-        statusIconView.image = markerImage?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
-        statusIconView.contentTintColor = NSColor.white.withAlphaComponent(0.96)
-        statusBadgeView.layer?.backgroundColor = markerColor.cgColor
 
         if isActive {
             activeAccentLayer.colors = [

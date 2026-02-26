@@ -351,6 +351,7 @@ final class MainWindowController: NSWindowController {
         overlayView = nil
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         clearLayoutConstraints(for: webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webContainer.addSubview(webView)
@@ -422,7 +423,9 @@ final class MainWindowController: NSWindowController {
         direction: ActionCenter.GestureTabSwitchDirection
     ) {
         fromWebView.navigationDelegate = self
+        fromWebView.uiDelegate = self
         toWebView.navigationDelegate = self
+        toWebView.uiDelegate = self
 
         clearLayoutConstraints(for: fromWebView)
         clearLayoutConstraints(for: toWebView)
@@ -819,6 +822,24 @@ extension MainWindowController: WKNavigationDelegate {
             applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
             rebuildTabStrip()
         }
+    }
+}
+
+extension MainWindowController: WKUIDelegate {
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        _ = configuration
+        _ = windowFeatures
+
+        // Handle target="_blank" / window.open by loading in the current tab.
+        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
+            webView.load(URLRequest(url: url))
+        }
+        return nil
     }
 }
 

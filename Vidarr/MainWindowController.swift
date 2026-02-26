@@ -215,6 +215,7 @@ final class MainWindowController: NSWindowController {
         addressBarEditorField.isBezeled = true
         addressBarEditorField.isBordered = true
         addressBarEditorField.bezelStyle = .roundedBezel
+        addressBarEditorField.cell?.lineBreakMode = .byClipping
         addressBarEditorField.isHidden = true
 
         tabSearchField.translatesAutoresizingMaskIntoConstraints = false
@@ -502,11 +503,7 @@ final class MainWindowController: NSWindowController {
         applyAddressEditingMode()
         addressBarEditorField.stringValue = currentAddressURLString
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.window?.makeFirstResponder(self.addressBarEditorField)
-            self.addressBarEditorField.selectText(nil)
-        }
+        focusAddressEditor(selectAll: true)
     }
 
     private func endAddressEditingWithoutSubmit() {
@@ -543,6 +540,24 @@ final class MainWindowController: NSWindowController {
     private func applyAddressEditingMode() {
         addressBarDisplayLabel.isHidden = true
         addressBarEditorField.isHidden = false
+    }
+
+    private func focusAddressEditor(selectAll: Bool) {
+        guard let window else { return }
+        window.makeFirstResponder(addressBarEditorField)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.addressBarEditorField)
+            let length = self.addressBarEditorField.stringValue.count
+            if let editor = self.addressBarEditorField.currentEditor() {
+                editor.selectedRange = selectAll
+                    ? NSRange(location: 0, length: length)
+                    : NSRange(location: length, length: 0)
+            } else if selectAll {
+                self.addressBarEditorField.selectText(nil)
+            }
+        }
     }
 
     private func attachWebView(_ webView: WKWebView) {

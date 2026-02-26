@@ -63,13 +63,13 @@ xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS
 
 ### リリース手順
 ```bash
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 ### ローカルでDMG作成
 ```bash
-./scripts/build_dmg.sh v0.1.3
+./scripts/build_dmg.sh v0.1.4
 ```
 
 ### License

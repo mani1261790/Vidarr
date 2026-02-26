@@ -986,6 +986,7 @@ final class MainWindowController: NSWindowController {
             return
         }
 
+        let stripSpawnAnchor = rightEdgeTabSpawnAnchorPoint()
         let group = tabManager.currentGroup
         let newWebView = BrowserSession.makeConfiguredWebView(for: group)
         _ = tabManager.addTab(
@@ -1009,7 +1010,77 @@ final class MainWindowController: NSWindowController {
             direction: .left
         )
         interactiveTabSwitchState = state
+        animateTabCreationInStrip(from: stripSpawnAnchor, targetIndex: targetIndex)
         completeRightEdgeNewTabTransition(state)
+    }
+
+    private func rightEdgeTabSpawnAnchorPoint() -> CGPoint {
+        layoutTabStripAndRevealActive()
+        let bounds = tabStripContainer.bounds
+        let y = bounds.midY
+
+        let chips = tabStripStackView.arrangedSubviews.compactMap { $0 as? TabChipView }
+        guard let lastChip = chips.last else {
+            return CGPoint(x: max(16, bounds.maxX - 18), y: y)
+        }
+
+        let rect = lastChip.convert(lastChip.bounds, to: tabStripContainer)
+        let x = min(bounds.maxX - 16, rect.maxX + 10)
+        return CGPoint(x: max(16, x), y: y)
+    }
+
+    private func animateTabCreationInStrip(from source: CGPoint, targetIndex: Int) {
+        layoutTabStripAndRevealActive()
+        guard let targetChip = tabChipView(for: targetIndex) else { return }
+
+        let targetRect = targetChip.convert(targetChip.bounds, to: tabStripContainer)
+        guard targetRect.width > 8, targetRect.height > 8 else { return }
+
+        let startSize: CGFloat = 18
+        let startRect = CGRect(
+            x: source.x - (startSize * 0.5),
+            y: source.y - (startSize * 0.5),
+            width: startSize,
+            height: startSize
+        )
+
+        let birthView = TabBirthAnimationView(frame: startRect)
+        birthView.alphaValue = 0
+        tabStripContainer.addSubview(birthView)
+
+        let popRect = startRect.insetBy(dx: -2.5, dy: -2.5)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.11
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            birthView.animator().alphaValue = 1.0
+            birthView.animator().frame = popRect
+        } completionHandler: {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                birthView.animator().frame = targetRect
+                birthView.animator().alphaValue = 0.24
+                birthView.plusImageView.animator().alphaValue = 0
+            } completionHandler: { [weak self, weak targetChip] in
+                birthView.removeFromSuperview()
+                guard let self, let targetChip else { return }
+                targetChip.wantsLayer = true
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.10
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    targetChip.animator().alphaValue = 0.92
+                    targetChip.animator().layer?.transform = CATransform3DMakeScale(1.03, 1.03, 1)
+                } completionHandler: {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = 0.14
+                        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                        targetChip.animator().alphaValue = 1.0
+                        targetChip.animator().layer?.transform = CATransform3DIdentity
+                    }
+                    self.layoutTabStripAndRevealActive()
+                }
+            }
+        }
     }
 
     private func completeRightEdgeNewTabTransition(_ state: InteractiveTabSwitchState) {
@@ -2023,6 +2094,51 @@ private final class ClickableLabelField: NSTextField {
 
     override func mouseDown(with event: NSEvent) {
         onActivate?()
+    }
+}
+
+private final class TabBirthAnimationView: NSView {
+    let plusImageView = NSImageView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    override func layout() {
+        super.layout()
+        let side = min(bounds.width, bounds.height)
+        let icon = max(10, min(16, side * 0.55))
+        plusImageView.frame = CGRect(
+            x: (bounds.width - icon) * 0.5,
+            y: (bounds.height - icon) * 0.5,
+            width: icon,
+            height: icon
+        )
+        layer?.cornerRadius = min(bounds.height * 0.25, 9)
+    }
+
+    private func setup() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.20).cgColor
+        layer?.borderWidth = 0.8
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.36).cgColor
+        layer?.shadowOpacity = 0.18
+        layer?.shadowRadius = 5
+        layer?.shadowOffset = CGSize(width: 0, height: -1)
+        layer?.masksToBounds = false
+
+        plusImageView.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab")
+        plusImageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        plusImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        plusImageView.imageScaling = .scaleProportionallyDown
+        plusImageView.alphaValue = 1.0
+        addSubview(plusImageView)
     }
 }
 

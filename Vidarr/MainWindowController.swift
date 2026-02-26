@@ -17,7 +17,7 @@ final class MainWindowController: NSWindowController {
     private let tabInteractionView = TabInteractionView()
     private let tabStripDocumentView = NonInteractiveView()
     private let tabStripStackView = NonInteractiveStackView()
-    private let groupSelectorPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let groupSelectorButton = NSButton(title: "", target: nil, action: nil)
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
     private let addressBarField = AddressBarField()
@@ -168,14 +168,18 @@ final class MainWindowController: NSWindowController {
         tabStripStackView.spacing = 6
         tabStripDocumentView.addSubview(tabStripStackView)
 
-        groupSelectorPopup.translatesAutoresizingMaskIntoConstraints = false
-        groupSelectorPopup.removeAllItems()
-        groupSelectorPopup.addItems(withTitles: BrowserTabGroup.allCases.map(\.displayName))
-        groupSelectorPopup.target = self
-        groupSelectorPopup.action = #selector(groupSelectionDidChange(_:))
-        groupSelectorPopup.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        groupSelectorPopup.bezelStyle = .rounded
-        groupSelectorPopup.selectItem(at: 0)
+        groupSelectorButton.translatesAutoresizingMaskIntoConstraints = false
+        groupSelectorButton.target = self
+        groupSelectorButton.action = #selector(didTapGroupSelector)
+        groupSelectorButton.isBordered = false
+        groupSelectorButton.image = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Tab Group")
+        groupSelectorButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        groupSelectorButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.88)
+        groupSelectorButton.wantsLayer = true
+        groupSelectorButton.layer?.cornerRadius = 4
+        groupSelectorButton.layer?.borderWidth = 1
+        groupSelectorButton.layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
+        groupSelectorButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
@@ -207,7 +211,7 @@ final class MainWindowController: NSWindowController {
         tabSearchField.delegate = self
 
         let toolbarContent = toolbarContainer.contentLayoutView
-        toolbarContent.addSubview(groupSelectorPopup)
+        toolbarContent.addSubview(groupSelectorButton)
         toolbarContent.addSubview(tabStripContainer)
         toolbarContent.addSubview(newTabButton)
         toolbarContent.addSubview(rightPanelView)
@@ -222,10 +226,10 @@ final class MainWindowController: NSWindowController {
         rightPanelWidthConstraint = rightPanelWidth
 
         NSLayoutConstraint.activate([
-            groupSelectorPopup.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 12),
-            groupSelectorPopup.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
-            groupSelectorPopup.widthAnchor.constraint(equalToConstant: 156),
-            groupSelectorPopup.heightAnchor.constraint(equalToConstant: 24),
+            groupSelectorButton.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 12),
+            groupSelectorButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
+            groupSelectorButton.widthAnchor.constraint(equalToConstant: 28),
+            groupSelectorButton.heightAnchor.constraint(equalToConstant: 24),
 
             minLeading,
             tabWidth,
@@ -334,10 +338,21 @@ final class MainWindowController: NSWindowController {
         actions.newTab()
     }
 
-    @objc private func groupSelectionDidChange(_ sender: NSPopUpButton) {
-        let selectedIndex = sender.indexOfSelectedItem
-        guard selectedIndex >= 0, selectedIndex < BrowserTabGroup.allCases.count else { return }
-        let group = BrowserTabGroup.allCases[selectedIndex]
+    @objc private func didTapGroupSelector() {
+        let menu = NSMenu()
+        for group in BrowserTabGroup.allCases {
+            let item = NSMenuItem(title: group.displayName, action: #selector(didSelectGroupMenuItem(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = group.rawValue
+            item.state = (group == tabManager.currentGroup) ? .on : .off
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: groupSelectorButton.bounds.height + 4), in: groupSelectorButton)
+    }
+
+    @objc private func didSelectGroupMenuItem(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let group = BrowserTabGroup(rawValue: raw) else { return }
         tabManager.switchGroup(group)
     }
 
@@ -818,7 +833,7 @@ final class MainWindowController: NSWindowController {
             return rect.maxX
         }.max() ?? 74
 
-        let groupSelectorRequiredLeading: CGFloat = 12 + 156 + 12
+        let groupSelectorRequiredLeading: CGFloat = 12 + 28 + 12
         tabStripMinLeadingConstraint?.constant = max(maxButtonX + 10, groupSelectorRequiredLeading)
 
         let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
@@ -831,10 +846,11 @@ final class MainWindowController: NSWindowController {
     }
 
     private func syncGroupSelectorSelection() {
-        let index = BrowserTabGroup.allCases.firstIndex(of: tabManager.currentGroup) ?? 0
-        if groupSelectorPopup.indexOfSelectedItem != index {
-            groupSelectorPopup.selectItem(at: index)
-        }
+        let accent = accentColorForCurrentGroup()
+        groupSelectorButton.layer?.borderColor = accent.withAlphaComponent(0.52).cgColor
+        groupSelectorButton.layer?.backgroundColor = accent.withAlphaComponent(0.20).cgColor
+        groupSelectorButton.contentTintColor = accent.withAlphaComponent(0.96)
+        groupSelectorButton.toolTip = tabManager.currentGroup.displayName
     }
 
     private func accentColorForCurrentGroup() -> NSColor {

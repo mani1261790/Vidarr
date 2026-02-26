@@ -20,8 +20,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.regular)
         configureMainMenu()
-        let bundleIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
-        NSApp.applicationIconImage = bundleIcon
+        if let iconImage = NSImage(named: "AppIcon") ?? NSImage(named: NSImage.applicationIconName) {
+            NSApp.applicationIconImage = iconImage
+        }
 
         let windowController = MainWindowController()
         mainWindowController = windowController

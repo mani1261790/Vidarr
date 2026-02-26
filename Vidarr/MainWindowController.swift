@@ -313,6 +313,46 @@ final class MainWindowController: NSWindowController {
         actions.newTab()
     }
 
+    // MARK: - Menu Actions
+    func menuNewTab() {
+        actions.newTab()
+    }
+
+    func menuCloseTab() {
+        actions.tabClose()
+    }
+
+    func menuReopenClosedTab() {
+        actions.tabReopenClosed()
+    }
+
+    func menuGoBack() {
+        actions.goBack()
+    }
+
+    func menuGoForward() {
+        actions.goForward()
+    }
+
+    func menuReload() {
+        actions.reload()
+    }
+
+    func menuReloadAllTabs() {
+        actions.reloadAll()
+    }
+
+    func menuFocusAddressBar() {
+        beginAddressEditing()
+    }
+
+    func menuToggleWebInspector() {
+        guard let webView = tabManager.currentWebView else { return }
+        let selector = NSSelectorFromString("_toggleWebInspector:")
+        guard webView.responds(to: selector) else { return }
+        webView.perform(selector, with: nil)
+    }
+
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
         tabSearchQuery = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         rebuildTabStrip()
@@ -656,8 +696,6 @@ final class MainWindowController: NSWindowController {
     }
 
     private func confirmCloseProtectedTab() -> Bool {
-        guard let window else { return false }
-
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "保護タブを閉じますか？"

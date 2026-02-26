@@ -22,6 +22,7 @@ final class BrowserSession {
         let config = WKWebViewConfiguration()
         config.allowsAirPlayForMediaPlayback = true
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         config.websiteDataStore = prefs.ephemeralModeEnabled ? .nonPersistent() : .default()
 

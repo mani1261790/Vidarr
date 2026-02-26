@@ -114,6 +114,169 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q"
         )
         appMenu.addItem(quitItem)
+
+        let fileMenu = NSMenu(title: "File")
+        let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
+        fileMenu.addItem(makeMenuItem("New Tab", action: #selector(menuNewTab), key: "t"))
+        fileMenu.addItem(makeMenuItem("Close Tab", action: #selector(menuCloseTab), key: "w"))
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(makeMenuItem("Close Window", action: #selector(menuCloseWindow), key: "w", modifiers: [.command, .shift]))
+
+        let editMenu = NSMenu(title: "Edit")
+        let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        let viewMenu = NSMenu(title: "View")
+        let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+
+        viewMenu.addItem(makeMenuItem("Reload", action: #selector(menuReload), key: "r"))
+        viewMenu.addItem(makeMenuItem("Reload All Tabs", action: #selector(menuReloadAll), key: "r", modifiers: [.command, .shift]))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(makeMenuItem("Focus Address Bar", action: #selector(menuFocusAddressBar), key: "l"))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(makeMenuItem("Enter Full Screen", action: #selector(menuToggleFullScreen), key: "f", modifiers: [.command, .control]))
+
+        let historyMenu = NSMenu(title: "History")
+        let historyMenuItem = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
+        historyMenuItem.submenu = historyMenu
+        mainMenu.addItem(historyMenuItem)
+
+        historyMenu.addItem(makeMenuItem("Back", action: #selector(menuGoBack), key: "["))
+        historyMenu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
+        historyMenu.addItem(NSMenuItem.separator())
+        historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
+
+        let developMenu = NSMenu(title: "Develop")
+        let developMenuItem = NSMenuItem(title: "Develop", action: nil, keyEquivalent: "")
+        developMenuItem.submenu = developMenu
+        mainMenu.addItem(developMenuItem)
+
+        developMenu.addItem(makeMenuItem("Toggle Web Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        developMenu.addItem(makeMenuItem("Clear Browsing Data", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
+
+        let windowMenu = NSMenu(title: "Window")
+        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
+        NSApp.windowsMenu = windowMenu
+
+        windowMenu.addItem(makeMenuItem("Minimize", action: #selector(NSWindow.performMiniaturize(_:)), key: "m"))
+        windowMenu.addItem(makeMenuItem("Zoom", action: #selector(NSWindow.performZoom(_:)), key: ""))
+        windowMenu.addItem(NSMenuItem.separator())
+        windowMenu.addItem(makeMenuItem("Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), key: ""))
+
+        let helpMenu = NSMenu(title: "Help")
+        let helpMenuItem = NSMenuItem(title: "Help", action: nil, keyEquivalent: "")
+        helpMenuItem.submenu = helpMenu
+        mainMenu.addItem(helpMenuItem)
+        NSApp.helpMenu = helpMenu
+
+        helpMenu.addItem(makeMenuItem("Vidarr on GitHub", action: #selector(menuOpenGitHub), key: ""))
+        helpMenu.addItem(makeMenuItem("Releases", action: #selector(menuOpenReleases), key: ""))
+    }
+
+    private func makeMenuItem(
+        _ title: String,
+        action: Selector?,
+        key: String,
+        modifiers: NSEvent.ModifierFlags = [.command]
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = modifiers
+        item.target = self
+        return item
+    }
+
+    @objc private func menuNewTab() {
+        mainWindowController?.menuNewTab()
+    }
+
+    @objc private func menuCloseTab() {
+        mainWindowController?.menuCloseTab()
+    }
+
+    @objc private func menuCloseWindow() {
+        mainWindowController?.window?.performClose(nil)
+    }
+
+    @objc private func menuReload() {
+        mainWindowController?.menuReload()
+    }
+
+    @objc private func menuReloadAll() {
+        mainWindowController?.menuReloadAllTabs()
+    }
+
+    @objc private func menuFocusAddressBar() {
+        mainWindowController?.menuFocusAddressBar()
+    }
+
+    @objc private func menuToggleFullScreen() {
+        mainWindowController?.window?.toggleFullScreen(nil)
+    }
+
+    @objc private func menuGoBack() {
+        mainWindowController?.menuGoBack()
+    }
+
+    @objc private func menuGoForward() {
+        mainWindowController?.menuGoForward()
+    }
+
+    @objc private func menuReopenClosedTab() {
+        mainWindowController?.menuReopenClosedTab()
+    }
+
+    @objc private func menuToggleWebInspector() {
+        mainWindowController?.menuToggleWebInspector()
+    }
+
+    @objc private func menuClearBrowsingData() {
+        BrowserDataCleaner.clearPersistentBrowsingData { [weak self] result in
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                switch result {
+                case .success:
+                    alert.alertStyle = .informational
+                    alert.messageText = "閲覧データを削除しました"
+                    alert.informativeText = "Cookie とキャッシュを消去しました。"
+                case .failure(let error):
+                    alert.alertStyle = .warning
+                    alert.messageText = "閲覧データ削除に失敗しました"
+                    alert.informativeText = error.localizedDescription
+                }
+                alert.addButton(withTitle: "OK")
+                if let window = self?.mainWindowController?.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func menuOpenGitHub() {
+        guard let url = URL(string: "https://github.com/mani1261790/Vidarr") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func menuOpenReleases() {
+        guard let url = URL(string: "https://github.com/mani1261790/Vidarr/releases") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func openPreferences() {

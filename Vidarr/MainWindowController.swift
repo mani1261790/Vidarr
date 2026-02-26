@@ -196,7 +196,7 @@ final class MainWindowController: NSWindowController {
         addressBarDisplayLabel.translatesAutoresizingMaskIntoConstraints = false
         addressBarDisplayLabel.font = NSFont.systemFont(ofSize: 13.0)
         addressBarDisplayLabel.isEditable = false
-        addressBarDisplayLabel.isSelectable = true
+        addressBarDisplayLabel.isSelectable = false
         addressBarDisplayLabel.isBezeled = false
         addressBarDisplayLabel.isBordered = false
         addressBarDisplayLabel.drawsBackground = false
@@ -497,7 +497,10 @@ final class MainWindowController: NSWindowController {
     }
 
     private func beginAddressEditing() {
-        guard !isAddressEditing else { return }
+        if isAddressEditing {
+            focusAddressEditor(selectAll: true)
+            return
+        }
         isAddressEditing = true
 
         applyAddressEditingMode()

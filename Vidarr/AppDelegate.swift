@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import WebKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -136,6 +137,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
     private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
+    private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
 
     init() {
@@ -211,6 +213,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         doNotTrackCheckbox.target = self
         doNotTrackCheckbox.action = #selector(doNotTrackChanged(_:))
 
+        clearDataButton.translatesAutoresizingMaskIntoConstraints = false
+        clearDataButton.target = self
+        clearDataButton.action = #selector(clearBrowsingData)
+
         let resetButton = NSButton(title: "デフォルトに戻す", target: self, action: #selector(resetDefaults))
         resetButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -224,6 +230,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         root.addSubview(antiTrackingCheckbox)
         root.addSubview(ephemeralModeCheckbox)
         root.addSubview(doNotTrackCheckbox)
+        root.addSubview(clearDataButton)
         root.addSubview(resetButton)
 
         NSLayoutConstraint.activate([
@@ -261,6 +268,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
             doNotTrackCheckbox.topAnchor.constraint(equalTo: ephemeralModeCheckbox.bottomAnchor, constant: 8),
             doNotTrackCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            clearDataButton.topAnchor.constraint(equalTo: doNotTrackCheckbox.bottomAnchor, constant: 14),
+            clearDataButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
             resetButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             resetButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18)
@@ -306,6 +316,33 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func doNotTrackChanged(_ sender: NSButton) {
         prefs.sendDoNotTrack = (sender.state == .on)
+    }
+
+    @objc private func clearBrowsingData() {
+        clearDataButton.isEnabled = false
+        BrowserDataCleaner.clearPersistentBrowsingData { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.clearDataButton.isEnabled = true
+
+                let alert = NSAlert()
+                switch result {
+                case .success:
+                    alert.alertStyle = .informational
+                    alert.messageText = "閲覧データを削除しました"
+                    alert.informativeText = "Cookie、キャッシュ、保存済みサイトデータを削除しました。"
+                case .failure(let error):
+                    alert.alertStyle = .warning
+                    alert.messageText = "閲覧データの削除に失敗しました"
+                    alert.informativeText = error.localizedDescription
+                }
+                if let window = self.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+            }
+        }
     }
 
     @objc private func sensitivityChanged(_ sender: NSPopUpButton) {

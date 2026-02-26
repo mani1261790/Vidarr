@@ -37,6 +37,9 @@ final class MainWindowController: NSWindowController {
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
     private var dragFromTabIndex: Int?
     private var dragToTabIndex: Int?
+    private var preferenceObserver: NSObjectProtocol?
+    private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
+    private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -78,10 +81,17 @@ final class MainWindowController: NSWindowController {
 
         configureWindow()
         configureBindings()
+        configurePreferenceObserver()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        if let preferenceObserver {
+            NotificationCenter.default.removeObserver(preferenceObserver)
+        }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -261,6 +271,28 @@ final class MainWindowController: NSWindowController {
         actions.finishInteractiveGestureTabSwitch = { [weak self] totalX in
             self?.finishInteractiveTabSwitch(totalX: totalX)
         }
+    }
+
+    private func configurePreferenceObserver() {
+        preferenceObserver = NotificationCenter.default.addObserver(
+            forName: BrowserPreferences.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyPreferenceChangesIfNeeded()
+        }
+    }
+
+    private func applyPreferenceChangesIfNeeded() {
+        let prefs = BrowserPreferences.shared
+        let shouldReconfigureTabs = (prefs.ephemeralModeEnabled != lastEphemeralMode)
+            || (prefs.sendDoNotTrack != lastDoNotTrack)
+
+        lastEphemeralMode = prefs.ephemeralModeEnabled
+        lastDoNotTrack = prefs.sendDoNotTrack
+
+        guard shouldReconfigureTabs else { return }
+        tabManager.reconfigureAllTabsForCurrentPreferences()
     }
 
     private func ensureInitialTabVisible() {

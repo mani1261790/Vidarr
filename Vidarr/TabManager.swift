@@ -232,6 +232,38 @@ final class TabManager {
         }
     }
 
+    func reconfigureAllTabsForCurrentPreferences() {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard !self.tabs.isEmpty else { return }
+
+            let selectedIndex = self.currentIndex
+            let snapshots = self.tabs.map { tab in
+                (
+                    url: tab.webView.url ?? tab.lastKnownURL,
+                    isProtected: tab.isProtected
+                )
+            }
+
+            self.tabs = snapshots.map { snapshot in
+                let webView = BrowserSession.makeConfiguredWebView()
+                if let url = snapshot.url {
+                    webView.load(URLRequest(url: url))
+                }
+                return Tab(
+                    webView: webView,
+                    lastKnownURL: snapshot.url,
+                    thumbnail: nil,
+                    isProtected: snapshot.isProtected
+                )
+            }
+
+            self.currentIndex = min(max(0, selectedIndex), self.tabs.count - 1)
+            self.delegate?.tabManager(self, didUpdateTabs: self.tabs.count)
+            self.delegate?.tabManager(self, didSelect: self.tabs[self.currentIndex].webView)
+        }
+    }
+
     func updateMetadata(for webView: WKWebView) {
         performOnMain { [weak self] in
             guard let self else { return }

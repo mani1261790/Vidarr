@@ -23,7 +23,6 @@ final class MainWindowController: NSWindowController {
     private let reloadButton = NSButton(title: "", target: nil, action: nil)
     private let bookmarkButton = NSButton(title: "", target: nil, action: nil)
     private let shareButton = NSButton(title: "", target: nil, action: nil)
-    private let rowMenuButton = NSButton(title: "", target: nil, action: nil)
     private let groupSelectorButton = NSButton(title: "", target: nil, action: nil)
     private let newTabButton = NSButton(title: "+", target: nil, action: nil)
     private let rightPanelView = NonDraggableView()
@@ -32,6 +31,7 @@ final class MainWindowController: NSWindowController {
     private let tabSearchField = NSSearchField()
 
     private var leftButtonRowLeadingConstraint: NSLayoutConstraint?
+    private var leftButtonRowTopConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
     private var rightPanelWidthConstraint: NSLayoutConstraint?
 
@@ -227,15 +227,8 @@ final class MainWindowController: NSWindowController {
             weight: .semibold,
             action: #selector(didTapShareButton)
         )
-        configureToolbarSymbolButton(
-            rowMenuButton,
-            symbolName: "chevron.down",
-            pointSize: 11,
-            weight: .semibold,
-            action: #selector(didTapToolbarMenuButton)
-        )
 
-        [backButton, forwardButton, reloadButton, bookmarkButton, shareButton, rowMenuButton].forEach { button in
+        [backButton, forwardButton, reloadButton, bookmarkButton, shareButton].forEach { button in
             navigationButtonRow.addArrangedSubview(button)
         }
 
@@ -305,7 +298,9 @@ final class MainWindowController: NSWindowController {
         rightPanelView.addSubview(tabSearchField)
 
         let leftLeading = navigationButtonRow.leadingAnchor.constraint(equalTo: toolbarContent.leadingAnchor, constant: 84)
+        let leftTop = navigationButtonRow.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 18)
         leftButtonRowLeadingConstraint = leftLeading
+        leftButtonRowTopConstraint = leftTop
         let tabWidth = tabStripContainer.widthAnchor.constraint(equalToConstant: 520)
         tabStripWidthConstraint = tabWidth
         let rightPanelWidth = rightPanelView.widthAnchor.constraint(equalToConstant: 250)
@@ -313,7 +308,7 @@ final class MainWindowController: NSWindowController {
 
         NSLayoutConstraint.activate([
             leftLeading,
-            navigationButtonRow.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 20),
+            leftTop,
             navigationButtonRow.heightAnchor.constraint(equalToConstant: 22),
 
             groupSelectorButton.centerYAnchor.constraint(equalTo: tabStripContainer.centerYAnchor),
@@ -480,30 +475,6 @@ final class MainWindowController: NSWindowController {
         guard let url = tabManager.currentWebView?.url else { return }
         let picker = NSSharingServicePicker(items: [url])
         picker.show(relativeTo: shareButton.bounds, of: shareButton, preferredEdge: .maxY)
-    }
-
-    @objc private func didTapToolbarMenuButton() {
-        let menu = NSMenu()
-        let newTabItem = NSMenuItem(title: "新規タブ", action: #selector(didTapNewTab), keyEquivalent: "")
-        newTabItem.target = self
-        menu.addItem(newTabItem)
-        menu.addItem(NSMenuItem.separator())
-        let reloadAllItem = NSMenuItem(title: "すべてリロード", action: #selector(didTapReloadAllFromRowMenu), keyEquivalent: "")
-        reloadAllItem.target = self
-        menu.addItem(reloadAllItem)
-        let reopenItem = NSMenuItem(title: "閉じたタブを復元", action: #selector(didTapReopenClosedFromRowMenu), keyEquivalent: "")
-        reopenItem.target = self
-        reopenItem.isEnabled = tabManager.canReopenClosedTab
-        menu.addItem(reopenItem)
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: rowMenuButton.bounds.height + 4), in: rowMenuButton)
-    }
-
-    @objc private func didTapReloadAllFromRowMenu() {
-        actions.reloadAll()
-    }
-
-    @objc private func didTapReopenClosedFromRowMenu() {
-        actions.tabReopenClosed()
     }
 
     @objc private func didTapGroupSelector() {
@@ -1258,19 +1229,31 @@ final class MainWindowController: NSWindowController {
         let trafficButtons: [NSButton] = [.closeButton, .miniaturizeButton, .zoomButton]
             .compactMap { window.standardWindowButton($0) }
 
+        let minButtonX = trafficButtons.compactMap { button -> CGFloat? in
+            guard let superview = button.superview else { return nil }
+            let rect = contentView.convert(button.frame, from: superview)
+            return rect.minX
+        }.min() ?? 12
         let maxButtonX = trafficButtons.compactMap { button -> CGFloat? in
             guard let superview = button.superview else { return nil }
             let rect = contentView.convert(button.frame, from: superview)
             return rect.maxX
         }.max() ?? 74
+        let maxButtonY = trafficButtons.compactMap { button -> CGFloat? in
+            guard let superview = button.superview else { return nil }
+            let rect = contentView.convert(button.frame, from: superview)
+            return rect.maxY
+        }.max() ?? 16
 
-        leftButtonRowLeadingConstraint?.constant = maxButtonX + 8
+        leftButtonRowLeadingConstraint?.constant = max(10, minButtonX - 1)
+        let topInsetFromTraffic = contentView.bounds.height - maxButtonY
+        leftButtonRowTopConstraint?.constant = max(2, topInsetFromTraffic + 5)
 
         let rightPanelWidth = min(300, max(220, window.frame.width * 0.24))
         rightPanelWidthConstraint?.constant = rightPanelWidth
 
         let reservedRight = rightPanelWidth + 10 + 20 + 8 + 12
-        let leftReserved = (maxButtonX + 8) + 160
+        let leftReserved = maxButtonX + 168
         let available = window.frame.width - leftReserved - reservedRight
         tabStripWidthConstraint?.constant = min(640, max(220, available))
         layoutTabStripAndRevealActive()

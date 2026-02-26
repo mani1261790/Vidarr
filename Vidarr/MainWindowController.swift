@@ -858,7 +858,11 @@ final class MainWindowController: NSWindowController {
         case .regular:
             return NSColor.systemBlue
         case .privateMode:
-            return NSColor.systemOrange
+            return NSColor.systemPurple
+        case .work:
+            return NSColor.systemGreen
+        case .research:
+            return NSColor.systemPink
         }
     }
 

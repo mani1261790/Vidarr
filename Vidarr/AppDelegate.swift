@@ -8,12 +8,14 @@
 import Cocoa
 import WebKit
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var mainWindowController: MainWindowController?
     private var preferencesWindowController: PreferencesWindowController?
     private let updateChecker = UpdateChecker()
     private var hasPresentedUpdateAlert = false
+    private weak var historyMenu: NSMenu?
+    private weak var bookmarksMenu: NSMenu?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -163,11 +165,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let historyMenuItem = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
         historyMenuItem.submenu = historyMenu
         mainMenu.addItem(historyMenuItem)
+        historyMenu.delegate = self
+        self.historyMenu = historyMenu
 
         historyMenu.addItem(makeMenuItem("Back", action: #selector(menuGoBack), key: "["))
         historyMenu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
         historyMenu.addItem(NSMenuItem.separator())
         historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
+
+        let bookmarksMenu = NSMenu(title: "Bookmarks")
+        let bookmarksMenuItem = NSMenuItem(title: "Bookmarks", action: nil, keyEquivalent: "")
+        bookmarksMenuItem.submenu = bookmarksMenu
+        mainMenu.addItem(bookmarksMenuItem)
+        bookmarksMenu.delegate = self
+        self.bookmarksMenu = bookmarksMenu
 
         let developMenu = NSMenu(title: "Develop")
         let developMenuItem = NSMenuItem(title: "Develop", action: nil, keyEquivalent: "")
@@ -281,6 +292,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindowController?.menuReopenClosedTab()
     }
 
+    @objc private func menuOpenHistoryEntry(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let url = URL(string: raw) else { return }
+        mainWindowController?.menuOpenExternalListURL(url)
+    }
+
+    @objc private func menuOpenBookmarkEntry(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let url = URL(string: raw) else { return }
+        mainWindowController?.menuOpenExternalListURL(url)
+    }
+
     @objc private func menuToggleWebInspector() {
         mainWindowController?.menuToggleWebInspector()
     }
@@ -317,6 +340,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuOpenReleases() {
         guard let url = URL(string: "https://github.com/mani1261790/Vidarr/releases") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === historyMenu {
+            rebuildHistoryMenu(menu)
+            return
+        }
+        if menu === bookmarksMenu {
+            rebuildBookmarksMenu(menu)
+        }
+    }
+
+    private func rebuildHistoryMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        menu.addItem(makeMenuItem("Back", action: #selector(menuGoBack), key: "["))
+        menu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
+        menu.addItem(NSMenuItem.separator())
+
+        let entries = BrowsingHistoryStore.shared.recent(limit: 10)
+        if entries.isEmpty {
+            let empty = NSMenuItem(title: "履歴はありません", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+
+        for entry in entries {
+            let title = entry.title.isEmpty ? (entry.url?.host ?? entry.urlString) : entry.title
+            let item = NSMenuItem(title: title, action: #selector(menuOpenHistoryEntry(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.urlString
+            item.toolTip = entry.urlString
+            menu.addItem(item)
+        }
+    }
+
+    private func rebuildBookmarksMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let entries = BookmarkStore.shared.all()
+        if entries.isEmpty {
+            let empty = NSMenuItem(title: "ブックマークはありません", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+
+        for entry in entries {
+            let title = entry.title.isEmpty ? (entry.url?.host ?? entry.urlString) : entry.title
+            let item = NSMenuItem(title: title, action: #selector(menuOpenBookmarkEntry(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.urlString
+            item.toolTip = entry.urlString
+            menu.addItem(item)
+        }
     }
 
     @objc private func openPreferences() {

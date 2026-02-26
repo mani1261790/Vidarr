@@ -496,7 +496,21 @@ final class MainWindowController: NSWindowController {
     }
 
     func menuToggleBookmark() {
+        guard let webView = tabManager.currentWebView,
+              let url = webView.url else {
+            return
+        }
         tabManager.toggleCurrentTabBookmark()
+        let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tabManager.isCurrentTabBookmarked {
+            BookmarkStore.shared.addOrUpdate(url: url, title: title)
+        } else {
+            BookmarkStore.shared.remove(url: url)
+        }
+    }
+
+    func menuOpenExternalListURL(_ url: URL) {
+        tabManager.newTab(url: url)
     }
 
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
@@ -1466,6 +1480,13 @@ extension MainWindowController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         tabManager.updateMetadata(for: webView)
         captureThumbnail(for: webView)
+        if let url = webView.url {
+            let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            BrowsingHistoryStore.shared.recordVisit(url: url, title: title)
+            if tabManager.isCurrentTabBookmarked, tabManager.currentWebView === webView {
+                BookmarkStore.shared.addOrUpdate(url: url, title: title)
+            }
+        }
 
         if tabManager.currentWebView === webView, !isAddressEditing {
             applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")

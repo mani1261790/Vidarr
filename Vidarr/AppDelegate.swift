@@ -570,7 +570,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openPreferences() {
         if preferencesWindowController == nil {
-            preferencesWindowController = PreferencesWindowController()
+            preferencesWindowController = PreferencesWindowController(
+                openDownloads: { [weak self] in self?.menuOpenDownloads() },
+                openHistory: { [weak self] in self?.menuOpenHistoryWindow() },
+                openBookmarks: { [weak self] in self?.menuOpenBookmarksWindow() },
+                openSiteControls: { [weak self] in self?.menuOpenSiteSettings() }
+            )
         }
         preferencesWindowController?.showWindow(self)
         preferencesWindowController?.window?.makeKeyAndOrderFront(nil)
@@ -582,6 +587,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 private final class PreferencesWindowController: NSWindowController, NSTextFieldDelegate {
     private let prefs = BrowserPreferences.shared
+    private let openDownloadsAction: () -> Void
+    private let openHistoryAction: () -> Void
+    private let openBookmarksAction: () -> Void
+    private let openSiteControlsAction: () -> Void
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
@@ -594,11 +603,21 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let summaryLabel = NSTextField(labelWithString: "")
 
-    init() {
+    init(
+        openDownloads: @escaping () -> Void,
+        openHistory: @escaping () -> Void,
+        openBookmarks: @escaping () -> Void,
+        openSiteControls: @escaping () -> Void
+    ) {
+        self.openDownloadsAction = openDownloads
+        self.openHistoryAction = openHistory
+        self.openBookmarksAction = openBookmarks
+        self.openSiteControlsAction = openSiteControls
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -615,36 +634,89 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
-        let root = NSView()
-        root.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(root)
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+        contentView.addSubview(scrollView)
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
 
         NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: contentView.topAnchor),
-            root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            documentView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
         ])
 
-        let homeLabel = NSTextField(labelWithString: "スタートページ URL")
-        homeLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        homeLabel.translatesAutoresizingMaskIntoConstraints = false
+        let titleLabel = NSTextField(labelWithString: "Preferences")
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 24, weight: .semibold)
+
+        summaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        summaryLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        summaryLabel.textColor = .secondaryLabelColor
+        summaryLabel.stringValue = "ホームページ、ジェスチャー、プライバシー、保存データをここでまとめて管理できます。"
+
+        let rootStack = NSStackView()
+        rootStack.translatesAutoresizingMaskIntoConstraints = false
+        rootStack.orientation = .vertical
+        rootStack.alignment = .leading
+        rootStack.spacing = 18
+        documentView.addSubview(titleLabel)
+        documentView.addSubview(summaryLabel)
+        documentView.addSubview(rootStack)
+
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 22),
+
+            summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            summaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            summaryLabel.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -22),
+
+            rootStack.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 18),
+            rootStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 22),
+            rootStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -22),
+            rootStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20)
+        ])
+
+        let generalSection = makeSectionContainer()
+        let gestureSection = makeSectionContainer()
+        let privacySection = makeSectionContainer()
+        let dataSection = makeSectionContainer()
+        let resetSection = makeSectionContainer()
+
+        rootStack.addArrangedSubview(generalSection)
+        rootStack.addArrangedSubview(gestureSection)
+        rootStack.addArrangedSubview(privacySection)
+        rootStack.addArrangedSubview(dataSection)
+        rootStack.addArrangedSubview(resetSection)
+
+        let homeLabel = makeFieldLabel("スタートページ URL")
 
         homePageField.translatesAutoresizingMaskIntoConstraints = false
         homePageField.delegate = self
         homePageField.placeholderString = "https://search.fenrir-inc.com/"
+        homePageField.controlSize = .large
 
-        let searchLabel = NSTextField(labelWithString: "検索 URL テンプレート ({query} を使用)")
-        searchLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        searchLabel.translatesAutoresizingMaskIntoConstraints = false
+        let searchLabel = makeFieldLabel("検索 URL テンプレート ({query} を使用)")
 
         searchTemplateField.translatesAutoresizingMaskIntoConstraints = false
         searchTemplateField.delegate = self
         searchTemplateField.placeholderString = "https://search.fenrir-inc.com/?q={query}"
+        searchTemplateField.controlSize = .large
 
-        let sensitivityLabel = NSTextField(labelWithString: "ジェスチャー感度")
-        sensitivityLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        sensitivityLabel.translatesAutoresizingMaskIntoConstraints = false
+        let sensitivityLabel = makeFieldLabel("ジェスチャー感度")
 
         sensitivityPopup.translatesAutoresizingMaskIntoConstraints = false
         sensitivityPopup.removeAllItems()
@@ -686,74 +758,119 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let resetButton = NSButton(title: "デフォルトに戻す", target: self, action: #selector(resetDefaults))
         resetButton.translatesAutoresizingMaskIntoConstraints = false
+        let openDownloadsButton = NSButton(title: "ダウンロード一覧を開く", target: self, action: #selector(openDownloads))
+        let openHistoryButton = NSButton(title: "履歴を管理", target: self, action: #selector(openHistory))
+        let openBookmarksButton = NSButton(title: "ブックマークを管理", target: self, action: #selector(openBookmarks))
+        let openSiteControlsButton = NSButton(title: "サイトごとの例外を管理", target: self, action: #selector(openSiteControls))
+        [openDownloadsButton, openHistoryButton, openBookmarksButton, openSiteControlsButton].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+        }
 
-        root.addSubview(homeLabel)
-        root.addSubview(homePageField)
-        root.addSubview(searchLabel)
-        root.addSubview(searchTemplateField)
-        root.addSubview(sensitivityLabel)
-        root.addSubview(sensitivityPopup)
-        root.addSubview(updatesCheckbox)
-        root.addSubview(antiTrackingCheckbox)
-        root.addSubview(contentBlockingCheckbox)
-        root.addSubview(popupBlockingCheckbox)
-        root.addSubview(harmfulSiteWarningCheckbox)
-        root.addSubview(ephemeralModeCheckbox)
-        root.addSubview(doNotTrackCheckbox)
-        root.addSubview(clearDataButton)
-        root.addSubview(resetButton)
+        let generalGrid = makeTwoColumnGrid()
+        generalSection.addSubview(makeSectionTitle("General"))
+        let generalStack = makeSectionContentStack(in: generalSection)
+        generalStack.addArrangedSubview(homeLabel)
+        generalStack.addArrangedSubview(homePageField)
+        generalStack.addArrangedSubview(searchLabel)
+        generalStack.addArrangedSubview(searchTemplateField)
+        generalStack.addArrangedSubview(updatesCheckbox)
+        generalStack.addArrangedSubview(generalGrid)
+        generalGrid.addArrangedSubview(openDownloadsButton)
+        generalGrid.addArrangedSubview(openHistoryButton)
 
+        let gestureStack = makeSectionContentStack(in: gestureSection)
+        gestureSection.addSubview(makeSectionTitle("Gestures"))
+        let sensitivityRow = NSStackView()
+        sensitivityRow.orientation = .horizontal
+        sensitivityRow.alignment = .centerY
+        sensitivityRow.spacing = 12
+        sensitivityRow.addArrangedSubview(sensitivityLabel)
+        sensitivityRow.addArrangedSubview(sensitivityPopup)
+        gestureStack.addArrangedSubview(sensitivityRow)
+
+        let privacyStack = makeSectionContentStack(in: privacySection)
+        privacySection.addSubview(makeSectionTitle("Privacy"))
+        privacyStack.addArrangedSubview(antiTrackingCheckbox)
+        privacyStack.addArrangedSubview(contentBlockingCheckbox)
+        privacyStack.addArrangedSubview(popupBlockingCheckbox)
+        privacyStack.addArrangedSubview(harmfulSiteWarningCheckbox)
+        privacyStack.addArrangedSubview(ephemeralModeCheckbox)
+        privacyStack.addArrangedSubview(doNotTrackCheckbox)
+
+        let dataStack = makeSectionContentStack(in: dataSection)
+        dataSection.addSubview(makeSectionTitle("Saved Data"))
+        let dataGrid = makeTwoColumnGrid()
+        dataStack.addArrangedSubview(dataGrid)
+        dataGrid.addArrangedSubview(openBookmarksButton)
+        dataGrid.addArrangedSubview(openSiteControlsButton)
+        dataStack.addArrangedSubview(clearDataButton)
+
+        let resetStack = makeSectionContentStack(in: resetSection)
+        resetSection.addSubview(makeSectionTitle("Reset"))
+        let resetNote = NSTextField(wrappingLabelWithString: "ホームページ、検索、ジェスチャー感度、プライバシー設定を初期状態に戻します。")
+        resetNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        resetNote.textColor = .secondaryLabelColor
+        resetStack.addArrangedSubview(resetNote)
+        resetStack.addArrangedSubview(resetButton)
+
+        for section in [generalSection, gestureSection, privacySection, dataSection, resetSection] {
+            section.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
+        }
+    }
+
+    private func makeSectionContainer() -> NSView {
+        let view = NSView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 14
+        view.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
+        view.layer?.borderWidth = 1
+        view.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        return view
+    }
+
+    private func makeSectionTitle(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        return label
+    }
+
+    private func makeFieldLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }
+
+    private func makeSectionContentStack(in container: NSView) -> NSStackView {
+        let titleView = container.subviews.first!
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        container.addSubview(stack)
         NSLayoutConstraint.activate([
-            homeLabel.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
-            homeLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            homeLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            titleView.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+            titleView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            titleView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
 
-            homePageField.topAnchor.constraint(equalTo: homeLabel.bottomAnchor, constant: 6),
-            homePageField.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            homePageField.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-
-            searchLabel.topAnchor.constraint(equalTo: homePageField.bottomAnchor, constant: 16),
-            searchLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            searchLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-
-            searchTemplateField.topAnchor.constraint(equalTo: searchLabel.bottomAnchor, constant: 6),
-            searchTemplateField.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            searchTemplateField.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-
-            sensitivityLabel.topAnchor.constraint(equalTo: searchTemplateField.bottomAnchor, constant: 16),
-            sensitivityLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            sensitivityPopup.centerYAnchor.constraint(equalTo: sensitivityLabel.centerYAnchor),
-            sensitivityPopup.leadingAnchor.constraint(equalTo: sensitivityLabel.trailingAnchor, constant: 12),
-            sensitivityPopup.widthAnchor.constraint(equalToConstant: 120),
-
-            updatesCheckbox.topAnchor.constraint(equalTo: sensitivityLabel.bottomAnchor, constant: 16),
-            updatesCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            antiTrackingCheckbox.topAnchor.constraint(equalTo: updatesCheckbox.bottomAnchor, constant: 10),
-            antiTrackingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            contentBlockingCheckbox.topAnchor.constraint(equalTo: antiTrackingCheckbox.bottomAnchor, constant: 8),
-            contentBlockingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            popupBlockingCheckbox.topAnchor.constraint(equalTo: contentBlockingCheckbox.bottomAnchor, constant: 8),
-            popupBlockingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            harmfulSiteWarningCheckbox.topAnchor.constraint(equalTo: popupBlockingCheckbox.bottomAnchor, constant: 8),
-            harmfulSiteWarningCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            ephemeralModeCheckbox.topAnchor.constraint(equalTo: harmfulSiteWarningCheckbox.bottomAnchor, constant: 8),
-            ephemeralModeCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            doNotTrackCheckbox.topAnchor.constraint(equalTo: ephemeralModeCheckbox.bottomAnchor, constant: 8),
-            doNotTrackCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            clearDataButton.topAnchor.constraint(equalTo: doNotTrackCheckbox.bottomAnchor, constant: 14),
-            clearDataButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-
-            resetButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-            resetButton.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18)
+            stack.topAnchor.constraint(equalTo: titleView.bottomAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16)
         ])
+        return stack
+    }
+
+    private func makeTwoColumnGrid() -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.alignment = .leading
+        stack.distribution = .fillEqually
+        stack.spacing = 10
+        return stack
     }
 
     private func loadValues() {
@@ -848,5 +965,21 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     @objc private func resetDefaults() {
         prefs.resetDefaults()
         loadValues()
+    }
+
+    @objc private func openDownloads() {
+        openDownloadsAction()
+    }
+
+    @objc private func openHistory() {
+        openHistoryAction()
+    }
+
+    @objc private func openBookmarks() {
+        openBookmarksAction()
+    }
+
+    @objc private func openSiteControls() {
+        openSiteControlsAction()
     }
 }

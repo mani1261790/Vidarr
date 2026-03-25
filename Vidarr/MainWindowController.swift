@@ -54,6 +54,7 @@ final class MainWindowController: NSWindowController {
     private weak var dragSourceChipView: TabChipView?
     private var dragPreviewOffsetX: CGFloat = 0
     private var preferenceObserver: NSObjectProtocol?
+    private var bookmarkObserver: NSObjectProtocol?
     private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
@@ -112,6 +113,7 @@ final class MainWindowController: NSWindowController {
         configureWindow()
         configureBindings()
         configurePreferenceObserver()
+        configureBookmarkObserver()
     }
 
     required init?(coder: NSCoder) {
@@ -121,6 +123,9 @@ final class MainWindowController: NSWindowController {
     deinit {
         if let preferenceObserver {
             NotificationCenter.default.removeObserver(preferenceObserver)
+        }
+        if let bookmarkObserver {
+            NotificationCenter.default.removeObserver(bookmarkObserver)
         }
     }
 
@@ -407,6 +412,16 @@ final class MainWindowController: NSWindowController {
         }
     }
 
+    private func configureBookmarkObserver() {
+        bookmarkObserver = NotificationCenter.default.addObserver(
+            forName: BookmarkStore.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.syncBookmarkedStateFromStore()
+        }
+    }
+
     private func applyPreferenceChangesIfNeeded() {
         let prefs = BrowserPreferences.shared
         let removedPersistedHarmfulHosts = lastHarmfulAllowedHosts.subtracting(prefs.harmfulSiteAllowedHosts)
@@ -426,6 +441,11 @@ final class MainWindowController: NSWindowController {
 
         guard shouldReconfigureTabs else { return }
         tabManager.reconfigureAllTabsForCurrentPreferences()
+    }
+
+    private func syncBookmarkedStateFromStore() {
+        let bookmarkedURLStrings = Set(BookmarkStore.shared.all().map(\.urlString))
+        tabManager.syncBookmarkedStates(bookmarkedURLStrings: bookmarkedURLStrings)
     }
 
     private func ensureInitialTabVisible() {
@@ -679,12 +699,11 @@ final class MainWindowController: NSWindowController {
               let url = webView.url else {
             return
         }
-        tabManager.toggleCurrentTabBookmark()
         let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if tabManager.isCurrentTabBookmarked {
-            BookmarkStore.shared.addOrUpdate(url: url, title: title)
-        } else {
+        if BookmarkStore.shared.contains(url: url) {
             BookmarkStore.shared.remove(url: url)
+        } else {
+            BookmarkStore.shared.addOrUpdate(url: url, title: title)
         }
     }
 

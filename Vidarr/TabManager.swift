@@ -368,6 +368,38 @@ final class TabManager {
         }
     }
 
+    func syncBookmarkedStates(bookmarkedURLStrings: Set<String>) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            var didChangeCurrentGroup = false
+
+            for group in BrowserTabGroup.allCases {
+                var state = state(for: group)
+                var didChangeGroup = false
+
+                for index in state.tabs.indices {
+                    let currentURLString = (state.tabs[index].webView.url ?? state.tabs[index].lastKnownURL)?.absoluteString
+                    let shouldBeBookmarked = currentURLString.map { bookmarkedURLStrings.contains($0) } ?? false
+                    if state.tabs[index].isBookmarked != shouldBeBookmarked {
+                        state.tabs[index].isBookmarked = shouldBeBookmarked
+                        didChangeGroup = true
+                    }
+                }
+
+                if didChangeGroup {
+                    setState(state, for: group)
+                    if group == currentGroup {
+                        didChangeCurrentGroup = true
+                    }
+                }
+            }
+
+            if didChangeCurrentGroup {
+                notifyCurrentGroupUpdated(selectCurrent: false)
+            }
+        }
+    }
+
     func moveTab(from fromIndex: Int, to toIndex: Int) {
         performOnMain { [weak self] in
             guard let self else { return }
@@ -524,6 +556,11 @@ final class TabManager {
             guard let (group, index) = findTabIndex(for: webView) else { return }
             var state = state(for: group)
             state.tabs[index].lastKnownURL = webView.url
+            if let urlString = (webView.url ?? state.tabs[index].lastKnownURL)?.absoluteString {
+                state.tabs[index].isBookmarked = BookmarkStore.shared.contains(urlString: urlString)
+            } else {
+                state.tabs[index].isBookmarked = false
+            }
             setState(state, for: group)
             if group == currentGroup {
                 notifyCurrentGroupUpdated(selectCurrent: false)

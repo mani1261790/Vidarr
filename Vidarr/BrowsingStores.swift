@@ -76,6 +76,7 @@ final class BrowsingHistoryStore {
 
 final class BookmarkStore {
     static let shared = BookmarkStore()
+    static let didChangeNotification = Notification.Name("BookmarkStoreDidChange")
 
     private enum Key {
         static let bookmarkItems = "bookmarks.items"
@@ -110,6 +111,14 @@ final class BookmarkStore {
         persist()
     }
 
+    func contains(url: URL) -> Bool {
+        items.contains { $0.urlString == url.absoluteString }
+    }
+
+    func contains(urlString: String) -> Bool {
+        items.contains { $0.urlString == urlString }
+    }
+
     func all() -> [BrowsingItem] {
         items
     }
@@ -133,5 +142,6 @@ final class BookmarkStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(items) else { return }
         defaults.set(data, forKey: Key.bookmarkItems)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 }

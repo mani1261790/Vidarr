@@ -3,6 +3,18 @@ import AVFoundation
 import UniformTypeIdentifiers
 import WebKit
 
+private final class PDFExportContext {
+    unowned let controller: MainWindowController
+    let fallbackData: Data?
+    let destinationURL: URL
+
+    init(controller: MainWindowController, fallbackData: Data?, destinationURL: URL) {
+        self.controller = controller
+        self.fallbackData = fallbackData
+        self.destinationURL = destinationURL
+    }
+}
+
 final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 54
@@ -618,38 +630,64 @@ final class MainWindowController: NSWindowController {
     }
 
     private func exportWebViewToPDF(_ webView: WKWebView, destinationURL: URL) {
-        let writeData: (Data) -> Void = { [weak self] data in
+        DispatchQueue.main.async { [weak self, weak webView] in
+            guard let self, let webView else { return }
+            webView.layoutSubtreeIfNeeded()
+
+            let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+            printInfo.jobDisposition = .save
+            printInfo.horizontalPagination = .automatic
+            printInfo.verticalPagination = .automatic
+            printInfo.isHorizontallyCentered = true
+            printInfo.topMargin = 16
+            printInfo.bottomMargin = 16
+            printInfo.leftMargin = 16
+            printInfo.rightMargin = 16
+            printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = destinationURL
+
+            let operation = webView.printOperation(with: printInfo)
+            operation.showsPrintPanel = false
+            operation.showsProgressPanel = true
+
+            let didRunSelector = #selector(Self.exportPDFDidRun(_:success:contextInfo:))
+            let context = Unmanaged.passRetained(PDFExportContext(controller: self, fallbackData: self.fallbackPDFData(for: webView), destinationURL: destinationURL)).toOpaque()
+
+            guard let modalWindow = self.window ?? NSApp.keyWindow else {
+                self.finishPDFExport(success: false, contextInfo: context)
+                return
+            }
+            operation.runModal(for: modalWindow, delegate: self, didRun: didRunSelector, contextInfo: context)
+        }
+    }
+
+    @objc private func exportPDFDidRun(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        finishPDFExport(success: success, contextInfo: contextInfo)
+    }
+
+    private func finishPDFExport(success: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        guard let contextInfo else { return }
+        let context = Unmanaged<PDFExportContext>.fromOpaque(contextInfo).takeRetainedValue()
+        guard !success else { return }
+
+        if let fallbackData = context.fallbackData {
             do {
-                try data.write(to: destinationURL, options: .atomic)
+                try fallbackData.write(to: context.destinationURL, options: .atomic)
+                return
             } catch {
-                self?.presentDocumentAlert(
+                context.controller.presentDocumentAlert(
                     title: "PDF保存に失敗しました",
                     message: error.localizedDescription,
                     style: .warning
                 )
+                return
             }
         }
 
-        DispatchQueue.main.async { [weak self, weak webView] in
-            guard let self, let webView else { return }
-            webView.layoutSubtreeIfNeeded()
-            webView.createPDF(configuration: WKPDFConfiguration()) { result in
-                switch result {
-                case .success(let data):
-                    writeData(data)
-                case .failure:
-                    if let fallback = self.fallbackPDFData(for: webView) {
-                        writeData(fallback)
-                    } else {
-                        self.presentDocumentAlert(
-                            title: "PDF保存に失敗しました",
-                            message: "このページのPDFを書き出せませんでした。",
-                            style: .warning
-                        )
-                    }
-                }
-            }
-        }
+        context.controller.presentDocumentAlert(
+            title: "PDF保存に失敗しました",
+            message: "このページのPDFを書き出せませんでした。",
+            style: .warning
+        )
     }
 
     private func fallbackPDFData(for webView: WKWebView) -> Data? {

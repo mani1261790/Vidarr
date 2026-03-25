@@ -648,30 +648,6 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
-        let scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .noBorder
-        contentView.addSubview(scrollView)
-
-        let documentView = NSView()
-        documentView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = documentView
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-
-            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
-            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
-            documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
-            documentView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
-            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
-        ])
-
         let titleLabel = NSTextField(labelWithString: "Preferences")
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 24, weight: .semibold)
@@ -681,40 +657,26 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         summaryLabel.textColor = .secondaryLabelColor
         summaryLabel.stringValue = "ホームページ、ジェスチャー、プライバシー、保存データをここでまとめて管理できます。"
 
-        let rootStack = NSStackView()
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
-        rootStack.orientation = .vertical
-        rootStack.alignment = .leading
-        rootStack.spacing = 18
-        documentView.addSubview(titleLabel)
-        documentView.addSubview(summaryLabel)
-        documentView.addSubview(rootStack)
+        let tabView = NSTabView()
+        tabView.translatesAutoresizingMaskIntoConstraints = false
+        tabView.tabViewType = .topTabsBezelBorder
+        contentView.addSubview(titleLabel)
+        contentView.addSubview(summaryLabel)
+        contentView.addSubview(tabView)
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 20),
-            titleLabel.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 22),
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
 
             summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             summaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            summaryLabel.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -22),
+            summaryLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
 
-            rootStack.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 18),
-            rootStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 22),
-            rootStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -22),
-            rootStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20)
+            tabView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 14),
+            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
         ])
-
-        let generalSection = makeSectionContainer()
-        let gestureSection = makeSectionContainer()
-        let privacySection = makeSectionContainer()
-        let dataSection = makeSectionContainer()
-        let resetSection = makeSectionContainer()
-
-        rootStack.addArrangedSubview(generalSection)
-        rootStack.addArrangedSubview(gestureSection)
-        rootStack.addArrangedSubview(privacySection)
-        rootStack.addArrangedSubview(dataSection)
-        rootStack.addArrangedSubview(resetSection)
 
         let homeLabel = makeFieldLabel("スタートページ URL")
 
@@ -781,10 +743,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openBookmarksButton.action = #selector(openBookmarks)
         openSiteControlsButton.action = #selector(openSiteControls)
 
-        let generalTitle = makeSectionTitle("General")
-        generalSection.addSubview(generalTitle)
         let generalGrid = makeTwoColumnGrid()
-        let generalStack = makeSectionContentStack(in: generalSection, titleView: generalTitle)
+        let generalSection = makeSectionContentStack()
+        let generalStack = generalSection
         generalStack.addArrangedSubview(configureSummaryLabel(generalSummaryLabel))
         generalStack.addArrangedSubview(homeLabel)
         generalStack.addArrangedSubview(homePageField)
@@ -795,9 +756,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalGrid.addArrangedSubview(openDownloadsButton)
         generalGrid.addArrangedSubview(openHistoryButton)
 
-        let gestureTitle = makeSectionTitle("Gestures")
-        gestureSection.addSubview(gestureTitle)
-        let gestureStack = makeSectionContentStack(in: gestureSection, titleView: gestureTitle)
+        let gestureSection = makeSectionContentStack()
+        let gestureStack = gestureSection
         gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
         let sensitivityRow = NSStackView()
         sensitivityRow.orientation = .horizontal
@@ -807,9 +767,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         sensitivityRow.addArrangedSubview(sensitivityPopup)
         gestureStack.addArrangedSubview(sensitivityRow)
 
-        let privacyTitle = makeSectionTitle("Privacy")
-        privacySection.addSubview(privacyTitle)
-        let privacyStack = makeSectionContentStack(in: privacySection, titleView: privacyTitle)
+        let privacySection = makeSectionContentStack()
+        let privacyStack = privacySection
         privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
         privacyStack.addArrangedSubview(antiTrackingCheckbox)
         privacyStack.addArrangedSubview(contentBlockingCheckbox)
@@ -818,9 +777,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         privacyStack.addArrangedSubview(ephemeralModeCheckbox)
         privacyStack.addArrangedSubview(doNotTrackCheckbox)
 
-        let dataTitle = makeSectionTitle("Saved Data")
-        dataSection.addSubview(dataTitle)
-        let dataStack = makeSectionContentStack(in: dataSection, titleView: dataTitle)
+        let dataSection = makeSectionContentStack()
+        let dataStack = dataSection
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         let dataGrid = makeTwoColumnGrid()
         dataStack.addArrangedSubview(dataGrid)
@@ -828,36 +786,19 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(clearDataButton)
 
-        let resetTitle = makeSectionTitle("Reset")
-        resetSection.addSubview(resetTitle)
-        let resetStack = makeSectionContentStack(in: resetSection, titleView: resetTitle)
+        let resetSection = makeSectionContentStack()
+        let resetStack = resetSection
         let resetNote = NSTextField(wrappingLabelWithString: "ホームページ、検索、ジェスチャー感度、プライバシー設定を初期状態に戻します。")
         resetNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         resetNote.textColor = .secondaryLabelColor
         resetStack.addArrangedSubview(resetNote)
         resetStack.addArrangedSubview(resetButton)
 
-        for section in [generalSection, gestureSection, privacySection, dataSection, resetSection] {
-            section.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
-        }
-    }
-
-    private func makeSectionContainer() -> NSView {
-        let view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        view.wantsLayer = true
-        view.layer?.cornerRadius = 14
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
-        view.layer?.borderWidth = 1
-        view.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-        return view
-    }
-
-    private func makeSectionTitle(_ text: String) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        return label
+        tabView.addTabViewItem(makeTab(title: "General", content: wrapTabContent(generalSection)))
+        tabView.addTabViewItem(makeTab(title: "Gestures", content: wrapTabContent(gestureSection)))
+        tabView.addTabViewItem(makeTab(title: "Privacy", content: wrapTabContent(privacySection)))
+        tabView.addTabViewItem(makeTab(title: "Saved Data", content: wrapTabContent(dataSection)))
+        tabView.addTabViewItem(makeTab(title: "Reset", content: wrapTabContent(resetSection)))
     }
 
     private func makeFieldLabel(_ text: String) -> NSTextField {
@@ -893,24 +834,39 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         }
     }
 
-    private func makeSectionContentStack(in container: NSView, titleView: NSView) -> NSStackView {
+    private func makeSectionContentStack() -> NSStackView {
         let stack = NSStackView()
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
+        stack.distribution = .gravityAreas
+        stack.spacing = 12
+        return stack
+    }
+
+    private func wrapTabContent(_ stack: NSStackView) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 14
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
+        container.layer?.borderWidth = 1
+        container.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
         container.addSubview(stack)
         NSLayoutConstraint.activate([
-            titleView.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-            titleView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            titleView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-
-            stack.topAnchor.constraint(equalTo: titleView.bottomAnchor, constant: 12),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16)
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -18),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -18)
         ])
-        return stack
+        return container
+    }
+
+    private func makeTab(title: String, content: NSView) -> NSTabViewItem {
+        let item = NSTabViewItem(identifier: title)
+        item.label = title
+        item.view = content
+        return item
     }
 
     private func makeTwoColumnGrid() -> NSStackView {

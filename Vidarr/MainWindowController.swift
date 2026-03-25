@@ -590,10 +590,18 @@ final class MainWindowController: NSWindowController {
 
     func menuPrintPage() {
         guard let webView = tabManager.currentWebView else { return }
-        let operation = webView.printOperation(with: .init())
+        let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+        printInfo.horizontalPagination = .automatic
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = true
+        let operation = webView.printOperation(with: printInfo)
         operation.showsPrintPanel = true
         operation.showsProgressPanel = true
-        operation.run()
+        if let modalWindow = window ?? NSApp.keyWindow {
+            operation.runModal(for: modalWindow, delegate: nil, didRun: nil, contextInfo: nil)
+        } else {
+            operation.run()
+        }
     }
 
     func menuExportPDF() {
@@ -605,26 +613,60 @@ final class MainWindowController: NSWindowController {
         guard let modalWindow = window ?? NSApp.keyWindow else { return }
         savePanel.beginSheetModal(for: modalWindow) { [weak self] response in
             guard response == .OK, let destinationURL = savePanel.url else { return }
+            self?.exportWebViewToPDF(webView, destinationURL: destinationURL)
+        }
+    }
+
+    private func exportWebViewToPDF(_ webView: WKWebView, destinationURL: URL) {
+        let writeData: (Data) -> Void = { [weak self] data in
+            do {
+                try data.write(to: destinationURL, options: .atomic)
+            } catch {
+                self?.presentDocumentAlert(
+                    title: "PDF保存に失敗しました",
+                    message: error.localizedDescription,
+                    style: .warning
+                )
+            }
+        }
+
+        DispatchQueue.main.async { [weak self, weak webView] in
+            guard let self, let webView else { return }
+            webView.layoutSubtreeIfNeeded()
             webView.createPDF(configuration: WKPDFConfiguration()) { result in
                 switch result {
                 case .success(let data):
-                    do {
-                        try data.write(to: destinationURL, options: .atomic)
-                    } catch {
-                        self?.presentTransientAlert(
+                    writeData(data)
+                case .failure:
+                    if let fallback = self.fallbackPDFData(for: webView) {
+                        writeData(fallback)
+                    } else {
+                        self.presentDocumentAlert(
                             title: "PDF保存に失敗しました",
-                            message: error.localizedDescription,
+                            message: "このページのPDFを書き出せませんでした。",
                             style: .warning
                         )
                     }
-                case .failure(let error):
-                    self?.presentTransientAlert(
-                        title: "PDF保存に失敗しました",
-                        message: error.localizedDescription,
-                        style: .warning
-                    )
                 }
             }
+        }
+    }
+
+    private func fallbackPDFData(for webView: WKWebView) -> Data? {
+        let targetRect = webView.bounds.isEmpty ? NSRect(x: 0, y: 0, width: 1280, height: 800) : webView.bounds
+        return webView.dataWithPDF(inside: targetRect)
+    }
+
+    private func presentDocumentAlert(title: String, message: String, style: NSAlert.Style) {
+        let alert = NSAlert()
+        alert.alertStyle = style
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        if let modalWindow = window ?? NSApp.keyWindow {
+            alert.beginSheetModal(for: modalWindow)
+        } else {
+            alert.runModal()
         }
     }
 

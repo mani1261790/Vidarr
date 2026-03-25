@@ -54,6 +54,12 @@ final class DownloadStore {
         persist()
     }
 
+    func remove(destinationPaths: Set<String>) {
+        guard !destinationPaths.isEmpty else { return }
+        items.removeAll { destinationPaths.contains($0.destinationPath) }
+        persist()
+    }
+
     private func persist() {
         guard let data = try? JSONEncoder().encode(items) else { return }
         defaults.set(data, forKey: Key.items)
@@ -176,8 +182,11 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
     private let emptyStateLabel = NSTextField(labelWithString: "")
-    private let tableView = NSTableView()
+    private let tableView = SelectionAwareTableView()
     private let scrollView = NSScrollView()
+    private let openButton = NSButton(title: "Open", target: nil, action: nil)
+    private let revealButton = NSButton(title: "Reveal", target: nil, action: nil)
+    private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     private var items: [DownloadItem] = []
     private var filteredItems: [DownloadItem] = []
 
@@ -236,6 +245,8 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         tableView.target = self
         tableView.doubleAction = #selector(openSelectedDownload)
         tableView.selectionHighlightStyle = .regular
+        tableView.allowsMultipleSelection = true
+        tableView.menu = makeContextMenu()
 
         let itemColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("item"))
         itemColumn.resizingMask = .autoresizingMask
@@ -260,13 +271,20 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         contentView.addSubview(scrollView)
         contentView.addSubview(emptyStateLabel)
 
-        let openButton = NSButton(title: "Open", target: self, action: #selector(openSelectedDownload))
         openButton.translatesAutoresizingMaskIntoConstraints = false
+        openButton.target = self
+        openButton.action = #selector(openSelectedDownload)
         contentView.addSubview(openButton)
 
-        let revealButton = NSButton(title: "Reveal", target: self, action: #selector(revealSelectedDownload))
         revealButton.translatesAutoresizingMaskIntoConstraints = false
+        revealButton.target = self
+        revealButton.action = #selector(revealSelectedDownload)
         contentView.addSubview(revealButton)
+
+        removeButton.translatesAutoresizingMaskIntoConstraints = false
+        removeButton.target = self
+        removeButton.action = #selector(removeSelectedDownloads)
+        contentView.addSubview(removeButton)
 
         let clearButton = NSButton(title: "Clear Downloads", target: self, action: #selector(clearDownloads))
         clearButton.translatesAutoresizingMaskIntoConstraints = false
@@ -294,9 +312,14 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
             revealButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
             revealButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
 
-            openButton.trailingAnchor.constraint(equalTo: revealButton.leadingAnchor, constant: -8),
+            removeButton.trailingAnchor.constraint(equalTo: revealButton.leadingAnchor, constant: -8),
+            removeButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+
+            openButton.trailingAnchor.constraint(equalTo: removeButton.leadingAnchor, constant: -8),
             openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
         ])
+
+        updateActionButtons()
     }
 
     private func reloadData() {
@@ -322,6 +345,7 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         updateSummary()
         emptyStateLabel.isHidden = !filteredItems.isEmpty
         tableView.reloadData()
+        updateActionButtons()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -341,7 +365,7 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = BrowsingItemRowView()
-        rowView.setSelected(row == tableView.selectedRow)
+        rowView.setSelected(tableView.selectedRowIndexes.contains(row))
         return rowView
     }
 
@@ -349,21 +373,37 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         _ = notification
         for row in 0..<tableView.numberOfRows {
             if let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) as? BrowsingItemRowView {
-                rowView.setSelected(row == tableView.selectedRow)
+                rowView.setSelected(tableView.selectedRowIndexes.contains(row))
             }
         }
+        updateActionButtons()
     }
 
     @objc private func openSelectedDownload() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < filteredItems.count else { return }
-        NSWorkspace.shared.open(filteredItems[row].destinationURL)
+        let selectedItems = selectedDownloadItems()
+        guard !selectedItems.isEmpty else { return }
+        for item in selectedItems {
+            NSWorkspace.shared.open(item.destinationURL)
+        }
     }
 
     @objc private func revealSelectedDownload() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < filteredItems.count else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([filteredItems[row].destinationURL])
+        let selectedItems = selectedDownloadItems()
+        guard !selectedItems.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(selectedItems.map(\.destinationURL))
+    }
+
+    @objc private func removeSelectedDownloads() {
+        let selectedItems = selectedDownloadItems()
+        guard !selectedItems.isEmpty else { return }
+        let title = selectedItems.count == 1 ? "Remove selected download?" : "Remove \(selectedItems.count) downloads?"
+        presentConfirmation(
+            title: title,
+            message: "This removes the selected items from Vidarr's download list. Downloaded files themselves are not deleted."
+        ) { [weak self] in
+            DownloadStore.shared.remove(destinationPaths: Set(selectedItems.map(\.destinationPath)))
+            self?.reloadData()
+        }
     }
 
     @objc private func clearDownloads() {
@@ -388,6 +428,35 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         } else {
             summaryLabel.stringValue = "\(filteredItems.count) shown of \(total)"
         }
+    }
+
+    private func selectedDownloadItems() -> [DownloadItem] {
+        let rows = tableView.selectedRowIndexes
+        return rows.compactMap { row in
+            guard row >= 0, row < filteredItems.count else { return nil }
+            return filteredItems[row]
+        }
+    }
+
+    private func updateActionButtons() {
+        let count = selectedDownloadItems().count
+        let hasSelection = count > 0
+        openButton.isEnabled = hasSelection
+        revealButton.isEnabled = hasSelection
+        removeButton.isEnabled = hasSelection
+        openButton.title = count > 1 ? "Open Selected" : "Open"
+        revealButton.title = count > 1 ? "Reveal Selected" : "Reveal"
+        removeButton.title = count > 1 ? "Remove Selected" : "Remove"
+    }
+
+    private func makeContextMenu() -> NSMenu {
+        let menu = NSMenu(title: "Downloads")
+        menu.addItem(NSMenuItem(title: "Open", action: #selector(openSelectedDownload), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Reveal in Finder", action: #selector(revealSelectedDownload), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Remove from List", action: #selector(removeSelectedDownloads), keyEquivalent: ""))
+        menu.items.forEach { $0.target = self }
+        return menu
     }
 
     private func presentConfirmation(title: String, message: String, confirmed: @escaping () -> Void) {
@@ -493,8 +562,10 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
     private let emptyStateLabel = NSTextField(labelWithString: "")
-    private let tableView = NSTableView()
+    private let tableView = SelectionAwareTableView()
     private let scrollView = NSScrollView()
+    private let openButton = NSButton(title: "Open", target: nil, action: nil)
+    private let deleteButton = NSButton(title: "Delete", target: nil, action: nil)
     private var items: [BrowsingItem] = []
     private var filteredItems: [BrowsingItem] = []
     private let mode: Mode
@@ -558,6 +629,8 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         tableView.target = self
         tableView.doubleAction = #selector(openSelectedItem)
         tableView.selectionHighlightStyle = .regular
+        tableView.allowsMultipleSelection = true
+        tableView.menu = makeContextMenu()
 
         let itemColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("item"))
         itemColumn.resizingMask = .autoresizingMask
@@ -585,13 +658,15 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         contentView.addSubview(scrollView)
         contentView.addSubview(emptyStateLabel)
 
-        let openButton = NSButton(title: "Open", target: self, action: #selector(openSelectedItem))
         openButton.translatesAutoresizingMaskIntoConstraints = false
         openButton.bezelStyle = .rounded
+        openButton.target = self
+        openButton.action = #selector(openSelectedItem)
         contentView.addSubview(openButton)
 
-        let deleteButton = NSButton(title: "Delete", target: self, action: #selector(deleteSelectedItem))
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteSelectedItem)
         contentView.addSubview(deleteButton)
 
         let clearButton = NSButton(title: mode == .history ? "Clear History" : "Clear Bookmarks", target: self, action: #selector(clearAllItems))
@@ -624,6 +699,8 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
             openButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
             openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
         ])
+
+        updateActionButtons()
     }
 
     private func reloadData() {
@@ -648,6 +725,7 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         updateSummary()
         emptyStateLabel.isHidden = !filteredItems.isEmpty
         tableView.reloadData()
+        updateActionButtons()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -667,7 +745,7 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = BrowsingItemRowView()
-        rowView.setSelected(row == tableView.selectedRow)
+        rowView.setSelected(tableView.selectedRowIndexes.contains(row))
         return rowView
     }
 
@@ -675,28 +753,72 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         _ = notification
         for row in 0..<tableView.numberOfRows {
             if let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) as? BrowsingItemRowView {
-                rowView.setSelected(row == tableView.selectedRow)
+                rowView.setSelected(tableView.selectedRowIndexes.contains(row))
+            }
+        }
+        updateActionButtons()
+    }
+
+    @objc private func openSelectedItem() {
+        let selected = selectedItems()
+        guard !selected.isEmpty else { return }
+        for item in selected {
+            if let url = item.url {
+                openHandler(url)
             }
         }
     }
 
-    @objc private func openSelectedItem() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < filteredItems.count, let url = filteredItems[row].url else { return }
-        openHandler(url)
+    @objc private func deleteSelectedItem() {
+        let selected = selectedItems()
+        guard !selected.isEmpty else { return }
+        let count = selected.count
+        let title = mode == .history
+            ? (count == 1 ? "Delete selected history entry?" : "Delete \(count) history entries?")
+            : (count == 1 ? "Delete selected bookmark?" : "Delete \(count) bookmarks?")
+        let message = mode == .history
+            ? "This removes the selected entries from Vidarr's browsing history."
+            : "This removes the selected entries from Vidarr's bookmarks."
+        presentConfirmation(title: title, message: message) { [weak self] in
+            for urlString in selected.map(\.urlString) {
+                switch self?.mode {
+                case .history:
+                    BrowsingHistoryStore.shared.remove(urlString: urlString)
+                case .bookmarks:
+                    BookmarkStore.shared.remove(urlString: urlString)
+                case .none:
+                    break
+                }
+            }
+            self?.reloadData()
+        }
     }
 
-    @objc private func deleteSelectedItem() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < filteredItems.count else { return }
-        let urlString = filteredItems[row].urlString
-        switch mode {
-        case .history:
-            BrowsingHistoryStore.shared.remove(urlString: urlString)
-        case .bookmarks:
-            BookmarkStore.shared.remove(urlString: urlString)
+    private func selectedItems() -> [BrowsingItem] {
+        let rows = tableView.selectedRowIndexes
+        return rows.compactMap { row in
+            guard row >= 0, row < filteredItems.count else { return nil }
+            return filteredItems[row]
         }
-        reloadData()
+    }
+
+    private func updateActionButtons() {
+        let count = selectedItems().count
+        let hasSelection = count > 0
+        openButton.isEnabled = hasSelection
+        deleteButton.isEnabled = hasSelection
+        openButton.title = count > 1 ? "Open Selected" : "Open"
+        deleteButton.title = count > 1 ? "Delete Selected" : "Delete"
+    }
+
+    private func makeContextMenu() -> NSMenu {
+        let menu = NSMenu(title: mode == .history ? "History" : "Bookmarks")
+        let openTitle = mode == .history ? "Open Selected in New Tabs" : "Open Selected in New Tabs"
+        menu.addItem(NSMenuItem(title: openTitle, action: #selector(openSelectedItem), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Delete Selected", action: #selector(deleteSelectedItem), keyEquivalent: ""))
+        menu.items.forEach { $0.target = self }
+        return menu
     }
 
     @objc private func clearAllItems() {
@@ -864,12 +986,23 @@ private final class BrowsingItemRowView: NSTableRowView {
     }
 }
 
+private final class SelectionAwareTableView: NSTableView {
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
+        if row >= 0, !selectedRowIndexes.contains(row) {
+            selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        }
+        return super.menu(for: event)
+    }
+}
+
 final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
-    private let exceptionsTableView = NSTableView()
-    private let harmfulHostsTableView = NSTableView()
-    private let mediaPermissionsTableView = NSTableView()
+    private let exceptionsTableView = SelectionAwareTableView()
+    private let harmfulHostsTableView = SelectionAwareTableView()
+    private let mediaPermissionsTableView = SelectionAwareTableView()
     private var exceptionHosts: [String] = []
     private var harmfulAllowedHosts: [String] = []
     private var mediaPermissions: [StoredMediaPermission] = []
@@ -942,7 +1075,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             tableView: exceptionsTableView,
             columns: [("host", 400), ("state", 220)],
             deleteAction: #selector(removeSelectedBlockingException),
-            deleteTitle: "Turn Blocking Back On"
+            deleteTitle: "Turn Blocking Back On for Selected"
         ))
 
         root.addArrangedSubview(makeSectionHeader(
@@ -953,7 +1086,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             tableView: harmfulHostsTableView,
             columns: [("host", 400), ("state", 220)],
             deleteAction: #selector(removeSelectedHarmfulHostException),
-            deleteTitle: "Restore Warning"
+            deleteTitle: "Restore Warning for Selected"
         ))
 
         root.addArrangedSubview(makeSectionHeader(
@@ -964,7 +1097,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             tableView: mediaPermissionsTableView,
             columns: [("host", 250), ("permission", 220), ("decision", 120)],
             deleteAction: #selector(removeSelectedMediaPermission),
-            deleteTitle: "Ask Again Next Time"
+            deleteTitle: "Ask Again for Selected"
         ))
     }
 
@@ -1007,6 +1140,8 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         tableView.intercellSpacing = NSSize(width: 0, height: 4)
         tableView.delegate = self
         tableView.dataSource = self
+        tableView.allowsMultipleSelection = true
+        tableView.menu = makeContextMenu(for: tableView)
 
         for (identifier, width) in columns {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
@@ -1111,25 +1246,57 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
     }
 
     @objc private func removeSelectedBlockingException() {
-        let row = exceptionsTableView.selectedRow
-        guard row >= 0, row < exceptionHosts.count else { return }
-        BrowserPreferences.shared.setContentBlockingDisabled(false, for: exceptionHosts[row])
+        let hosts = selectedHosts(in: exceptionsTableView, from: exceptionHosts)
+        guard !hosts.isEmpty else { return }
+        for host in hosts {
+            BrowserPreferences.shared.setContentBlockingDisabled(false, for: host)
+        }
         reloadData()
     }
 
     @objc private func removeSelectedMediaPermission() {
-        let row = mediaPermissionsTableView.selectedRow
-        guard row >= 0, row < mediaPermissions.count else { return }
-        let permission = mediaPermissions[row]
-        MediaPermissionStore.shared.remove(host: permission.host, kind: permission.kind)
+        let selectedPermissions = selectedMediaPermissions()
+        guard !selectedPermissions.isEmpty else { return }
+        for permission in selectedPermissions {
+            MediaPermissionStore.shared.remove(host: permission.host, kind: permission.kind)
+        }
         reloadData()
     }
 
     @objc private func removeSelectedHarmfulHostException() {
-        let row = harmfulHostsTableView.selectedRow
-        guard row >= 0, row < harmfulAllowedHosts.count else { return }
-        BrowserPreferences.shared.setHarmfulSiteAllowed(false, for: harmfulAllowedHosts[row])
+        let hosts = selectedHosts(in: harmfulHostsTableView, from: harmfulAllowedHosts)
+        guard !hosts.isEmpty else { return }
+        for host in hosts {
+            BrowserPreferences.shared.setHarmfulSiteAllowed(false, for: host)
+        }
         reloadData()
+    }
+
+    private func selectedHosts(in tableView: NSTableView, from source: [String]) -> [String] {
+        tableView.selectedRowIndexes.compactMap { row in
+            guard row >= 0, row < source.count else { return nil }
+            return source[row]
+        }
+    }
+
+    private func selectedMediaPermissions() -> [StoredMediaPermission] {
+        mediaPermissionsTableView.selectedRowIndexes.compactMap { row in
+            guard row >= 0, row < mediaPermissions.count else { return nil }
+            return mediaPermissions[row]
+        }
+    }
+
+    private func makeContextMenu(for tableView: NSTableView) -> NSMenu {
+        let menu = NSMenu(title: "Actions")
+        if tableView === exceptionsTableView {
+            menu.addItem(NSMenuItem(title: "Turn Blocking Back On for Selected", action: #selector(removeSelectedBlockingException), keyEquivalent: ""))
+        } else if tableView === harmfulHostsTableView {
+            menu.addItem(NSMenuItem(title: "Restore Warning for Selected", action: #selector(removeSelectedHarmfulHostException), keyEquivalent: ""))
+        } else {
+            menu.addItem(NSMenuItem(title: "Ask Again for Selected", action: #selector(removeSelectedMediaPermission), keyEquivalent: ""))
+        }
+        menu.items.forEach { $0.target = self }
+        return menu
     }
 
     private func displayName(for kind: MediaPermissionKind) -> String {

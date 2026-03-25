@@ -12,6 +12,7 @@ struct BrowsingItem: Codable {
 
 final class BrowsingHistoryStore {
     static let shared = BrowsingHistoryStore()
+    static let didChangeNotification = Notification.Name("BrowsingHistoryStoreDidChange")
 
     private enum Key {
         static let historyItems = "history.items"
@@ -71,6 +72,7 @@ final class BrowsingHistoryStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(items) else { return }
         defaults.set(data, forKey: Key.historyItems)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 }
 

@@ -12,6 +12,7 @@ struct DownloadItem: Codable {
 
 final class DownloadStore {
     static let shared = DownloadStore()
+    static let didChangeNotification = Notification.Name("DownloadStoreDidChange")
 
     private enum Key {
         static let items = "downloads.items"
@@ -63,6 +64,7 @@ final class DownloadStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(items) else { return }
         defaults.set(data, forKey: Key.items)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 }
 
@@ -113,6 +115,7 @@ struct StoredMediaPermission {
 
 final class MediaPermissionStore {
     static let shared = MediaPermissionStore()
+    static let didChangeNotification = Notification.Name("MediaPermissionStoreDidChange")
 
     private enum Key {
         static let decisions = "media.permissions.decisions"
@@ -174,6 +177,7 @@ final class MediaPermissionStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(decisions) else { return }
         defaults.set(data, forKey: Key.decisions)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 }
 

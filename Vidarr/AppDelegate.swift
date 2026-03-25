@@ -594,6 +594,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
+    private let generalSummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let dataSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
     private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
     private let contentBlockingCheckbox = NSButton(checkboxWithTitle: "広告/追跡スクリプトをブロック", target: nil, action: nil)
@@ -604,6 +608,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let summaryLabel = NSTextField(labelWithString: "")
+    private let openDownloadsButton = NSButton(title: "", target: nil, action: nil)
+    private let openHistoryButton = NSButton(title: "", target: nil, action: nil)
+    private let openBookmarksButton = NSButton(title: "", target: nil, action: nil)
+    private let openSiteControlsButton = NSButton(title: "", target: nil, action: nil)
+    private var observers: [NSObjectProtocol] = []
 
     init(
         openDownloads: @escaping () -> Void,
@@ -625,11 +634,16 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         window.isReleasedWhenClosed = false
         super.init(window: window)
         setupUI()
+        setupObservers()
         loadValues()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
     }
 
     private func setupUI() {
@@ -758,17 +772,19 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let resetButton = NSButton(title: "デフォルトに戻す", target: self, action: #selector(resetDefaults))
         resetButton.translatesAutoresizingMaskIntoConstraints = false
-        let openDownloadsButton = NSButton(title: "ダウンロード一覧を開く", target: self, action: #selector(openDownloads))
-        let openHistoryButton = NSButton(title: "履歴を管理", target: self, action: #selector(openHistory))
-        let openBookmarksButton = NSButton(title: "ブックマークを管理", target: self, action: #selector(openBookmarks))
-        let openSiteControlsButton = NSButton(title: "サイトごとの例外を管理", target: self, action: #selector(openSiteControls))
         [openDownloadsButton, openHistoryButton, openBookmarksButton, openSiteControlsButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
+            $0.target = self
         }
+        openDownloadsButton.action = #selector(openDownloads)
+        openHistoryButton.action = #selector(openHistory)
+        openBookmarksButton.action = #selector(openBookmarks)
+        openSiteControlsButton.action = #selector(openSiteControls)
 
         let generalGrid = makeTwoColumnGrid()
         generalSection.addSubview(makeSectionTitle("General"))
         let generalStack = makeSectionContentStack(in: generalSection)
+        generalStack.addArrangedSubview(configureSummaryLabel(generalSummaryLabel))
         generalStack.addArrangedSubview(homeLabel)
         generalStack.addArrangedSubview(homePageField)
         generalStack.addArrangedSubview(searchLabel)
@@ -780,6 +796,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let gestureStack = makeSectionContentStack(in: gestureSection)
         gestureSection.addSubview(makeSectionTitle("Gestures"))
+        gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
         let sensitivityRow = NSStackView()
         sensitivityRow.orientation = .horizontal
         sensitivityRow.alignment = .centerY
@@ -790,6 +807,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let privacyStack = makeSectionContentStack(in: privacySection)
         privacySection.addSubview(makeSectionTitle("Privacy"))
+        privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
         privacyStack.addArrangedSubview(antiTrackingCheckbox)
         privacyStack.addArrangedSubview(contentBlockingCheckbox)
         privacyStack.addArrangedSubview(popupBlockingCheckbox)
@@ -799,6 +817,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let dataStack = makeSectionContentStack(in: dataSection)
         dataSection.addSubview(makeSectionTitle("Saved Data"))
+        dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         let dataGrid = makeTwoColumnGrid()
         dataStack.addArrangedSubview(dataGrid)
         dataGrid.addArrangedSubview(openBookmarksButton)
@@ -841,6 +860,32 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         label.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
+    }
+
+    private func configureSummaryLabel(_ label: NSTextField) -> NSTextField {
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        label.textColor = .secondaryLabelColor
+        label.maximumNumberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        return label
+    }
+
+    private func setupObservers() {
+        let center = NotificationCenter.default
+        let names = [
+            BrowserPreferences.didChangeNotification,
+            BrowsingHistoryStore.didChangeNotification,
+            BookmarkStore.didChangeNotification,
+            DownloadStore.didChangeNotification,
+            MediaPermissionStore.didChangeNotification
+        ]
+        names.forEach { name in
+            let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.loadValues()
+            }
+            observers.append(observer)
+        }
     }
 
     private func makeSectionContentStack(in container: NSView) -> NSStackView {
@@ -890,6 +935,34 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             sensitivityPopup.selectItem(at: 1)
         }
+
+        let homeHost = URL(string: prefs.homePageURLString)?.host ?? prefs.homePageURLString
+        let searchHost = URL(string: prefs.searchTemplate)?.host ?? prefs.searchTemplate
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")"
+
+        gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
+
+        privacySummaryLabel.stringValue = [
+            "追跡除去 \(prefs.antiTrackingEnabled ? "オン" : "オフ")",
+            "広告ブロック \(prefs.contentBlockingEnabled ? "オン" : "オフ")",
+            "ポップアップ抑止 \(prefs.popupBlockingEnabled ? "オン" : "オフ")",
+            "有害サイト警告 \(prefs.harmfulSiteWarningEnabled ? "オン" : "オフ")",
+            "フットプリント最小化 \(prefs.ephemeralModeEnabled ? "オン" : "オフ")",
+            "DNT/GPC \(prefs.sendDoNotTrack ? "オン" : "オフ")"
+        ].joined(separator: " / ")
+
+        let historyCount = BrowsingHistoryStore.shared.all().count
+        let bookmarkCount = BookmarkStore.shared.all().count
+        let downloadCount = DownloadStore.shared.all().count
+        let contentExceptionCount = prefs.contentBlockingDisabledHosts.count
+        let harmfulExceptionCount = prefs.harmfulSiteAllowedHosts.count
+        let mediaPermissionCount = MediaPermissionStore.shared.all().count
+
+        dataSummaryLabel.stringValue = "履歴 \(historyCount)件 / ブックマーク \(bookmarkCount)件 / ダウンロード \(downloadCount)件\nサイト例外 \(contentExceptionCount + harmfulExceptionCount)件 / メディア権限 \(mediaPermissionCount)件"
+        openDownloadsButton.title = "ダウンロード一覧を開く (\(downloadCount)件)"
+        openHistoryButton.title = "履歴を管理 (\(historyCount)件)"
+        openBookmarksButton.title = "ブックマークを管理 (\(bookmarkCount)件)"
+        openSiteControlsButton.title = "サイトごとの例外を管理 (\(contentExceptionCount + harmfulExceptionCount + mediaPermissionCount)件)"
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
@@ -899,34 +972,42 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else if field == searchTemplateField {
             prefs.searchTemplate = field.stringValue
         }
+        loadValues()
     }
 
     @objc private func updatesChanged(_ sender: NSButton) {
         prefs.updatesEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func antiTrackingChanged(_ sender: NSButton) {
         prefs.antiTrackingEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func contentBlockingChanged(_ sender: NSButton) {
         prefs.contentBlockingEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func popupBlockingChanged(_ sender: NSButton) {
         prefs.popupBlockingEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func harmfulSiteWarningChanged(_ sender: NSButton) {
         prefs.harmfulSiteWarningEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func ephemeralModeChanged(_ sender: NSButton) {
         prefs.ephemeralModeEnabled = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func doNotTrackChanged(_ sender: NSButton) {
         prefs.sendDoNotTrack = (sender.state == .on)
+        loadValues()
     }
 
     @objc private func clearBrowsingData() {
@@ -960,6 +1041,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let index = sender.indexOfSelectedItem
         guard index >= 0, index < BrowserPreferences.GestureSensitivity.allCases.count else { return }
         prefs.gestureSensitivity = BrowserPreferences.GestureSensitivity.allCases[index]
+        loadValues()
     }
 
     @objc private func resetDefaults() {

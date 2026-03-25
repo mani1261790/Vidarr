@@ -617,15 +617,25 @@ final class MainWindowController: NSWindowController {
     }
 
     func menuExportPDF() {
-        guard let webView = tabManager.currentWebView else { return }
-        let savePanel = NSSavePanel()
-        savePanel.canCreateDirectories = true
-        savePanel.nameFieldStringValue = (webView.title?.isEmpty == false ? webView.title! : "Page") + ".pdf"
-        savePanel.allowedContentTypes = [.pdf]
-        guard let modalWindow = window ?? NSApp.keyWindow else { return }
-        savePanel.beginSheetModal(for: modalWindow) { [weak self] response in
-            guard response == .OK, let destinationURL = savePanel.url else { return }
-            self?.exportWebViewToPDF(webView, destinationURL: destinationURL)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let webView = self.tabManager.currentWebView else { return }
+
+            let rawTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let pageTitle = rawTitle.isEmpty ? "Page" : rawTitle
+
+            let savePanel = NSSavePanel()
+            savePanel.canCreateDirectories = true
+            savePanel.nameFieldStringValue = pageTitle + ".pdf"
+            savePanel.allowedContentTypes = [.pdf]
+
+            if let modalWindow = self.window ?? NSApp.keyWindow {
+                savePanel.beginSheetModal(for: modalWindow) { [weak self] response in
+                    guard response == .OK, let destinationURL = savePanel.url else { return }
+                    self?.exportWebViewToPDF(webView, destinationURL: destinationURL)
+                }
+            } else if savePanel.runModal() == .OK, let destinationURL = savePanel.url {
+                self.exportWebViewToPDF(webView, destinationURL: destinationURL)
+            }
         }
     }
 

@@ -186,6 +186,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         historyMenu.addItem(NSMenuItem.separator())
         historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
         historyMenu.addItem(makeMenuItem("Show Full History", action: #selector(menuOpenHistoryWindow), key: "y"))
+        historyMenu.addItem(makeMenuItem("Clear History...", action: #selector(menuClearHistory), key: "", modifiers: []))
 
         let bookmarksMenu = NSMenu(title: "Bookmarks")
         let bookmarksMenuItem = NSMenuItem(title: "Bookmarks", action: nil, keyEquivalent: "")
@@ -271,6 +272,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         historyWindowController?.showWindowAndReload()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func menuClearHistory() {
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .warning
+        confirmation.messageText = "履歴を削除しますか？"
+        confirmation.informativeText = "Vidarr に保存されている閲覧履歴をすべて削除します。ブックマーク、ダウンロード履歴、Cookie、サイト設定は削除しません。"
+        confirmation.addButton(withTitle: "削除")
+        confirmation.addButton(withTitle: "キャンセル")
+
+        let clear = {
+            BrowsingHistoryStore.shared.clear()
+            self.historyWindowController?.showWindowAndReload()
+        }
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            clear()
+        }
+
+        if let window = mainWindowController?.window {
+            confirmation.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(confirmation.runModal())
+        }
     }
 
     @objc private func menuOpenBookmarksWindow() {
@@ -464,17 +490,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let empty = NSMenuItem(title: "履歴はありません", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
-            return
+        } else {
+            for entry in entries {
+                let title = entry.title.isEmpty ? (entry.url?.host ?? entry.urlString) : entry.title
+                let item = NSMenuItem(title: title, action: #selector(menuOpenHistoryEntry(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = entry.urlString
+                item.toolTip = entry.urlString
+                menu.addItem(item)
+            }
         }
-
-        for entry in entries {
-            let title = entry.title.isEmpty ? (entry.url?.host ?? entry.urlString) : entry.title
-            let item = NSMenuItem(title: title, action: #selector(menuOpenHistoryEntry(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = entry.urlString
-            item.toolTip = entry.urlString
-            menu.addItem(item)
-        }
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(makeMenuItem("Clear History...", action: #selector(menuClearHistory), key: "", modifiers: []))
     }
 
     private func rebuildBookmarksMenu(_ menu: NSMenu) {

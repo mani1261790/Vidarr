@@ -781,9 +781,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openBookmarksButton.action = #selector(openBookmarks)
         openSiteControlsButton.action = #selector(openSiteControls)
 
+        let generalTitle = makeSectionTitle("General")
+        generalSection.addSubview(generalTitle)
         let generalGrid = makeTwoColumnGrid()
-        generalSection.addSubview(makeSectionTitle("General"))
-        let generalStack = makeSectionContentStack(in: generalSection)
+        let generalStack = makeSectionContentStack(in: generalSection, titleView: generalTitle)
         generalStack.addArrangedSubview(configureSummaryLabel(generalSummaryLabel))
         generalStack.addArrangedSubview(homeLabel)
         generalStack.addArrangedSubview(homePageField)
@@ -794,8 +795,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalGrid.addArrangedSubview(openDownloadsButton)
         generalGrid.addArrangedSubview(openHistoryButton)
 
-        let gestureStack = makeSectionContentStack(in: gestureSection)
-        gestureSection.addSubview(makeSectionTitle("Gestures"))
+        let gestureTitle = makeSectionTitle("Gestures")
+        gestureSection.addSubview(gestureTitle)
+        let gestureStack = makeSectionContentStack(in: gestureSection, titleView: gestureTitle)
         gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
         let sensitivityRow = NSStackView()
         sensitivityRow.orientation = .horizontal
@@ -805,8 +807,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         sensitivityRow.addArrangedSubview(sensitivityPopup)
         gestureStack.addArrangedSubview(sensitivityRow)
 
-        let privacyStack = makeSectionContentStack(in: privacySection)
-        privacySection.addSubview(makeSectionTitle("Privacy"))
+        let privacyTitle = makeSectionTitle("Privacy")
+        privacySection.addSubview(privacyTitle)
+        let privacyStack = makeSectionContentStack(in: privacySection, titleView: privacyTitle)
         privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
         privacyStack.addArrangedSubview(antiTrackingCheckbox)
         privacyStack.addArrangedSubview(contentBlockingCheckbox)
@@ -815,8 +818,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         privacyStack.addArrangedSubview(ephemeralModeCheckbox)
         privacyStack.addArrangedSubview(doNotTrackCheckbox)
 
-        let dataStack = makeSectionContentStack(in: dataSection)
-        dataSection.addSubview(makeSectionTitle("Saved Data"))
+        let dataTitle = makeSectionTitle("Saved Data")
+        dataSection.addSubview(dataTitle)
+        let dataStack = makeSectionContentStack(in: dataSection, titleView: dataTitle)
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         let dataGrid = makeTwoColumnGrid()
         dataStack.addArrangedSubview(dataGrid)
@@ -824,8 +828,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(clearDataButton)
 
-        let resetStack = makeSectionContentStack(in: resetSection)
-        resetSection.addSubview(makeSectionTitle("Reset"))
+        let resetTitle = makeSectionTitle("Reset")
+        resetSection.addSubview(resetTitle)
+        let resetStack = makeSectionContentStack(in: resetSection, titleView: resetTitle)
         let resetNote = NSTextField(wrappingLabelWithString: "ホームページ、検索、ジェスチャー感度、プライバシー設定を初期状態に戻します。")
         resetNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         resetNote.textColor = .secondaryLabelColor
@@ -888,8 +893,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         }
     }
 
-    private func makeSectionContentStack(in container: NSView) -> NSStackView {
-        let titleView = container.subviews.first!
+    private func makeSectionContentStack(in container: NSView, titleView: NSView) -> NSStackView {
         let stack = NSStackView()
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical

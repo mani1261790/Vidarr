@@ -79,6 +79,7 @@ final class MainWindowController: NSWindowController {
     private var longPressHandlerBoxes: [ObjectIdentifier: WeakScriptMessageHandler] = [:]
     private var downloadSourceURLs: [ObjectIdentifier: URL] = [:]
     private var downloadDestinationURLs: [ObjectIdentifier: URL] = [:]
+    private var downloadSecurityScopedAccess: [ObjectIdentifier: URL] = [:]
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -680,11 +681,15 @@ final class MainWindowController: NSWindowController {
     private func finishPDFExport(success: Bool, contextInfo: UnsafeMutableRawPointer?) {
         guard let contextInfo else { return }
         let context = Unmanaged<PDFExportContext>.fromOpaque(contextInfo).takeRetainedValue()
-        guard !success else { return }
+        if success {
+            openLocalDocument(context.destinationURL, preferNewTab: true)
+            return
+        }
 
         if let fallbackData = context.fallbackData {
             do {
                 try fallbackData.write(to: context.destinationURL, options: .atomic)
+                openLocalDocument(context.destinationURL, preferNewTab: true)
                 return
             } catch {
                 context.controller.presentDocumentAlert(
@@ -863,6 +868,34 @@ final class MainWindowController: NSWindowController {
             return
         }
         tabManager.newTab(url: url)
+    }
+
+    func menuOpenLocalFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.pdf, .html, .plainText]
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            self.openLocalDocument(url, preferNewTab: true)
+        }
+
+        if let modalWindow = window ?? NSApp.keyWindow {
+            panel.beginSheetModal(for: modalWindow, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
+    private func openLocalDocument(_ url: URL, preferNewTab: Bool) {
+        guard isSafeStoredURL(url) else { return }
+        if preferNewTab || tabManager.currentWebView == nil {
+            tabManager.newTab(url: url)
+        } else {
+            session.load(url: url)
+        }
     }
 
     func restoreSavedSessionIfAvailable() {
@@ -2478,6 +2511,17 @@ extension MainWindowController: WKUIDelegate {
 extension MainWindowController: WKDownloadDelegate {
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
         _ = response
+        if let preferredDirectory = BrowserPreferences.shared.preferredDownloadDirectoryURL() {
+            let startedAccess = preferredDirectory.startAccessingSecurityScopedResource()
+            let destinationURL = availableDestinationURL(in: preferredDirectory, suggestedFilename: suggestedFilename)
+            downloadDestinationURLs[ObjectIdentifier(download)] = destinationURL
+            if startedAccess {
+                downloadSecurityScopedAccess[ObjectIdentifier(download)] = preferredDirectory
+            }
+            completionHandler(destinationURL)
+            return
+        }
+
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = suggestedFilename
@@ -2500,6 +2544,9 @@ extension MainWindowController: WKDownloadDelegate {
 
     func downloadDidFinish(_ download: WKDownload) {
         let sourceURL = downloadSourceURLs.removeValue(forKey: ObjectIdentifier(download))
+        if let accessURL = downloadSecurityScopedAccess.removeValue(forKey: ObjectIdentifier(download)) {
+            accessURL.stopAccessingSecurityScopedResource()
+        }
         guard let destinationURL = downloadDestinationURLs.removeValue(forKey: ObjectIdentifier(download)) else {
             return
         }
@@ -2510,7 +2557,28 @@ extension MainWindowController: WKDownloadDelegate {
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
         _ = resumeData
         downloadSourceURLs.removeValue(forKey: ObjectIdentifier(download))
+        downloadDestinationURLs.removeValue(forKey: ObjectIdentifier(download))
+        if let accessURL = downloadSecurityScopedAccess.removeValue(forKey: ObjectIdentifier(download)) {
+            accessURL.stopAccessingSecurityScopedResource()
+        }
         presentTransientAlert(title: "ダウンロード失敗", message: error.localizedDescription, style: .warning)
+    }
+
+    private func availableDestinationURL(in directory: URL, suggestedFilename: String) -> URL {
+        let fileManager = FileManager.default
+        let sanitizedName = suggestedFilename.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = sanitizedName.isEmpty ? "Download" : sanitizedName
+        let ext = URL(fileURLWithPath: baseName).pathExtension
+        let stem = ext.isEmpty ? baseName : (baseName as NSString).deletingPathExtension
+
+        var candidate = directory.appendingPathComponent(baseName)
+        var counter = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            let numberedName = ext.isEmpty ? "\(stem) \(counter)" : "\(stem) \(counter).\(ext)"
+            candidate = directory.appendingPathComponent(numberedName)
+            counter += 1
+        }
+        return candidate
     }
 }
 

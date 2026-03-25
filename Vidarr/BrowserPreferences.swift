@@ -54,6 +54,8 @@ final class BrowserPreferences {
         static let searchTemplate = "prefs.searchTemplate"
         static let updatesEnabled = "prefs.updatesEnabled"
         static let preferredContentLanguage = "prefs.preferredContentLanguage"
+        static let preferredDownloadDirectoryBookmark = "prefs.preferredDownloadDirectoryBookmark"
+        static let preferredDownloadDirectoryPath = "prefs.preferredDownloadDirectoryPath"
         static let gestureSensitivity = "prefs.gestureSensitivity"
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
@@ -120,6 +122,43 @@ final class BrowserPreferences {
         set {
             defaults.set(newValue.rawValue, forKey: Key.preferredContentLanguage)
             notifyChanged()
+        }
+    }
+
+    var preferredDownloadDirectoryPath: String? {
+        defaults.string(forKey: Key.preferredDownloadDirectoryPath)
+    }
+
+    func preferredDownloadDirectoryURL() -> URL? {
+        guard let data = defaults.data(forKey: Key.preferredDownloadDirectoryBookmark) else { return nil }
+        var isStale = false
+        guard let url = try? URL(
+            resolvingBookmarkData: data,
+            options: [.withSecurityScope],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ) else {
+            return nil
+        }
+        if isStale {
+            _ = try? setPreferredDownloadDirectory(url)
+        }
+        return url
+    }
+
+    @discardableResult
+    func setPreferredDownloadDirectory(_ url: URL?) throws -> URL? {
+        if let url {
+            let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+            defaults.set(bookmark, forKey: Key.preferredDownloadDirectoryBookmark)
+            defaults.set(url.path, forKey: Key.preferredDownloadDirectoryPath)
+            notifyChanged()
+            return url
+        } else {
+            defaults.removeObject(forKey: Key.preferredDownloadDirectoryBookmark)
+            defaults.removeObject(forKey: Key.preferredDownloadDirectoryPath)
+            notifyChanged()
+            return nil
         }
     }
 
@@ -245,6 +284,8 @@ final class BrowserPreferences {
             defaults.set("https://search.fenrir-inc.com/?q={query}", forKey: Key.searchTemplate)
             defaults.set(true, forKey: Key.updatesEnabled)
             defaults.set(PreferredContentLanguage.system.rawValue, forKey: Key.preferredContentLanguage)
+            defaults.removeObject(forKey: Key.preferredDownloadDirectoryBookmark)
+            defaults.removeObject(forKey: Key.preferredDownloadDirectoryPath)
             defaults.set(GestureSensitivity.normal.rawValue, forKey: Key.gestureSensitivity)
             defaults.set(true, forKey: Key.antiTrackingEnabled)
             defaults.set(true, forKey: Key.contentBlockingEnabled)

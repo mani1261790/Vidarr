@@ -128,6 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.addItem(fileMenuItem)
 
         fileMenu.addItem(makeMenuItem("New Tab", action: #selector(menuNewTab), key: "t"))
+        fileMenu.addItem(makeMenuItem("Open File...", action: #selector(menuOpenFile), key: "o"))
         fileMenu.addItem(makeMenuItem("Close Tab", action: #selector(menuCloseTab), key: "w"))
         fileMenu.addItem(makeMenuItem("Toggle Bookmark", action: #selector(menuToggleBookmark), key: "d"))
         fileMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
@@ -262,6 +263,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         downloadsWindowController?.showWindowAndReload()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func menuOpenFile() {
+        mainWindowController?.menuOpenLocalFile()
     }
 
     @objc private func menuOpenHistoryWindow() {
@@ -613,6 +618,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let openHistoryButton = NSButton(title: "", target: nil, action: nil)
     private let openBookmarksButton = NSButton(title: "", target: nil, action: nil)
     private let openSiteControlsButton = NSButton(title: "", target: nil, action: nil)
+    private let downloadFolderLabel = NSTextField(wrappingLabelWithString: "")
+    private let chooseDownloadFolderButton = NSButton(title: "ダウンロード先フォルダを選ぶ", target: nil, action: nil)
+    private let clearDownloadFolderButton = NSButton(title: "既定に戻す", target: nil, action: nil)
     private var observers: [NSObjectProtocol] = []
 
     init(
@@ -747,10 +755,16 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.target = self
         }
+        [chooseDownloadFolderButton, clearDownloadFolderButton].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            $0.target = self
+        }
         openDownloadsButton.action = #selector(openDownloads)
         openHistoryButton.action = #selector(openHistory)
         openBookmarksButton.action = #selector(openBookmarks)
         openSiteControlsButton.action = #selector(openSiteControls)
+        chooseDownloadFolderButton.action = #selector(chooseDownloadFolder)
+        clearDownloadFolderButton.action = #selector(clearDownloadFolder)
 
         let generalGrid = makeTwoColumnGrid()
         let generalSection = makeSectionContentStack()
@@ -800,6 +814,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataStack.addArrangedSubview(dataGrid)
         dataGrid.addArrangedSubview(openBookmarksButton)
         dataGrid.addArrangedSubview(openSiteControlsButton)
+        dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
+        let downloadFolderButtons = NSStackView()
+        downloadFolderButtons.orientation = .horizontal
+        downloadFolderButtons.alignment = .centerY
+        downloadFolderButtons.spacing = 10
+        downloadFolderButtons.addArrangedSubview(chooseDownloadFolderButton)
+        downloadFolderButtons.addArrangedSubview(clearDownloadFolderButton)
+        dataStack.addArrangedSubview(downloadFolderButtons)
         dataStack.addArrangedSubview(clearDataButton)
 
         let resetSection = makeSectionContentStack()
@@ -938,12 +960,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let contentExceptionCount = prefs.contentBlockingDisabledHosts.count
         let harmfulExceptionCount = prefs.harmfulSiteAllowedHosts.count
         let mediaPermissionCount = MediaPermissionStore.shared.all().count
+        let downloadFolderPath = prefs.preferredDownloadDirectoryPath
 
         dataSummaryLabel.stringValue = "履歴 \(historyCount)件 / ブックマーク \(bookmarkCount)件 / ダウンロード \(downloadCount)件\nサイト例外 \(contentExceptionCount + harmfulExceptionCount)件 / メディア権限 \(mediaPermissionCount)件"
+        downloadFolderLabel.stringValue = "ダウンロード先: \(downloadFolderPath ?? "毎回確認")"
         openDownloadsButton.title = "ダウンロード一覧を開く (\(downloadCount)件)"
         openHistoryButton.title = "履歴を管理 (\(historyCount)件)"
         openBookmarksButton.title = "ブックマークを管理 (\(bookmarkCount)件)"
         openSiteControlsButton.title = "サイトごとの例外を管理 (\(contentExceptionCount + harmfulExceptionCount + mediaPermissionCount)件)"
+        clearDownloadFolderButton.isEnabled = (downloadFolderPath != nil)
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
@@ -1051,5 +1076,46 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func openSiteControls() {
         openSiteControlsAction()
+    }
+
+    @objc private func chooseDownloadFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        if let currentURL = prefs.preferredDownloadDirectoryURL() {
+            panel.directoryURL = currentURL
+        }
+
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            do {
+                try self.prefs.setPreferredDownloadDirectory(url)
+                self.loadValues()
+            } catch {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "ダウンロード先を保存できませんでした"
+                alert.informativeText = error.localizedDescription
+                if let window = self.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+            }
+        }
+
+        if let window = window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            completion(panel.runModal())
+        }
+    }
+
+    @objc private func clearDownloadFolder() {
+        _ = try? prefs.setPreferredDownloadDirectory(nil)
+        loadValues()
     }
 }

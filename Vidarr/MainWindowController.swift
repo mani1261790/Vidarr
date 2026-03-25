@@ -18,6 +18,8 @@ private final class PDFExportContext {
 final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 54
+        static let fullScreenRevealHotzoneHeight: CGFloat = 6
+        static let fullScreenHideDelay: TimeInterval = 0.85
         static let tabChipSize = NSSize(width: 96, height: 48)
         static let tabSwitchGap: CGFloat = 16
         static let tabSwitchInteractiveMaxProgress: CGFloat = 0.82
@@ -50,6 +52,7 @@ final class MainWindowController: NSWindowController {
     private var leftButtonRowTopConstraint: NSLayoutConstraint?
     private var tabStripWidthConstraint: NSLayoutConstraint?
     private var rightPanelWidthConstraint: NSLayoutConstraint?
+    private var toolbarTopConstraint: NSLayoutConstraint?
 
     private let tabManager: TabManager
     private let session: BrowserSession
@@ -80,6 +83,9 @@ final class MainWindowController: NSWindowController {
     private var downloadSourceURLs: [ObjectIdentifier: URL] = [:]
     private var downloadDestinationURLs: [ObjectIdentifier: URL] = [:]
     private var downloadSecurityScopedAccess: [ObjectIdentifier: URL] = [:]
+    private var fullScreenMouseMonitor: Any?
+    private var fullScreenHideTimer: Timer?
+    private var isFullScreenToolbarHidden = false
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -141,6 +147,10 @@ final class MainWindowController: NSWindowController {
         if let bookmarkObserver {
             NotificationCenter.default.removeObserver(bookmarkObserver)
         }
+        fullScreenHideTimer?.invalidate()
+        if let fullScreenMouseMonitor {
+            NSEvent.removeMonitor(fullScreenMouseMonitor)
+        }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -167,13 +177,16 @@ final class MainWindowController: NSWindowController {
 
         setupToolbarUI()
 
+        let toolbarTopConstraint = toolbarContainer.topAnchor.constraint(equalTo: rootContainer.topAnchor)
+        self.toolbarTopConstraint = toolbarTopConstraint
+
         NSLayoutConstraint.activate([
             rootContainer.topAnchor.constraint(equalTo: contentView.topAnchor),
             rootContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             rootContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             rootContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            toolbarContainer.topAnchor.constraint(equalTo: rootContainer.topAnchor),
+            toolbarTopConstraint,
             toolbarContainer.leadingAnchor.constraint(equalTo: rootContainer.leadingAnchor),
             toolbarContainer.trailingAnchor.constraint(equalTo: rootContainer.trailingAnchor),
             toolbarContainer.heightAnchor.constraint(equalToConstant: UI.toolbarHeight),
@@ -1981,14 +1994,25 @@ extension MainWindowController: NSTextFieldDelegate, NSSearchFieldDelegate {
 extension MainWindowController: NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         syncToolbarLayout()
+        refreshFullScreenToolbarBehavior(animated: false)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         syncToolbarLayout()
+        refreshFullScreenToolbarBehavior(animated: false)
     }
 
     func windowDidResignKey(_ notification: Notification) {
         endAddressEditingWithoutSubmit()
+        invalidateFullScreenToolbarHideTimer()
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        refreshFullScreenToolbarBehavior(animated: true)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        refreshFullScreenToolbarBehavior(animated: false)
     }
 }
 
@@ -2386,6 +2410,104 @@ extension MainWindowController: WKNavigationDelegate {
                 MediaPermissionStore.shared.setDecision(allowed ? .allow : .deny, for: originHost, kind: kind)
                 decisionHandler(allowed ? .grant : .deny)
             }
+        }
+    }
+
+    private var isWindowFullScreen: Bool {
+        window?.styleMask.contains(.fullScreen) == true
+    }
+
+    private func installFullScreenMouseMonitorIfNeeded() {
+        guard fullScreenMouseMonitor == nil else { return }
+        fullScreenMouseMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        ) { [weak self] event in
+            self?.handleFullScreenPointerEvent(event)
+            return event
+        }
+        window?.acceptsMouseMovedEvents = true
+    }
+
+    private func uninstallFullScreenMouseMonitor() {
+        if let fullScreenMouseMonitor {
+            NSEvent.removeMonitor(fullScreenMouseMonitor)
+            self.fullScreenMouseMonitor = nil
+        }
+        window?.acceptsMouseMovedEvents = false
+    }
+
+    private func invalidateFullScreenToolbarHideTimer() {
+        fullScreenHideTimer?.invalidate()
+        fullScreenHideTimer = nil
+    }
+
+    private func handleFullScreenPointerEvent(_ event: NSEvent) {
+        guard isWindowFullScreen, let contentView = window?.contentView else { return }
+        let location = contentView.convert(event.locationInWindow, from: nil)
+        let maxY = contentView.bounds.maxY
+        let revealThreshold = maxY - UI.fullScreenRevealHotzoneHeight
+        let insideToolbarBand = location.y >= maxY - UI.toolbarHeight
+
+        if location.y >= revealThreshold {
+            setFullScreenToolbarHidden(false, animated: true)
+            scheduleFullScreenToolbarHide()
+            return
+        }
+
+        if insideToolbarBand || isAddressEditing {
+            invalidateFullScreenToolbarHideTimer()
+            return
+        }
+
+        scheduleFullScreenToolbarHide()
+    }
+
+    private func scheduleFullScreenToolbarHide() {
+        guard isWindowFullScreen else { return }
+        invalidateFullScreenToolbarHideTimer()
+        fullScreenHideTimer = Timer.scheduledTimer(withTimeInterval: UI.fullScreenHideDelay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            if self.isAddressEditing {
+                self.scheduleFullScreenToolbarHide()
+                return
+            }
+            self.setFullScreenToolbarHidden(true, animated: true)
+        }
+    }
+
+    private func refreshFullScreenToolbarBehavior(animated: Bool) {
+        if isWindowFullScreen {
+            installFullScreenMouseMonitorIfNeeded()
+            setFullScreenToolbarHidden(true, animated: animated)
+        } else {
+            invalidateFullScreenToolbarHideTimer()
+            uninstallFullScreenMouseMonitor()
+            setFullScreenToolbarHidden(false, animated: animated)
+        }
+    }
+
+    private func setFullScreenToolbarHidden(_ hidden: Bool, animated: Bool) {
+        guard let toolbarTopConstraint else { return }
+        let targetConstant: CGFloat = hidden ? -UI.toolbarHeight : 0
+        guard toolbarTopConstraint.constant != targetConstant || isFullScreenToolbarHidden != hidden else { return }
+
+        isFullScreenToolbarHidden = hidden
+        toolbarTopConstraint.constant = targetConstant
+
+        let applyLayout = {
+            self.toolbarContainer.alphaValue = hidden ? 0.02 : 1.0
+            self.rootContainer.layoutSubtreeIfNeeded()
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = hidden ? 0.18 : 0.16
+                context.timingFunction = CAMediaTimingFunction(name: hidden ? .easeIn : .easeOut)
+                self.toolbarContainer.animator().alphaValue = hidden ? 0.02 : 1.0
+                self.rootContainer.animator().layoutSubtreeIfNeeded()
+            }
+        } else {
+            applyLayout()
         }
     }
 }

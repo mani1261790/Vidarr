@@ -484,6 +484,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
     private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
     private let contentBlockingCheckbox = NSButton(checkboxWithTitle: "広告/追跡スクリプトをブロック", target: nil, action: nil)
+    private let popupBlockingCheckbox = NSButton(checkboxWithTitle: "勝手に開くポップアップ/新規タブを抑止", target: nil, action: nil)
     private let harmfulSiteWarningCheckbox = NSButton(checkboxWithTitle: "有害サイト警告を表示", target: nil, action: nil)
     private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
@@ -559,6 +560,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         contentBlockingCheckbox.target = self
         contentBlockingCheckbox.action = #selector(contentBlockingChanged(_:))
 
+        popupBlockingCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        popupBlockingCheckbox.target = self
+        popupBlockingCheckbox.action = #selector(popupBlockingChanged(_:))
+
         harmfulSiteWarningCheckbox.translatesAutoresizingMaskIntoConstraints = false
         harmfulSiteWarningCheckbox.target = self
         harmfulSiteWarningCheckbox.action = #selector(harmfulSiteWarningChanged(_:))
@@ -587,6 +592,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         root.addSubview(updatesCheckbox)
         root.addSubview(antiTrackingCheckbox)
         root.addSubview(contentBlockingCheckbox)
+        root.addSubview(popupBlockingCheckbox)
         root.addSubview(harmfulSiteWarningCheckbox)
         root.addSubview(ephemeralModeCheckbox)
         root.addSubview(doNotTrackCheckbox)
@@ -626,7 +632,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             contentBlockingCheckbox.topAnchor.constraint(equalTo: antiTrackingCheckbox.bottomAnchor, constant: 8),
             contentBlockingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
-            harmfulSiteWarningCheckbox.topAnchor.constraint(equalTo: contentBlockingCheckbox.bottomAnchor, constant: 8),
+            popupBlockingCheckbox.topAnchor.constraint(equalTo: contentBlockingCheckbox.bottomAnchor, constant: 8),
+            popupBlockingCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+
+            harmfulSiteWarningCheckbox.topAnchor.constraint(equalTo: popupBlockingCheckbox.bottomAnchor, constant: 8),
             harmfulSiteWarningCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
 
             ephemeralModeCheckbox.topAnchor.constraint(equalTo: harmfulSiteWarningCheckbox.bottomAnchor, constant: 8),
@@ -649,6 +658,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         updatesCheckbox.state = prefs.updatesEnabled ? .on : .off
         antiTrackingCheckbox.state = prefs.antiTrackingEnabled ? .on : .off
         contentBlockingCheckbox.state = prefs.contentBlockingEnabled ? .on : .off
+        popupBlockingCheckbox.state = prefs.popupBlockingEnabled ? .on : .off
         harmfulSiteWarningCheckbox.state = prefs.harmfulSiteWarningEnabled ? .on : .off
         ephemeralModeCheckbox.state = prefs.ephemeralModeEnabled ? .on : .off
         doNotTrackCheckbox.state = prefs.sendDoNotTrack ? .on : .off
@@ -680,6 +690,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func contentBlockingChanged(_ sender: NSButton) {
         prefs.contentBlockingEnabled = (sender.state == .on)
+    }
+
+    @objc private func popupBlockingChanged(_ sender: NSButton) {
+        prefs.popupBlockingEnabled = (sender.state == .on)
     }
 
     @objc private func harmfulSiteWarningChanged(_ sender: NSButton) {

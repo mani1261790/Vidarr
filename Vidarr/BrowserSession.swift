@@ -21,7 +21,7 @@ final class BrowserSession {
         let prefs = BrowserPreferences.shared
         let config = WKWebViewConfiguration()
         config.allowsAirPlayForMediaPlayback = true
-        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.preferences.javaScriptCanOpenWindowsAutomatically = !prefs.popupBlockingEnabled
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let useEphemeralStore = (group == .privateMode) || prefs.ephemeralModeEnabled
@@ -40,7 +40,7 @@ final class BrowserSession {
             config.userContentController.addUserScript(script)
         }
 
-        WebContentBlocker.shared.applyIfEnabled(to: config.userContentController)
+        WebContentBlocker.shared.configure(userContentController: config.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = false

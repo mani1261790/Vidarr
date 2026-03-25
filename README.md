@@ -61,6 +61,8 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] ページズーム、印刷、PDF書き出し
 - [x] カメラ/マイク要求時の権限確認ダイアログ
 - [x] 読み込み失敗時の簡易エラーページ
+- [x] 勝手に開くポップアップ/新規タブの抑止
+- [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
 - [x] `GestureRecognizer` 単体テスト
 
 ### テスト実行

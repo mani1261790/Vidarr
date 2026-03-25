@@ -11,7 +11,12 @@ final class WebContentBlocker {
 
     private init() {}
 
-    func applyIfEnabled(to controller: WKUserContentController) {
+    func configure(userContentController controller: WKUserContentController) {
+        installPrivacyScripts(on: controller)
+        applyContentRulesIfNeeded(to: controller)
+    }
+
+    private func applyContentRulesIfNeeded(to controller: WKUserContentController) {
         guard BrowserPreferences.shared.contentBlockingEnabled else {
             controller.removeAllContentRuleLists()
             return
@@ -21,6 +26,18 @@ final class WebContentBlocker {
             guard let ruleList else { return }
             controller.removeAllContentRuleLists()
             controller.add(ruleList)
+        }
+    }
+
+    private func installPrivacyScripts(on controller: WKUserContentController) {
+        if BrowserPreferences.shared.popupBlockingEnabled {
+            controller.addUserScript(
+                WKUserScript(
+                    source: Self.popupProtectionScriptSource,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: false
+                )
+            )
         }
     }
 
@@ -41,6 +58,7 @@ final class WebContentBlocker {
             callbacks.forEach { $0(nil) }
             return
         }
+
         store.compileContentRuleList(
             forIdentifier: ruleListIdentifier,
             encodedContentRuleList: Self.encodedRules
@@ -54,77 +72,178 @@ final class WebContentBlocker {
         }
     }
 
-    private static let encodedRules = """
-    [
-      {
-        "trigger": {
-          "url-filter": ".*",
-          "if-domain": [
-            "doubleclick.net",
-            "googlesyndication.com",
-            "googleadservices.com",
-            "adservice.google.com",
-            "adnxs.com",
-            "taboola.com",
-            "outbrain.com",
-            "criteo.com",
-            "scorecardresearch.com",
-            "zedo.com",
-            "pubmatic.com",
-            "openx.net",
-            "adsrvr.org",
-            "tracking-protection.cdn.mozilla.net",
-            "amazon-adsystem.com",
-            "facebook.net",
-            "connect.facebook.net",
-            "analytics.yahoo.com",
-            "bat.bing.com",
-            "hotjar.com",
-            "segment.io"
-          ]
-        },
-        "action": { "type": "block" }
-      },
-      {
-        "trigger": {
-          "url-filter": ".*",
-          "resource-type": ["image"],
-          "load-type": ["third-party"],
-          "url-filter-is-case-sensitive": false,
-          "unless-domain": ["youtube.com", "www.youtube.com"]
-        },
-        "action": { "type": "block" }
-      },
-      {
-        "trigger": {
-          "url-filter": "https?://([a-z0-9-]+\\.)?(google-analytics\\.com|googletagmanager\\.com|stats\\.g\\.doubleclick\\.net)/.*"
-        },
-        "action": { "type": "block" }
-      },
-      {
-        "trigger": {
-          "url-filter": ".*",
-          "resource-type": ["script"],
-          "if-domain": [
-            "google-analytics.com",
-            "googletagmanager.com",
-            "connect.facebook.net",
-            "bat.bing.com",
-            "static.hotjar.com"
-          ]
-        },
-        "action": { "type": "block" }
-      },
-      {
-        "trigger": {
-          "url-filter": ".*",
-          "resource-type": ["style-sheet"],
-          "if-domain": ["googlesyndication.com", "doubleclick.net"]
-        },
-        "action": { "type": "block" }
-      }
-    ]
+    private static let popupProtectionScriptSource = """
+    (() => {
+      if (window.__vidarrPopupGuardInstalled) return;
+      Object.defineProperty(window, '__vidarrPopupGuardInstalled', {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false
+      });
+
+      const nativeOpen = window.open.bind(window);
+      let lastTrustedUserEventAt = 0;
+      const markUserGesture = () => { lastTrustedUserEventAt = Date.now(); };
+      const activationWindowMs = 1400;
+
+      ['pointerdown', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'keydown', 'click'].forEach((name) => {
+        window.addEventListener(name, markUserGesture, true);
+        document.addEventListener(name, markUserGesture, true);
+      });
+
+      const hasUserActivation = () => {
+        try {
+          if (navigator.userActivation && navigator.userActivation.isActive) return true;
+        } catch (_) {}
+        try {
+          if (document.hasTransientActivation) return true;
+        } catch (_) {}
+        return (Date.now() - lastTrustedUserEventAt) <= activationWindowMs;
+      };
+
+      window.open = function(...args) {
+        if (!hasUserActivation()) {
+          return null;
+        }
+        return nativeOpen(...args);
+      };
+    })();
     """
+
+    private static let blockedDomains: [String] = [
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "adservice.google.com",
+        "adservice.google.co.jp",
+        "googletagmanager.com",
+        "google-analytics.com",
+        "analytics.google.com",
+        "googletagservices.com",
+        "adnxs.com",
+        "adsrvr.org",
+        "advertising.com",
+        "amazon-adsystem.com",
+        "criteo.com",
+        "criteo.net",
+        "taboola.com",
+        "outbrain.com",
+        "openx.net",
+        "pubmatic.com",
+        "rubiconproject.com",
+        "moatads.com",
+        "scorecardresearch.com",
+        "quantserve.com",
+        "zedo.com",
+        "yieldmo.com",
+        "casalemedia.com",
+        "lijit.com",
+        "sharethrough.com",
+        "smartadserver.com",
+        "adsystem.com",
+        "serving-sys.com",
+        "sitescout.com",
+        "hotjar.com",
+        "segment.io",
+        "segment.com",
+        "mixpanel.com",
+        "newrelic.com",
+        "facebook.net",
+        "connect.facebook.net",
+        "bat.bing.com",
+        "branch.io",
+        "appsflyer.com",
+        "amplitude.com",
+        "mouseflow.com",
+        "clarity.ms",
+        "omtrdc.net",
+        "demdex.net"
+    ]
+
+    private static let adScriptPatterns: [String] = [
+        "https?://[^/]*google-analytics\\.com/.*",
+        "https?://[^/]*googletagmanager\\.com/.*",
+        "https?://[^/]*doubleclick\\.net/.*",
+        "https?://[^/]*googlesyndication\\.com/.*",
+        "https?://[^/]*googleadservices\\.com/.*",
+        "https?://[^/]*amazon-adsystem\\.com/.*",
+        "https?://[^/]*facebook\\.net/.*",
+        "https?://[^/]*connect\\.facebook\\.net/.*",
+        "https?://[^/]*bat\\.bing\\.com/.*",
+        "https?://[^/]*hotjar\\.com/.*",
+        "https?://[^/]*clarity\\.ms/.*",
+        "https?://[^/]*(analytics|tracking|telemetry|metrics|beacon|ads)[^/]*\\..*"
+    ]
+
+    private static let hideSelectors = [
+        "[id^='google_ads']",
+        "[id^='div-gpt-ad']",
+        "[id^='taboola-']",
+        "[id^='outbrain']",
+        "[class*='advert']",
+        "[class*='ad-slot']",
+        "[class*='adsbygoogle']",
+        "[class*='sponsored']",
+        "[data-ad]",
+        "[data-ad-container]",
+        "[data-testid='ad']",
+        "iframe[src*='doubleclick.net']",
+        "iframe[src*='googlesyndication.com']",
+        "iframe[id^='google_ads_iframe']"
+    ].joined(separator: ", ")
+
+    private static var encodedRules: String = {
+        var rules: [[String: Any]] = []
+
+        rules.append([
+            "trigger": [
+                "url-filter": ".*",
+                "if-domain": blockedDomains
+            ],
+            "action": ["type": "block"]
+        ])
+
+        for pattern in adScriptPatterns {
+            rules.append([
+                "trigger": [
+                    "url-filter": pattern
+                ],
+                "action": ["type": "block"]
+            ])
+        }
+
+        rules.append([
+            "trigger": [
+                "url-filter": "https?://.*(adservice|doubleclick|googlesyndication|analytics|tracking|telemetry|metrics|beacon|pixel|sponsor|affiliate|promo).*",
+                "resource-type": ["script", "raw", "image", "style-sheet"],
+                "load-type": ["third-party"],
+                "url-filter-is-case-sensitive": false
+            ],
+            "action": ["type": "block"]
+        ])
+
+        rules.append([
+            "trigger": [
+                "url-filter": ".*",
+                "resource-type": ["popup"]
+            ],
+            "action": ["type": "block"]
+        ])
+
+        rules.append([
+            "trigger": [
+                "url-filter": ".*"
+            ],
+            "action": [
+                "type": "css-display-none",
+                "selector": hideSelectors
+            ]
+        ])
+
+        let data = try? JSONSerialization.data(withJSONObject: rules, options: [])
+        return String(data: data ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+    }()
 }
 
 struct HarmfulSiteWarning {

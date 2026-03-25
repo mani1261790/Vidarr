@@ -34,6 +34,7 @@ final class BrowserPreferences {
         static let gestureSensitivity = "prefs.gestureSensitivity"
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
+        static let popupBlockingEnabled = "prefs.popupBlockingEnabled"
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
         static let sendDoNotTrack = "prefs.sendDoNotTrack"
@@ -50,6 +51,7 @@ final class BrowserPreferences {
             Key.gestureSensitivity: GestureSensitivity.normal.rawValue,
             Key.antiTrackingEnabled: true,
             Key.contentBlockingEnabled: true,
+            Key.popupBlockingEnabled: true,
             Key.harmfulSiteWarningEnabled: true,
             Key.ephemeralModeEnabled: false,
             Key.sendDoNotTrack: true
@@ -103,6 +105,14 @@ final class BrowserPreferences {
         get { defaults.bool(forKey: Key.contentBlockingEnabled) }
         set {
             defaults.set(newValue, forKey: Key.contentBlockingEnabled)
+            notifyChanged()
+        }
+    }
+
+    var popupBlockingEnabled: Bool {
+        get { defaults.bool(forKey: Key.popupBlockingEnabled) }
+        set {
+            defaults.set(newValue, forKey: Key.popupBlockingEnabled)
             notifyChanged()
         }
     }
@@ -171,6 +181,7 @@ final class BrowserPreferences {
         gestureSensitivity = .normal
         antiTrackingEnabled = true
         contentBlockingEnabled = true
+        popupBlockingEnabled = true
         harmfulSiteWarningEnabled = true
         ephemeralModeEnabled = false
         sendDoNotTrack = true

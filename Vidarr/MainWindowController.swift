@@ -57,6 +57,7 @@ final class MainWindowController: NSWindowController {
     private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
+    private var lastPopupBlockingEnabled = BrowserPreferences.shared.popupBlockingEnabled
     private var temporarilyAllowedHosts: Set<String> = []
     private var configuredLongPressControllers: Set<ObjectIdentifier> = []
     private var longPressHandlerBoxes: [ObjectIdentifier: WeakScriptMessageHandler] = [:]
@@ -409,10 +410,12 @@ final class MainWindowController: NSWindowController {
         let shouldReconfigureTabs = (prefs.ephemeralModeEnabled != lastEphemeralMode)
             || (prefs.sendDoNotTrack != lastDoNotTrack)
             || (prefs.contentBlockingEnabled != lastContentBlockingEnabled)
+            || (prefs.popupBlockingEnabled != lastPopupBlockingEnabled)
 
         lastEphemeralMode = prefs.ephemeralModeEnabled
         lastDoNotTrack = prefs.sendDoNotTrack
         lastContentBlockingEnabled = prefs.contentBlockingEnabled
+        lastPopupBlockingEnabled = prefs.popupBlockingEnabled
 
         guard shouldReconfigureTabs else { return }
         tabManager.reconfigureAllTabsForCurrentPreferences()
@@ -2060,6 +2063,41 @@ extension MainWindowController: WKNavigationDelegate {
         return scheme == "http" || scheme == "https" || scheme == "file" || scheme == "about"
     }
 
+    private func shouldAllowPopup(for navigationAction: WKNavigationAction, opener: WKWebView) -> Bool {
+        guard let url = navigationAction.request.url, isSafeStoredURL(url) else {
+            return false
+        }
+
+        guard BrowserPreferences.shared.popupBlockingEnabled else {
+            return true
+        }
+
+        switch navigationAction.navigationType {
+        case .linkActivated, .formSubmitted, .formResubmitted:
+            return true
+        case .backForward, .reload:
+            return false
+        case .other:
+            break
+        @unknown default:
+            break
+        }
+
+        let sourceURL = navigationAction.request.mainDocumentURL ?? opener.url
+        let sourceHost = sourceURL?.host?.lowercased()
+        let targetHost = url.host?.lowercased()
+
+        if url.scheme?.lowercased() == "about", url.absoluteString == "about:blank" {
+            return true
+        }
+
+        if let sourceHost, let targetHost, sourceHost == targetHost {
+            return true
+        }
+
+        return false
+    }
+
     @available(macOS 12.0, *)
     private func requestMediaPermission(originHost: String, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
         let kind: MediaPermissionKind
@@ -2145,11 +2183,13 @@ extension MainWindowController: WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        _ = webView
         _ = windowFeatures
 
-        // Browser-like behavior: open target="_blank" / window.open in a new tab.
         if navigationAction.targetFrame == nil {
+            guard shouldAllowPopup(for: navigationAction, opener: webView) else {
+                return nil
+            }
+
             let popupWebView = WKWebView(frame: .zero, configuration: configuration)
             popupWebView.translatesAutoresizingMaskIntoConstraints = false
             popupWebView.allowsBackForwardNavigationGestures = false

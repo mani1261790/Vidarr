@@ -775,6 +775,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalStack.addArrangedSubview(searchLabel)
         generalStack.addArrangedSubview(searchTemplateField)
         let contentLanguageRow = NSStackView()
+        contentLanguageRow.translatesAutoresizingMaskIntoConstraints = false
         contentLanguageRow.orientation = .horizontal
         contentLanguageRow.alignment = .centerY
         contentLanguageRow.spacing = 12
@@ -790,6 +791,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let gestureStack = gestureSection
         gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
         let sensitivityRow = NSStackView()
+        sensitivityRow.translatesAutoresizingMaskIntoConstraints = false
         sensitivityRow.orientation = .horizontal
         sensitivityRow.alignment = .centerY
         sensitivityRow.spacing = 12
@@ -816,6 +818,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
         let downloadFolderButtons = NSStackView()
+        downloadFolderButtons.translatesAutoresizingMaskIntoConstraints = false
         downloadFolderButtons.orientation = .horizontal
         downloadFolderButtons.alignment = .centerY
         downloadFolderButtons.spacing = 10
@@ -831,6 +834,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         resetNote.textColor = .secondaryLabelColor
         resetStack.addArrangedSubview(resetNote)
         resetStack.addArrangedSubview(resetButton)
+
+        NSLayoutConstraint.activate([
+            homePageField.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            searchTemplateField.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            contentLanguageRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            generalGrid.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+
+            sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+
+            dataGrid.widthAnchor.constraint(equalTo: dataSection.widthAnchor),
+            downloadFolderButtons.widthAnchor.constraint(equalTo: dataSection.widthAnchor)
+        ])
 
         tabView.addTabViewItem(makeTab(title: "General", content: wrapTabContent(generalSection)))
         tabView.addTabViewItem(makeTab(title: "Gestures", content: wrapTabContent(gestureSection)))

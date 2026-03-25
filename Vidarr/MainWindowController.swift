@@ -1799,6 +1799,11 @@ final class MainWindowController: NSWindowController {
             guard let self, let source = self.dragFromTabIndex else { return }
             self.handleTabDragEnded(fromIndex: source, locationInWindow: endInWindow)
         }
+
+        tabInteractionView.onFileDropURLs = { [weak self] urls in
+            guard let self else { return }
+            urls.forEach { self.openLocalDocument($0, preferNewTab: true) }
+        }
     }
 
     private func handleTabDragMoved(fromIndex: Int, locationInWindow: NSPoint) {
@@ -2871,9 +2876,21 @@ private final class TabInteractionView: NonDraggableView {
     var onDragBegan: ((NSPoint) -> Void)?
     var onDragMoved: ((NSPoint) -> Void)?
     var onDragEnded: ((NSPoint) -> Void)?
+    var onFileDropURLs: (([URL]) -> Void)?
     private var dragStartInWindow: NSPoint?
     private var dragActive = false
     private var previousWindowMovableState: Bool?
+    private var isDropTargetHighlighted = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL])
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
@@ -2919,6 +2936,63 @@ private final class TabInteractionView: NonDraggableView {
         }
         dragStartInWindow = nil
         dragActive = false
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard let urls = acceptedFileURLs(from: sender), !urls.isEmpty else { return [] }
+        setDropTargetHighlighted(true)
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        _ = sender
+        setDropTargetHighlighted(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        acceptedFileURLs(from: sender)?.isEmpty == false
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = acceptedFileURLs(from: sender), !urls.isEmpty else {
+            setDropTargetHighlighted(false)
+            return false
+        }
+        setDropTargetHighlighted(false)
+        onFileDropURLs?(urls)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        _ = sender
+        setDropTargetHighlighted(false)
+    }
+
+    private func acceptedFileURLs(from sender: NSDraggingInfo) -> [URL]? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else {
+            return nil
+        }
+        return urls.filter(Self.isSupportedDocumentURL(_:))
+    }
+
+    nonisolated private static func isSupportedDocumentURL(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext) {
+            return type.conforms(to: .pdf) || type.conforms(to: .html) || type.conforms(to: .plainText)
+        }
+        return ["pdf", "html", "htm", "txt"].contains(ext)
+    }
+
+    private func setDropTargetHighlighted(_ highlighted: Bool) {
+        guard highlighted != isDropTargetHighlighted else { return }
+        isDropTargetHighlighted = highlighted
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.borderWidth = highlighted ? 1 : 0
+        layer?.borderColor = NSColor.selectedControlColor.withAlphaComponent(0.45).cgColor
+        layer?.backgroundColor = highlighted ? NSColor.selectedControlColor.withAlphaComponent(0.08).cgColor : NSColor.clear.cgColor
     }
 }
 

@@ -13,6 +13,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var mainWindowController: MainWindowController?
     private var preferencesWindowController: PreferencesWindowController?
     private var downloadsWindowController: DownloadsWindowController?
+    private var historyWindowController: BrowsingItemsWindowController?
+    private var bookmarksWindowController: BrowsingItemsWindowController?
     private let updateChecker = UpdateChecker()
     private var hasPresentedUpdateAlert = false
     private weak var historyMenu: NSMenu?
@@ -182,6 +184,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         historyMenu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
         historyMenu.addItem(NSMenuItem.separator())
         historyMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
+        historyMenu.addItem(makeMenuItem("Show Full History", action: #selector(menuOpenHistoryWindow), key: "y"))
 
         let bookmarksMenu = NSMenu(title: "Bookmarks")
         let bookmarksMenuItem = NSMenuItem(title: "Bookmarks", action: nil, keyEquivalent: "")
@@ -189,6 +192,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.addItem(bookmarksMenuItem)
         bookmarksMenu.delegate = self
         self.bookmarksMenu = bookmarksMenu
+        bookmarksMenu.addItem(makeMenuItem("Show All Bookmarks", action: #selector(menuOpenBookmarksWindow), key: "b", modifiers: [.command, .option]))
+        bookmarksMenu.addItem(NSMenuItem.separator())
 
         let developMenu = NSMenu(title: "Develop")
         let developMenuItem = NSMenuItem(title: "Develop", action: nil, keyEquivalent: "")
@@ -252,6 +257,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             downloadsWindowController = DownloadsWindowController()
         }
         downloadsWindowController?.showWindowAndReload()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func menuOpenHistoryWindow() {
+        if historyWindowController == nil {
+            historyWindowController = BrowsingItemsWindowController(mode: .history) { [weak self] url in
+                self?.mainWindowController?.menuOpenExternalListURL(url)
+            }
+        }
+        historyWindowController?.showWindowAndReload()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func menuOpenBookmarksWindow() {
+        if bookmarksWindowController == nil {
+            bookmarksWindowController = BrowsingItemsWindowController(mode: .bookmarks) { [weak self] url in
+                self?.mainWindowController?.menuOpenExternalListURL(url)
+            }
+        }
+        bookmarksWindowController?.showWindowAndReload()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -396,6 +421,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeMenuItem("Forward", action: #selector(menuGoForward), key: "]"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "", modifiers: []))
+        menu.addItem(makeMenuItem("Show Full History", action: #selector(menuOpenHistoryWindow), key: "y"))
         menu.addItem(NSMenuItem.separator())
 
         let entries = BrowsingHistoryStore.shared.recent(limit: 10)
@@ -418,6 +444,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildBookmarksMenu(_ menu: NSMenu) {
         menu.removeAllItems()
+        menu.addItem(makeMenuItem("Show All Bookmarks", action: #selector(menuOpenBookmarksWindow), key: "b", modifiers: [.command, .option]))
+        menu.addItem(NSMenuItem.separator())
         let entries = BookmarkStore.shared.all()
         if entries.isEmpty {
             let empty = NSMenuItem(title: "ブックマークはありません", action: nil, keyEquivalent: "")

@@ -679,6 +679,10 @@ final class MainWindowController: NSWindowController {
     }
 
     func menuOpenExternalListURL(_ url: URL) {
+        guard isSafeStoredURL(url) else {
+            presentTransientAlert(title: "開けないURLです", message: url.absoluteString, style: .warning)
+            return
+        }
         tabManager.newTab(url: url)
     }
 
@@ -1887,7 +1891,10 @@ extension MainWindowController: WKNavigationDelegate {
         captureThumbnail(for: webView)
         if let url = webView.url {
             let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            BrowsingHistoryStore.shared.recordVisit(url: url, title: title)
+            let group = tabManager.group(for: webView) ?? tabManager.currentGroup
+            if group != .privateMode, isSafeStoredURL(url) {
+                BrowsingHistoryStore.shared.recordVisit(url: url, title: title)
+            }
             if tabManager.isCurrentTabBookmarked, tabManager.currentWebView === webView {
                 BookmarkStore.shared.addOrUpdate(url: url, title: title)
             }
@@ -2048,8 +2055,31 @@ extension MainWindowController: WKNavigationDelegate {
             .replacingOccurrences(of: "'", with: "&#39;")
     }
 
+    private func isSafeStoredURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https" || scheme == "file" || scheme == "about"
+    }
+
     @available(macOS 12.0, *)
     private func requestMediaPermission(originHost: String, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let kind: MediaPermissionKind
+        switch type {
+        case .camera:
+            kind = .camera
+        case .microphone:
+            kind = .microphone
+        case .cameraAndMicrophone:
+            kind = .cameraAndMicrophone
+        @unknown default:
+            decisionHandler(.deny)
+            return
+        }
+
+        if let saved = MediaPermissionStore.shared.decision(for: originHost, kind: kind) {
+            decisionHandler(saved == .allow ? .grant : .deny)
+            return
+        }
+
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "サイト権限の確認"
@@ -2070,6 +2100,7 @@ extension MainWindowController: WKNavigationDelegate {
 
         presentAlert(alert) { response in
             guard response == .alertFirstButtonReturn else {
+                MediaPermissionStore.shared.setDecision(.deny, for: originHost, kind: kind)
                 decisionHandler(.deny)
                 return
             }
@@ -2100,6 +2131,7 @@ extension MainWindowController: WKNavigationDelegate {
             }
 
             group.notify(queue: .main) {
+                MediaPermissionStore.shared.setDecision(allowed ? .allow : .deny, for: originHost, kind: kind)
                 decisionHandler(allowed ? .grant : .deny)
             }
         }
@@ -2268,6 +2300,7 @@ extension MainWindowController: WKScriptMessageHandler {
         if message.name == Self.longPressLinkMessageName {
             guard let href = body["href"] as? String else { return }
             guard let url = URL(string: href) else { return }
+            guard isSafeStoredURL(url) else { return }
             let group = message.webView.flatMap { tabManager.group(for: $0) } ?? tabManager.currentGroup
             tabManager.openBackgroundTab(url: url, in: group)
             return

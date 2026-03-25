@@ -411,7 +411,8 @@ final class TabManager {
     }
 
     func sessionSnapshot() -> BrowserSessionSnapshot {
-        let groups = BrowserTabGroup.allCases.map { group in
+        let groups = BrowserTabGroup.allCases.compactMap { group -> TabGroupSessionSnapshot? in
+            guard group != .privateMode else { return nil }
             let state = state(for: group)
             return TabGroupSessionSnapshot(
                 group: group,
@@ -426,7 +427,8 @@ final class TabManager {
                 }
             )
         }
-        return BrowserSessionSnapshot(currentGroup: currentGroup, groups: groups)
+        let persistedCurrentGroup: BrowserTabGroup = currentGroup == .privateMode ? .regular : currentGroup
+        return BrowserSessionSnapshot(currentGroup: persistedCurrentGroup, groups: groups)
     }
 
     func restoreSession(from snapshot: BrowserSessionSnapshot) {
@@ -438,7 +440,7 @@ final class TabManager {
                 rebuilt[group] = GroupState()
             }
 
-            for groupSnapshot in snapshot.groups {
+            for groupSnapshot in snapshot.groups where groupSnapshot.group != .privateMode {
                 var state = GroupState()
                 state.tabs = groupSnapshot.tabs.map { snapshot in
                     let webView = BrowserSession.makeConfiguredWebView(for: groupSnapshot.group)
@@ -465,7 +467,8 @@ final class TabManager {
             }
 
             states = rebuilt
-            switchGroupInternal(snapshot.currentGroup, ensureTab: true)
+            let safeGroup = snapshot.currentGroup == .privateMode ? .regular : snapshot.currentGroup
+            switchGroupInternal(safeGroup, ensureTab: true)
             notifyCurrentGroupUpdated(selectCurrent: true)
         }
     }

@@ -48,6 +48,15 @@ final class BrowsingHistoryStore {
         Array(items.prefix(max(0, limit)))
     }
 
+    func all() -> [BrowsingItem] {
+        items
+    }
+
+    func remove(urlString: String) {
+        items.removeAll { $0.urlString == urlString }
+        persist()
+    }
+
     func clear() {
         items.removeAll()
         persist()
@@ -103,6 +112,11 @@ final class BookmarkStore {
 
     func all() -> [BrowsingItem] {
         items
+    }
+
+    func remove(urlString: String) {
+        items.removeAll { $0.urlString == urlString }
+        persist()
     }
 
     func clear() {

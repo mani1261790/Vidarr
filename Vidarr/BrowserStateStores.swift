@@ -95,6 +95,12 @@ enum MediaPermissionDecision: String, Codable {
     case deny
 }
 
+struct StoredMediaPermission {
+    let host: String
+    let kind: MediaPermissionKind
+    let decision: MediaPermissionDecision
+}
+
 final class MediaPermissionStore {
     static let shared = MediaPermissionStore()
 
@@ -121,6 +127,33 @@ final class MediaPermissionStore {
 
     func setDecision(_ decision: MediaPermissionDecision, for host: String, kind: MediaPermissionKind) {
         decisions[key(host: host, kind: kind)] = decision
+        persist()
+    }
+
+    func all() -> [StoredMediaPermission] {
+        decisions.compactMap { entry in
+            let parts = entry.key.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2,
+                  let kind = MediaPermissionKind(rawValue: parts[1]) else {
+                return nil
+            }
+            return StoredMediaPermission(host: parts[0], kind: kind, decision: entry.value)
+        }
+        .sorted {
+            if $0.host == $1.host {
+                return $0.kind.rawValue < $1.kind.rawValue
+            }
+            return $0.host < $1.host
+        }
+    }
+
+    func remove(host: String, kind: MediaPermissionKind) {
+        decisions.removeValue(forKey: key(host: host, kind: kind))
+        persist()
+    }
+
+    func clear() {
+        decisions.removeAll()
         persist()
     }
 
@@ -381,5 +414,210 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
             BookmarkStore.shared.remove(urlString: urlString)
         }
         reloadData()
+    }
+}
+
+final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+    private enum Section {
+        case blockingExceptions
+        case mediaPermissions
+    }
+
+    private let exceptionsTableView = NSTableView()
+    private let mediaPermissionsTableView = NSTableView()
+    private var exceptionHosts: [String] = []
+    private var mediaPermissions: [StoredMediaPermission] = []
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Site Settings"
+        window.isReleasedWhenClosed = false
+        super.init(window: window)
+        setupUI()
+        reloadData()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func showWindowAndReload() {
+        reloadData()
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func setupUI() {
+        guard let contentView = window?.contentView else { return }
+
+        let root = NSStackView()
+        root.translatesAutoresizingMaskIntoConstraints = false
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 14
+        contentView.addSubview(root)
+
+        NSLayoutConstraint.activate([
+            root.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
+        ])
+
+        root.addArrangedSubview(makeSectionTitle("Content Blocking Exceptions"))
+        root.addArrangedSubview(makeTableContainer(
+            tableView: exceptionsTableView,
+            columns: [("host", 400), ("state", 220)],
+            deleteAction: #selector(removeSelectedBlockingException),
+            deleteTitle: "Remove Exception"
+        ))
+
+        root.addArrangedSubview(makeSectionTitle("Saved Media Permissions"))
+        root.addArrangedSubview(makeTableContainer(
+            tableView: mediaPermissionsTableView,
+            columns: [("host", 250), ("permission", 220), ("decision", 120)],
+            deleteAction: #selector(removeSelectedMediaPermission),
+            deleteTitle: "Forget Permission"
+        ))
+    }
+
+    private func makeSectionTitle(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        return label
+    }
+
+    private func makeTableContainer(
+        tableView: NSTableView,
+        columns: [(String, CGFloat)],
+        deleteAction: Selector,
+        deleteTitle: String
+    ) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+
+        tableView.headerView = nil
+        tableView.rowHeight = 30
+        tableView.intercellSpacing = NSSize(width: 0, height: 4)
+        tableView.delegate = self
+        tableView.dataSource = self
+
+        for (identifier, width) in columns {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
+            column.width = width
+            tableView.addTableColumn(column)
+        }
+
+        scrollView.documentView = tableView
+        container.addSubview(scrollView)
+
+        let deleteButton = NSButton(title: deleteTitle, target: self, action: deleteAction)
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(deleteButton)
+
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 640),
+            container.heightAnchor.constraint(equalToConstant: 170),
+
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: deleteButton.topAnchor, constant: -8),
+
+            deleteButton.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            deleteButton.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        return container
+    }
+
+    private func reloadData() {
+        exceptionHosts = BrowserPreferences.shared.contentBlockingDisabledHosts.sorted()
+        mediaPermissions = MediaPermissionStore.shared.all()
+        exceptionsTableView.reloadData()
+        mediaPermissionsTableView.reloadData()
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        if tableView === exceptionsTableView {
+            return exceptionHosts.count
+        }
+        return mediaPermissions.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let label = NSTextField(labelWithString: "")
+        label.lineBreakMode = .byTruncatingMiddle
+        let identifier = tableColumn?.identifier.rawValue ?? ""
+
+        if tableView === exceptionsTableView {
+            guard row >= 0, row < exceptionHosts.count else { return label }
+            let host = exceptionHosts[row]
+            switch identifier {
+            case "host":
+                label.stringValue = host
+            case "state":
+                label.stringValue = "Blocking disabled for this host"
+                label.textColor = .secondaryLabelColor
+            default:
+                break
+            }
+            return label
+        }
+
+        guard row >= 0, row < mediaPermissions.count else { return label }
+        let permission = mediaPermissions[row]
+        switch identifier {
+        case "host":
+            label.stringValue = permission.host
+        case "permission":
+            label.stringValue = displayName(for: permission.kind)
+            label.textColor = .secondaryLabelColor
+        case "decision":
+            label.stringValue = permission.decision == .allow ? "Allowed" : "Denied"
+            label.textColor = permission.decision == .allow
+                ? NSColor.systemGreen
+                : NSColor.systemOrange
+        default:
+            break
+        }
+        return label
+    }
+
+    @objc private func removeSelectedBlockingException() {
+        let row = exceptionsTableView.selectedRow
+        guard row >= 0, row < exceptionHosts.count else { return }
+        BrowserPreferences.shared.setContentBlockingDisabled(false, for: exceptionHosts[row])
+        reloadData()
+    }
+
+    @objc private func removeSelectedMediaPermission() {
+        let row = mediaPermissionsTableView.selectedRow
+        guard row >= 0, row < mediaPermissions.count else { return }
+        let permission = mediaPermissions[row]
+        MediaPermissionStore.shared.remove(host: permission.host, kind: permission.kind)
+        reloadData()
+    }
+
+    private func displayName(for kind: MediaPermissionKind) -> String {
+        switch kind {
+        case .camera:
+            return "Camera"
+        case .microphone:
+            return "Microphone"
+        case .cameraAndMicrophone:
+            return "Camera + Microphone"
+        }
     }
 }

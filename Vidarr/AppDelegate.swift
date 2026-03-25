@@ -15,6 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var downloadsWindowController: DownloadsWindowController?
     private var historyWindowController: BrowsingItemsWindowController?
     private var bookmarksWindowController: BrowsingItemsWindowController?
+    private var siteSettingsWindowController: SiteSettingsWindowController?
     private let updateChecker = UpdateChecker()
     private var hasPresentedUpdateAlert = false
     private weak var historyMenu: NSMenu?
@@ -201,6 +202,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.addItem(developMenuItem)
 
         developMenu.addItem(makeMenuItem("Toggle Web Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        developMenu.addItem(makeMenuItem("Site Settings...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
         developMenu.addItem(makeMenuItem("Toggle Content Blocking for Current Site", action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: []))
         developMenu.addItem(makeMenuItem("Clear Browsing Data", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
 
@@ -370,6 +372,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func menuToggleWebInspector() {
         mainWindowController?.menuToggleWebInspector()
+    }
+
+    @objc private func menuOpenSiteSettings() {
+        if siteSettingsWindowController == nil {
+            siteSettingsWindowController = SiteSettingsWindowController()
+        }
+        siteSettingsWindowController?.showWindowAndReload()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func menuToggleContentBlockingForCurrentSite() {

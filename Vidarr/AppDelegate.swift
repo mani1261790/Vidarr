@@ -532,7 +532,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildDevelopMenu(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(makeMenuItem("Open Page Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        menu.addItem(makeMenuItem("Open Page Inspector in Safari...", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
         menu.addItem(makeMenuItem("Privacy & Site Controls...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
         menu.addItem(NSMenuItem.separator())
 
@@ -594,6 +594,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
+    private let contentLanguagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let generalSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
@@ -692,6 +693,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         searchTemplateField.placeholderString = "https://search.fenrir-inc.com/?q={query}"
         searchTemplateField.controlSize = .large
 
+        let contentLanguageLabel = makeFieldLabel("コンテンツ言語")
+
+        contentLanguagePopup.translatesAutoresizingMaskIntoConstraints = false
+        contentLanguagePopup.removeAllItems()
+        contentLanguagePopup.addItems(withTitles: BrowserPreferences.PreferredContentLanguage.allCases.map(\.displayName))
+        contentLanguagePopup.target = self
+        contentLanguagePopup.action = #selector(contentLanguageChanged(_:))
+
         let sensitivityLabel = makeFieldLabel("ジェスチャー感度")
 
         sensitivityPopup.translatesAutoresizingMaskIntoConstraints = false
@@ -751,6 +760,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalStack.addArrangedSubview(homePageField)
         generalStack.addArrangedSubview(searchLabel)
         generalStack.addArrangedSubview(searchTemplateField)
+        let contentLanguageRow = NSStackView()
+        contentLanguageRow.orientation = .horizontal
+        contentLanguageRow.alignment = .centerY
+        contentLanguageRow.spacing = 12
+        contentLanguageRow.addArrangedSubview(contentLanguageLabel)
+        contentLanguageRow.addArrangedSubview(contentLanguagePopup)
+        generalStack.addArrangedSubview(contentLanguageRow)
         generalStack.addArrangedSubview(updatesCheckbox)
         generalStack.addArrangedSubview(generalGrid)
         generalGrid.addArrangedSubview(openDownloadsButton)
@@ -898,7 +914,12 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let homeHost = URL(string: prefs.homePageURLString)?.host ?? prefs.homePageURLString
         let searchHost = URL(string: prefs.searchTemplate)?.host ?? prefs.searchTemplate
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")"
+        if let index = BrowserPreferences.PreferredContentLanguage.allCases.firstIndex(of: prefs.preferredContentLanguage) {
+            contentLanguagePopup.selectItem(at: index)
+        } else {
+            contentLanguagePopup.selectItem(at: 0)
+        }
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")"
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
 
@@ -937,6 +958,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func updatesChanged(_ sender: NSButton) {
         prefs.updatesEnabled = (sender.state == .on)
+        loadValues()
+    }
+
+    @objc private func contentLanguageChanged(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard index >= 0, index < BrowserPreferences.PreferredContentLanguage.allCases.count else { return }
+        prefs.preferredContentLanguage = BrowserPreferences.PreferredContentLanguage.allCases[index]
         loadValues()
     }
 

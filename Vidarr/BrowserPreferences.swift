@@ -4,6 +4,28 @@ final class BrowserPreferences {
     static let shared = BrowserPreferences()
     static let didChangeNotification = Notification.Name("BrowserPreferencesDidChange")
 
+    enum PreferredContentLanguage: String, CaseIterable {
+        case system
+        case japanese
+        case english
+
+        var displayName: String {
+            switch self {
+            case .system: return "System Default"
+            case .japanese: return "Japanese"
+            case .english: return "English"
+            }
+        }
+
+        var navigatorLanguage: String? {
+            switch self {
+            case .system: return nil
+            case .japanese: return "ja-JP"
+            case .english: return "en-US"
+            }
+        }
+    }
+
     enum GestureSensitivity: String, CaseIterable {
         case low
         case normal
@@ -31,6 +53,7 @@ final class BrowserPreferences {
         static let homePageURL = "prefs.homePageURL"
         static let searchTemplate = "prefs.searchTemplate"
         static let updatesEnabled = "prefs.updatesEnabled"
+        static let preferredContentLanguage = "prefs.preferredContentLanguage"
         static let gestureSensitivity = "prefs.gestureSensitivity"
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
@@ -52,6 +75,7 @@ final class BrowserPreferences {
             Key.homePageURL: "https://search.fenrir-inc.com/",
             Key.searchTemplate: "https://search.fenrir-inc.com/?q={query}",
             Key.updatesEnabled: true,
+            Key.preferredContentLanguage: PreferredContentLanguage.system.rawValue,
             Key.gestureSensitivity: GestureSensitivity.normal.rawValue,
             Key.antiTrackingEnabled: true,
             Key.contentBlockingEnabled: true,
@@ -84,6 +108,17 @@ final class BrowserPreferences {
         get { defaults.bool(forKey: Key.updatesEnabled) }
         set {
             defaults.set(newValue, forKey: Key.updatesEnabled)
+            notifyChanged()
+        }
+    }
+
+    var preferredContentLanguage: PreferredContentLanguage {
+        get {
+            let raw = defaults.string(forKey: Key.preferredContentLanguage) ?? PreferredContentLanguage.system.rawValue
+            return PreferredContentLanguage(rawValue: raw) ?? .system
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.preferredContentLanguage)
             notifyChanged()
         }
     }
@@ -209,6 +244,7 @@ final class BrowserPreferences {
             defaults.set("https://search.fenrir-inc.com/", forKey: Key.homePageURL)
             defaults.set("https://search.fenrir-inc.com/?q={query}", forKey: Key.searchTemplate)
             defaults.set(true, forKey: Key.updatesEnabled)
+            defaults.set(PreferredContentLanguage.system.rawValue, forKey: Key.preferredContentLanguage)
             defaults.set(GestureSensitivity.normal.rawValue, forKey: Key.gestureSensitivity)
             defaults.set(true, forKey: Key.antiTrackingEnabled)
             defaults.set(true, forKey: Key.contentBlockingEnabled)

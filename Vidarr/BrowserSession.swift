@@ -40,6 +40,21 @@ final class BrowserSession {
             config.userContentController.addUserScript(script)
         }
 
+        if let language = prefs.preferredContentLanguage.navigatorLanguage {
+            let primaryLanguage = language.components(separatedBy: "-").first ?? language
+            let source = """
+            Object.defineProperty(navigator, 'language', { get: () => '\(language)' });
+            Object.defineProperty(navigator, 'languages', { get: () => ['\(language)', '\(primaryLanguage)'] });
+            try { document.documentElement.setAttribute('lang', '\(primaryLanguage)'); } catch (_) {}
+            """
+            let script = WKUserScript(
+                source: source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            config.userContentController.addUserScript(script)
+        }
+
         WebContentBlocker.shared.configure(userContentController: config.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)

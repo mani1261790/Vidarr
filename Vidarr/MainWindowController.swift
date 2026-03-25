@@ -72,6 +72,7 @@ final class MainWindowController: NSWindowController {
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
     private var lastContentBlockingExceptionSignature = BrowserPreferences.shared.contentBlockingExceptionSignature
     private var lastPopupBlockingEnabled = BrowserPreferences.shared.popupBlockingEnabled
+    private var lastPreferredContentLanguage = BrowserPreferences.shared.preferredContentLanguage
     private var lastHarmfulAllowedHosts = BrowserPreferences.shared.harmfulSiteAllowedHosts
     private var temporarilyAllowedHosts: Set<String> = []
     private var configuredLongPressControllers: Set<ObjectIdentifier> = []
@@ -442,12 +443,14 @@ final class MainWindowController: NSWindowController {
             || (prefs.contentBlockingEnabled != lastContentBlockingEnabled)
             || (prefs.contentBlockingExceptionSignature != lastContentBlockingExceptionSignature)
             || (prefs.popupBlockingEnabled != lastPopupBlockingEnabled)
+            || (prefs.preferredContentLanguage != lastPreferredContentLanguage)
 
         lastEphemeralMode = prefs.ephemeralModeEnabled
         lastDoNotTrack = prefs.sendDoNotTrack
         lastContentBlockingEnabled = prefs.contentBlockingEnabled
         lastContentBlockingExceptionSignature = prefs.contentBlockingExceptionSignature
         lastPopupBlockingEnabled = prefs.popupBlockingEnabled
+        lastPreferredContentLanguage = prefs.preferredContentLanguage
         lastHarmfulAllowedHosts = prefs.harmfulSiteAllowedHosts
         temporarilyAllowedHosts.subtract(removedPersistedHarmfulHosts)
 
@@ -723,22 +726,34 @@ final class MainWindowController: NSWindowController {
         if #available(macOS 13.3, *) {
             webView.isInspectable = true
         }
+        let pageTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = webView.url?.host ?? "this Mac"
 
-        let selectors = [
-            NSSelectorFromString("_showWebInspector:"),
-            NSSelectorFromString("_toggleWebInspector:")
-        ]
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Open Page Inspector in Safari"
+        alert.informativeText = """
+        Vidarr のページは inspectable に設定されています。
 
-        for selector in selectors where webView.responds(to: selector) {
-            webView.perform(selector, with: self)
-            return
+        1. Safari を開く
+        2. Safari > Settings > Advanced で Web Developer 機能を有効化
+        3. Safari > Develop > \(Host.current().localizedName ?? "Mac") > Vidarr
+        4. \(pageTitle?.isEmpty == false ? pageTitle! : host) を選択
+        """
+        alert.addButton(withTitle: "Open Safari")
+        alert.addButton(withTitle: "OK")
+
+        let handler: (NSApplication.ModalResponse) -> Void = { response in
+            if response == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Safari.app"))
+            }
         }
 
-        presentTransientAlert(
-            title: "Page Inspectorを開けません",
-            message: "現在の環境ではWeb Inspectorを表示できませんでした。",
-            style: .warning
-        )
+        if let modalWindow = window ?? NSApp.keyWindow {
+            alert.beginSheetModal(for: modalWindow, completionHandler: handler)
+        } else {
+            handler(alert.runModal())
+        }
     }
 
     func menuPreparePasswordAutoFill() {

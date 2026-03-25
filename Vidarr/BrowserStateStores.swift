@@ -374,6 +374,9 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
     }
 
     private let searchField = NSSearchField()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let summaryLabel = NSTextField(labelWithString: "")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private var items: [BrowsingItem] = []
@@ -410,11 +413,21 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
+        titleLabel.stringValue = mode == .history ? "Browsing History" : "Bookmarks"
+
+        summaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        summaryLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        summaryLabel.textColor = .secondaryLabelColor
+
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.target = self
         searchField.action = #selector(searchChanged(_:))
         searchField.sendsSearchStringImmediately = true
         searchField.placeholderString = mode == .history ? "Search History" : "Search Bookmarks"
+        searchField.controlSize = .large
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -422,28 +435,44 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         scrollView.drawsBackground = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 32
-        tableView.intercellSpacing = NSSize(width: 0, height: 4)
+        tableView.rowHeight = 70
+        tableView.intercellSpacing = NSSize(width: 0, height: 8)
         tableView.delegate = self
         tableView.dataSource = self
         tableView.target = self
         tableView.doubleAction = #selector(openSelectedItem)
+        tableView.selectionHighlightStyle = .regular
 
-        let titleColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("title"))
-        titleColumn.width = 310
-        tableView.addTableColumn(titleColumn)
+        let itemColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("item"))
+        itemColumn.resizingMask = .autoresizingMask
+        tableView.addTableColumn(itemColumn)
 
-        let urlColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("url"))
-        urlColumn.width = 330
-        tableView.addTableColumn(urlColumn)
+        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateLabel.alignment = .center
+        emptyStateLabel.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.maximumNumberOfLines = 2
+        emptyStateLabel.isHidden = true
+        emptyStateLabel.stringValue = mode == .history
+            ? "No browsing history yet"
+            : "No bookmarks yet"
 
-        let dateColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("date"))
-        dateColumn.width = 120
-        tableView.addTableColumn(dateColumn)
+        let headerStack = NSStackView(views: [titleLabel, summaryLabel])
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 4
 
         scrollView.documentView = tableView
+        contentView.addSubview(headerStack)
         contentView.addSubview(searchField)
         contentView.addSubview(scrollView)
+        contentView.addSubview(emptyStateLabel)
+
+        let openButton = NSButton(title: "Open", target: self, action: #selector(openSelectedItem))
+        openButton.translatesAutoresizingMaskIntoConstraints = false
+        openButton.bezelStyle = .rounded
+        contentView.addSubview(openButton)
 
         let deleteButton = NSButton(title: "Delete", target: self, action: #selector(deleteSelectedItem))
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
@@ -454,20 +483,30 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         contentView.addSubview(clearButton)
 
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            searchField.widthAnchor.constraint(equalToConstant: 260),
+            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
 
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            scrollView.bottomAnchor.constraint(equalTo: deleteButton.topAnchor, constant: -10),
+            searchField.centerYAnchor.constraint(equalTo: headerStack.centerYAnchor),
+            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            searchField.widthAnchor.constraint(equalToConstant: 280),
 
-            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            scrollView.bottomAnchor.constraint(equalTo: deleteButton.topAnchor, constant: -12),
 
-            deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            deleteButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            emptyStateLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyStateLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyStateLabel.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, multiplier: 0.7),
+
+            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+
+            deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            deleteButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+
+            openButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
+            openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
         ])
     }
 
@@ -490,6 +529,8 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
                 item.title.lowercased().contains(query) || item.urlString.lowercased().contains(query)
             }
         }
+        updateSummary()
+        emptyStateLabel.isHidden = !filteredItems.isEmpty
         tableView.reloadData()
     }
 
@@ -500,24 +541,27 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row >= 0, row < filteredItems.count else { return nil }
         let item = filteredItems[row]
-        let identifier = tableColumn?.identifier.rawValue ?? "cell"
-        let label = NSTextField(labelWithString: "")
-        label.lineBreakMode = .byTruncatingMiddle
+        let identifier = NSUserInterfaceItemIdentifier("BrowsingItemCardView")
+        let cardView = (tableView.makeView(withIdentifier: identifier, owner: self) as? BrowsingItemCardView)
+            ?? BrowsingItemCardView(frame: .zero)
+        cardView.identifier = identifier
+        cardView.configure(item: item, mode: mode)
+        return cardView
+    }
 
-        switch identifier {
-        case "title":
-            label.stringValue = item.title
-        case "url":
-            label.stringValue = item.urlString
-            label.textColor = .secondaryLabelColor
-        case "date":
-            label.stringValue = DateFormatter.localizedString(from: item.visitedAt, dateStyle: .short, timeStyle: .short)
-            label.textColor = .secondaryLabelColor
-        default:
-            break
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = BrowsingItemRowView()
+        rowView.setSelected(row == tableView.selectedRow)
+        return rowView
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        _ = notification
+        for row in 0..<tableView.numberOfRows {
+            if let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) as? BrowsingItemRowView {
+                rowView.setSelected(row == tableView.selectedRow)
+            }
         }
-
-        return label
     }
 
     @objc private func openSelectedItem() {
@@ -561,6 +605,16 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         applyFilter()
     }
 
+    private func updateSummary() {
+        let itemWord = mode == .history ? "entries" : "bookmarks"
+        let total = "\(items.count) \(itemWord)"
+        if filteredItems.count == items.count {
+            summaryLabel.stringValue = total
+        } else {
+            summaryLabel.stringValue = "\(filteredItems.count) shown of \(total)"
+        }
+    }
+
     private func presentConfirmation(title: String, message: String, confirmed: @escaping () -> Void) {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -579,6 +633,118 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         } else {
             handleResponse(alert.runModal())
         }
+    }
+}
+
+private final class BrowsingItemCardView: NSTableCellView {
+    private let symbolView = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let metadataLabel = NSTextField(labelWithString: "")
+    private let urlLabel = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
+        symbolView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        symbolView.contentTintColor = .secondaryLabelColor
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
+
+        metadataLabel.translatesAutoresizingMaskIntoConstraints = false
+        metadataLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        metadataLabel.textColor = .secondaryLabelColor
+        metadataLabel.lineBreakMode = .byTruncatingTail
+
+        urlLabel.translatesAutoresizingMaskIntoConstraints = false
+        urlLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        urlLabel.textColor = .tertiaryLabelColor
+        urlLabel.lineBreakMode = .byTruncatingMiddle
+
+        addSubview(symbolView)
+        addSubview(titleLabel)
+        addSubview(metadataLabel)
+        addSubview(urlLabel)
+
+        NSLayoutConstraint.activate([
+            symbolView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            symbolView.widthAnchor.constraint(equalToConstant: 18),
+            symbolView.heightAnchor.constraint(equalToConstant: 18),
+
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            titleLabel.leadingAnchor.constraint(equalTo: symbolView.trailingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+
+            metadataLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
+            metadataLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metadataLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+
+            urlLabel.topAnchor.constraint(equalTo: metadataLabel.bottomAnchor, constant: 2),
+            urlLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            urlLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(item: BrowsingItem, mode: BrowsingItemsWindowController.Mode) {
+        let host = item.url?.host ?? item.urlString
+        titleLabel.stringValue = item.title
+        metadataLabel.stringValue = "\(host)  •  \(relativeDateString(for: item.visitedAt))"
+        urlLabel.stringValue = item.urlString
+        symbolView.image = NSImage(
+            systemSymbolName: mode == .history ? "clock.arrow.circlepath" : "star",
+            accessibilityDescription: nil
+        )
+    }
+
+    private func relativeDateString(for date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private final class BrowsingItemRowView: NSTableRowView {
+    private let selectionBackground = NSVisualEffectView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        selectionBackground.material = .sidebar
+        selectionBackground.blendingMode = .withinWindow
+        selectionBackground.state = .active
+        selectionBackground.isHidden = true
+        selectionBackground.wantsLayer = true
+        selectionBackground.layer?.cornerRadius = 12
+        addSubview(selectionBackground, positioned: .below, relativeTo: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        selectionBackground.frame = bounds.insetBy(dx: 2, dy: 2)
+    }
+
+    override func drawSelection(in dirtyRect: NSRect) {
+    }
+
+    func setSelected(_ selected: Bool) {
+        selectionBackground.isHidden = !selected
+    }
+
+    override var isEmphasized: Bool {
+        get { super.isEmphasized }
+        set { super.isEmphasized = newValue }
     }
 }
 

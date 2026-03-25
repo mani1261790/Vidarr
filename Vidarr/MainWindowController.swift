@@ -19,7 +19,7 @@ final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 54
         static let fullScreenRevealHotzoneHeight: CGFloat = 6
-        static let fullScreenHideDelay: TimeInterval = 2.4
+        static let fullScreenHideDelay: TimeInterval = 1.1
         static let tabChipSize = NSSize(width: 96, height: 48)
         static let tabSwitchGap: CGFloat = 16
         static let tabSwitchInteractiveMaxProgress: CGFloat = 0.82

@@ -90,8 +90,24 @@ final class BrowserSession {
     func load(url: URL) {
         performOnMain { [weak self] in
             guard let webView = self?.currentWebView else { return }
-            webView.load(URLRequest(url: url))
+            Self.load(url: url, in: webView)
         }
+    }
+
+    static func load(url: URL, in webView: WKWebView) {
+        if url.isFileURL {
+            let readAccessURL: URL
+            if let resourceValues = try? url.resourceValues(forKeys: [.isDirectoryKey]),
+               resourceValues.isDirectory == true {
+                readAccessURL = url
+            } else {
+                readAccessURL = url.deletingLastPathComponent()
+            }
+            webView.loadFileURL(url, allowingReadAccessTo: readAccessURL)
+            return
+        }
+
+        webView.load(URLRequest(url: url))
     }
 
     // MARK: - Helpers

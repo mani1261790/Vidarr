@@ -83,6 +83,7 @@ final class MainWindowController: NSWindowController {
     private var downloadSourceURLs: [ObjectIdentifier: URL] = [:]
     private var downloadDestinationURLs: [ObjectIdentifier: URL] = [:]
     private var downloadSecurityScopedAccess: [ObjectIdentifier: URL] = [:]
+    private var retainedDocumentSecurityScopes: [String: URL] = [:]
     private var fullScreenMouseMonitor: Any?
     private var fullScreenHideTimer: Timer?
     private var isFullScreenToolbarHidden = false
@@ -151,6 +152,7 @@ final class MainWindowController: NSWindowController {
         if let fullScreenMouseMonitor {
             NSEvent.removeMonitor(fullScreenMouseMonitor)
         }
+        retainedDocumentSecurityScopes.values.forEach { $0.stopAccessingSecurityScopedResource() }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -904,10 +906,27 @@ final class MainWindowController: NSWindowController {
 
     private func openLocalDocument(_ url: URL, preferNewTab: Bool) {
         guard isSafeStoredURL(url) else { return }
+        retainSecurityScope(for: url)
         if preferNewTab || tabManager.currentWebView == nil {
             tabManager.newTab(url: url)
         } else {
             session.load(url: url)
+        }
+    }
+
+    private func retainSecurityScope(for url: URL) {
+        guard url.isFileURL else { return }
+        if retainedDocumentSecurityScopes[url.path] != nil { return }
+
+        if url.startAccessingSecurityScopedResource() {
+            retainedDocumentSecurityScopes[url.path] = url
+            return
+        }
+
+        if let preferredDirectory = BrowserPreferences.shared.preferredDownloadDirectoryURL(),
+           url.path.hasPrefix(preferredDirectory.path),
+           preferredDirectory.startAccessingSecurityScopedResource() {
+            retainedDocumentSecurityScopes[preferredDirectory.path] = preferredDirectory
         }
     }
 

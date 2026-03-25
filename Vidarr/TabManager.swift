@@ -213,7 +213,7 @@ final class TabManager {
             webView.pageZoom = pageZoom
 
             if shouldLoadInitialURL, let targetURL = initialURL {
-                webView.load(URLRequest(url: targetURL))
+                BrowserSession.load(url: targetURL, in: webView)
                 tab.lastKnownURL = targetURL
                 state.tabs[insertedIndex] = tab
             }
@@ -512,7 +512,7 @@ final class TabManager {
                     let webView = BrowserSession.makeConfiguredWebView(for: groupSnapshot.group)
                     let resolvedURL = snapshot.urlString.flatMap(URL.init(string:))
                     if let resolvedURL {
-                        webView.load(URLRequest(url: resolvedURL))
+                        BrowserSession.load(url: resolvedURL, in: webView)
                     }
                     webView.pageZoom = snapshot.pageZoom
                     return Tab(
@@ -598,7 +598,7 @@ final class TabManager {
         state.tabs = snapshots.map { snapshot in
             let webView = BrowserSession.makeConfiguredWebView(for: group)
             if let url = snapshot.url {
-                webView.load(URLRequest(url: url))
+                BrowserSession.load(url: url, in: webView)
             }
             webView.pageZoom = snapshot.pageZoom
             return Tab(

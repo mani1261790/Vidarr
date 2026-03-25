@@ -64,6 +64,8 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 勝手に開くポップアップ/新規タブの抑止
 - [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
 - [x] サイトごとの広告/追跡ブロック例外設定（Develop > Toggle Content Blocking for Current Site）
+- [x] Site Settings ウィンドウで例外ホストと保存済み権限を管理
+- [x] Downloads / History / Bookmarks ウィンドウの検索と基本操作
 - [x] `GestureRecognizer` 単体テスト
 
 ### テスト実行

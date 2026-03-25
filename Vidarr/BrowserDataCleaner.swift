@@ -13,6 +13,9 @@ enum BrowserDataCleaner {
                 BrowsingHistoryStore.shared.clear()
                 BookmarkStore.shared.clear()
                 DownloadStore.shared.clear()
+                MediaPermissionStore.shared.clear()
+                BrowserPreferences.shared.contentBlockingDisabledHosts = []
+                BrowserPreferences.shared.harmfulSiteAllowedHosts = []
                 completion(.success(()))
             }
         }

@@ -1852,6 +1852,7 @@ extension MainWindowController: WKNavigationDelegate {
         if BrowserPreferences.shared.harmfulSiteWarningEnabled,
            let host = url.host?.lowercased(),
            !temporarilyAllowedHosts.contains(host),
+           !BrowserPreferences.shared.isHarmfulSiteAllowed(for: host),
            let warning = HarmfulSiteGuard.warning(for: url) {
             decisionHandler(.cancel)
             presentHarmfulSiteWarning(
@@ -1968,10 +1969,14 @@ extension MainWindowController: WKNavigationDelegate {
             alert.informativeText = warning.message
             alert.addButton(withTitle: "戻る")
             alert.addButton(withTitle: "続行")
+            alert.addButton(withTitle: "このサイトを今後許可")
 
             let proceed: (NSApplication.ModalResponse) -> Void = { [weak self] response in
                 guard let self else { return }
-                guard response == .alertSecondButtonReturn else { return }
+                guard response == .alertSecondButtonReturn || response == .alertThirdButtonReturn else { return }
+                if response == .alertThirdButtonReturn {
+                    BrowserPreferences.shared.setHarmfulSiteAllowed(true, for: host)
+                }
                 self.temporarilyAllowedHosts.insert(host)
                 var request = originalRequest
                 request.url = url

@@ -168,9 +168,11 @@ final class MediaPermissionStore {
 }
 
 final class DownloadsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+    private let searchField = NSSearchField()
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private var items: [DownloadItem] = []
+    private var filteredItems: [DownloadItem] = []
 
     init() {
         let window = NSWindow(
@@ -198,6 +200,12 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.target = self
+        searchField.action = #selector(searchChanged(_:))
+        searchField.sendsSearchStringImmediately = true
+        searchField.placeholderString = "Search Downloads"
+
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
@@ -227,28 +235,65 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         tableView.addTableColumn(dateColumn)
 
         scrollView.documentView = tableView
+        contentView.addSubview(searchField)
         contentView.addSubview(scrollView)
 
+        let revealButton = NSButton(title: "Reveal", target: self, action: #selector(revealSelectedDownload))
+        revealButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(revealButton)
+
+        let clearButton = NSButton(title: "Clear History", target: self, action: #selector(clearDownloads))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(clearButton)
+
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            searchField.widthAnchor.constraint(equalToConstant: 260),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            scrollView.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -10),
+
+            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+
+            revealButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            revealButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
         ])
     }
 
     private func reloadData() {
         items = DownloadStore.shared.all()
+        applyFilter()
+    }
+
+    private func applyFilter() {
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if query.isEmpty {
+            filteredItems = items
+        } else {
+            filteredItems = items.filter { item in
+                let haystacks = [
+                    item.destinationURL.lastPathComponent.lowercased(),
+                    item.sourceURL?.host?.lowercased() ?? "",
+                    item.sourceURLString.lowercased(),
+                    item.destinationPath.lowercased()
+                ]
+                return haystacks.contains { $0.contains(query) }
+            }
+        }
         tableView.reloadData()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        items.count
+        filteredItems.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row >= 0, row < items.count else { return nil }
-        let item = items[row]
+        guard row >= 0, row < filteredItems.count else { return nil }
+        let item = filteredItems[row]
         let identifier = tableColumn?.identifier ?? NSUserInterfaceItemIdentifier("cell")
         let view = NSTextField(labelWithString: "")
         view.identifier = identifier
@@ -272,8 +317,24 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
 
     @objc private func openSelectedDownload() {
         let row = tableView.selectedRow
-        guard row >= 0, row < items.count else { return }
-        NSWorkspace.shared.open(items[row].destinationURL)
+        guard row >= 0, row < filteredItems.count else { return }
+        NSWorkspace.shared.open(filteredItems[row].destinationURL)
+    }
+
+    @objc private func revealSelectedDownload() {
+        let row = tableView.selectedRow
+        guard row >= 0, row < filteredItems.count else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([filteredItems[row].destinationURL])
+    }
+
+    @objc private func clearDownloads() {
+        DownloadStore.shared.clear()
+        reloadData()
+    }
+
+    @objc private func searchChanged(_ sender: NSSearchField) {
+        _ = sender
+        applyFilter()
     }
 }
 
@@ -283,9 +344,11 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         case bookmarks
     }
 
+    private let searchField = NSSearchField()
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private var items: [BrowsingItem] = []
+    private var filteredItems: [BrowsingItem] = []
     private let mode: Mode
     private let openHandler: (URL) -> Void
 
@@ -318,6 +381,12 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.target = self
+        searchField.action = #selector(searchChanged(_:))
+        searchField.sendsSearchStringImmediately = true
+        searchField.placeholderString = mode == .history ? "Search History" : "Search Bookmarks"
+
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
@@ -344,17 +413,30 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         tableView.addTableColumn(dateColumn)
 
         scrollView.documentView = tableView
+        contentView.addSubview(searchField)
         contentView.addSubview(scrollView)
 
         let deleteButton = NSButton(title: "Delete", target: self, action: #selector(deleteSelectedItem))
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(deleteButton)
 
+        let clearButton = NSButton(title: mode == .history ? "Clear History" : "Clear Bookmarks", target: self, action: #selector(clearAllItems))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(clearButton)
+
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            searchField.widthAnchor.constraint(equalToConstant: 260),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             scrollView.bottomAnchor.constraint(equalTo: deleteButton.topAnchor, constant: -10),
+
+            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+
             deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             deleteButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
         ])
@@ -367,16 +449,28 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         case .bookmarks:
             items = BookmarkStore.shared.all()
         }
+        applyFilter()
+    }
+
+    private func applyFilter() {
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if query.isEmpty {
+            filteredItems = items
+        } else {
+            filteredItems = items.filter { item in
+                item.title.lowercased().contains(query) || item.urlString.lowercased().contains(query)
+            }
+        }
         tableView.reloadData()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        items.count
+        filteredItems.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row >= 0, row < items.count else { return nil }
-        let item = items[row]
+        guard row >= 0, row < filteredItems.count else { return nil }
+        let item = filteredItems[row]
         let identifier = tableColumn?.identifier.rawValue ?? "cell"
         let label = NSTextField(labelWithString: "")
         label.lineBreakMode = .byTruncatingMiddle
@@ -399,14 +493,14 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
 
     @objc private func openSelectedItem() {
         let row = tableView.selectedRow
-        guard row >= 0, row < items.count, let url = items[row].url else { return }
+        guard row >= 0, row < filteredItems.count, let url = filteredItems[row].url else { return }
         openHandler(url)
     }
 
     @objc private func deleteSelectedItem() {
         let row = tableView.selectedRow
-        guard row >= 0, row < items.count else { return }
-        let urlString = items[row].urlString
+        guard row >= 0, row < filteredItems.count else { return }
+        let urlString = filteredItems[row].urlString
         switch mode {
         case .history:
             BrowsingHistoryStore.shared.remove(urlString: urlString)
@@ -415,17 +509,29 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         }
         reloadData()
     }
+
+    @objc private func clearAllItems() {
+        switch mode {
+        case .history:
+            BrowsingHistoryStore.shared.clear()
+        case .bookmarks:
+            BookmarkStore.shared.clear()
+        }
+        reloadData()
+    }
+
+    @objc private func searchChanged(_ sender: NSSearchField) {
+        _ = sender
+        applyFilter()
+    }
 }
 
 final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
-    private enum Section {
-        case blockingExceptions
-        case mediaPermissions
-    }
-
     private let exceptionsTableView = NSTableView()
+    private let harmfulHostsTableView = NSTableView()
     private let mediaPermissionsTableView = NSTableView()
     private var exceptionHosts: [String] = []
+    private var harmfulAllowedHosts: [String] = []
     private var mediaPermissions: [StoredMediaPermission] = []
 
     init() {
@@ -475,6 +581,14 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             columns: [("host", 400), ("state", 220)],
             deleteAction: #selector(removeSelectedBlockingException),
             deleteTitle: "Remove Exception"
+        ))
+
+        root.addArrangedSubview(makeSectionTitle("Harmful Site Warning Exceptions"))
+        root.addArrangedSubview(makeTableContainer(
+            tableView: harmfulHostsTableView,
+            columns: [("host", 400), ("state", 220)],
+            deleteAction: #selector(removeSelectedHarmfulHostException),
+            deleteTitle: "Remove Allow"
         ))
 
         root.addArrangedSubview(makeSectionTitle("Saved Media Permissions"))
@@ -544,14 +658,19 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
 
     private func reloadData() {
         exceptionHosts = BrowserPreferences.shared.contentBlockingDisabledHosts.sorted()
+        harmfulAllowedHosts = BrowserPreferences.shared.harmfulSiteAllowedHosts.sorted()
         mediaPermissions = MediaPermissionStore.shared.all()
         exceptionsTableView.reloadData()
+        harmfulHostsTableView.reloadData()
         mediaPermissionsTableView.reloadData()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
         if tableView === exceptionsTableView {
             return exceptionHosts.count
+        }
+        if tableView === harmfulHostsTableView {
+            return harmfulAllowedHosts.count
         }
         return mediaPermissions.count
     }
@@ -569,6 +688,21 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
                 label.stringValue = host
             case "state":
                 label.stringValue = "Blocking disabled for this host"
+                label.textColor = .secondaryLabelColor
+            default:
+                break
+            }
+            return label
+        }
+
+        if tableView === harmfulHostsTableView {
+            guard row >= 0, row < harmfulAllowedHosts.count else { return label }
+            let host = harmfulAllowedHosts[row]
+            switch identifier {
+            case "host":
+                label.stringValue = host
+            case "state":
+                label.stringValue = "Warning bypass allowed"
                 label.textColor = .secondaryLabelColor
             default:
                 break
@@ -607,6 +741,13 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         guard row >= 0, row < mediaPermissions.count else { return }
         let permission = mediaPermissions[row]
         MediaPermissionStore.shared.remove(host: permission.host, kind: permission.kind)
+        reloadData()
+    }
+
+    @objc private func removeSelectedHarmfulHostException() {
+        let row = harmfulHostsTableView.selectedRow
+        guard row >= 0, row < harmfulAllowedHosts.count else { return }
+        BrowserPreferences.shared.setHarmfulSiteAllowed(false, for: harmfulAllowedHosts[row])
         reloadData()
     }
 

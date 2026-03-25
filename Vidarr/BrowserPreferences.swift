@@ -35,6 +35,7 @@ final class BrowserPreferences {
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
         static let contentBlockingDisabledHosts = "prefs.contentBlockingDisabledHosts"
+        static let harmfulSiteAllowedHosts = "prefs.harmfulSiteAllowedHosts"
         static let popupBlockingEnabled = "prefs.popupBlockingEnabled"
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
@@ -53,6 +54,7 @@ final class BrowserPreferences {
             Key.antiTrackingEnabled: true,
             Key.contentBlockingEnabled: true,
             Key.contentBlockingDisabledHosts: [],
+            Key.harmfulSiteAllowedHosts: [],
             Key.popupBlockingEnabled: true,
             Key.harmfulSiteWarningEnabled: true,
             Key.ephemeralModeEnabled: false,
@@ -131,6 +133,18 @@ final class BrowserPreferences {
         }
     }
 
+    var harmfulSiteAllowedHosts: Set<String> {
+        get {
+            let values = defaults.array(forKey: Key.harmfulSiteAllowedHosts) as? [String] ?? []
+            return Set(values.compactMap(Self.normalizeHost(_:)))
+        }
+        set {
+            let normalized = newValue.compactMap(Self.normalizeHost(_:)).sorted()
+            defaults.set(normalized, forKey: Key.harmfulSiteAllowedHosts)
+            notifyChanged()
+        }
+    }
+
     var harmfulSiteWarningEnabled: Bool {
         get { defaults.bool(forKey: Key.harmfulSiteWarningEnabled) }
         set {
@@ -196,6 +210,7 @@ final class BrowserPreferences {
         antiTrackingEnabled = true
         contentBlockingEnabled = true
         contentBlockingDisabledHosts = []
+        harmfulSiteAllowedHosts = []
         popupBlockingEnabled = true
         harmfulSiteWarningEnabled = true
         ephemeralModeEnabled = false
@@ -221,6 +236,22 @@ final class BrowserPreferences {
 
     var contentBlockingExceptionSignature: String {
         contentBlockingDisabledHosts.sorted().joined(separator: "|")
+    }
+
+    func isHarmfulSiteAllowed(for host: String) -> Bool {
+        guard let normalized = Self.normalizeHost(host) else { return false }
+        return harmfulSiteAllowedHosts.contains(normalized)
+    }
+
+    func setHarmfulSiteAllowed(_ allowed: Bool, for host: String) {
+        guard let normalized = Self.normalizeHost(host) else { return }
+        var hosts = harmfulSiteAllowedHosts
+        if allowed {
+            hosts.insert(normalized)
+        } else {
+            hosts.remove(normalized)
+        }
+        harmfulSiteAllowedHosts = hosts
     }
 
     nonisolated private static func normalizeHost(_ host: String) -> String? {

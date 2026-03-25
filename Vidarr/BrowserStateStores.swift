@@ -865,6 +865,8 @@ private final class BrowsingItemRowView: NSTableRowView {
 }
 
 final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let summaryLabel = NSTextField(labelWithString: "")
     private let exceptionsTableView = NSTableView()
     private let harmfulHostsTableView = NSTableView()
     private let mediaPermissionsTableView = NSTableView()
@@ -879,7 +881,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             backing: .buffered,
             defer: false
         )
-        window.title = "Site Settings"
+        window.title = "Privacy & Site Controls"
         window.isReleasedWhenClosed = false
         super.init(window: window)
         setupUI()
@@ -899,49 +901,90 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
 
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
+        titleLabel.stringValue = "Privacy & Site Controls"
+
+        summaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        summaryLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        summaryLabel.textColor = .secondaryLabelColor
+        summaryLabel.stringValue = "Manage site-specific exceptions and saved permissions."
+
         let root = NSStackView()
         root.translatesAutoresizingMaskIntoConstraints = false
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 14
+        root.setHuggingPriority(.defaultLow, for: .vertical)
         contentView.addSubview(root)
+        contentView.addSubview(titleLabel)
+        contentView.addSubview(summaryLabel)
 
         NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+
+            summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            summaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            summaryLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+
+            root.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 18),
             root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
         ])
 
-        root.addArrangedSubview(makeSectionTitle("Content Blocking Exceptions"))
+        root.addArrangedSubview(makeSectionHeader(
+            title: "Sites where ad blocking is off",
+            detail: "Use this if a site breaks when content blocking is enabled."
+        ))
         root.addArrangedSubview(makeTableContainer(
             tableView: exceptionsTableView,
             columns: [("host", 400), ("state", 220)],
             deleteAction: #selector(removeSelectedBlockingException),
-            deleteTitle: "Remove Exception"
+            deleteTitle: "Turn Blocking Back On"
         ))
 
-        root.addArrangedSubview(makeSectionTitle("Harmful Site Warning Exceptions"))
+        root.addArrangedSubview(makeSectionHeader(
+            title: "Sites allowed past safety warnings",
+            detail: "These sites were opened even after Vidarr showed a warning."
+        ))
         root.addArrangedSubview(makeTableContainer(
             tableView: harmfulHostsTableView,
             columns: [("host", 400), ("state", 220)],
             deleteAction: #selector(removeSelectedHarmfulHostException),
-            deleteTitle: "Remove Allow"
+            deleteTitle: "Restore Warning"
         ))
 
-        root.addArrangedSubview(makeSectionTitle("Saved Media Permissions"))
+        root.addArrangedSubview(makeSectionHeader(
+            title: "Saved camera and microphone permissions",
+            detail: "Remove an entry if you want a site to ask again."
+        ))
         root.addArrangedSubview(makeTableContainer(
             tableView: mediaPermissionsTableView,
             columns: [("host", 250), ("permission", 220), ("decision", 120)],
             deleteAction: #selector(removeSelectedMediaPermission),
-            deleteTitle: "Forget Permission"
+            deleteTitle: "Ask Again Next Time"
         ))
     }
 
-    private func makeSectionTitle(_ text: String) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        return label
+    private func makeSectionHeader(title: String, detail: String) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+
+        let detailLabel = NSTextField(wrappingLabelWithString: detail)
+        detailLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 2
+
+        stack.addArrangedSubview(titleLabel)
+        stack.addArrangedSubview(detailLabel)
+        return stack
     }
 
     private func makeTableContainer(
@@ -960,7 +1003,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         scrollView.drawsBackground = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 30
+        tableView.rowHeight = 34
         tableView.intercellSpacing = NSSize(width: 0, height: 4)
         tableView.delegate = self
         tableView.dataSource = self
@@ -1025,7 +1068,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             case "host":
                 label.stringValue = host
             case "state":
-                label.stringValue = "Blocking disabled for this host"
+                label.stringValue = "Ad blocking is currently off"
                 label.textColor = .secondaryLabelColor
             default:
                 break
@@ -1040,7 +1083,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             case "host":
                 label.stringValue = host
             case "state":
-                label.stringValue = "Warning bypass allowed"
+                label.stringValue = "Safety warning is currently skipped"
                 label.textColor = .secondaryLabelColor
             default:
                 break

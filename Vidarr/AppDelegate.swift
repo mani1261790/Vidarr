@@ -202,10 +202,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         developMenuItem.submenu = developMenu
         mainMenu.addItem(developMenuItem)
 
-        developMenu.addItem(makeMenuItem("Toggle Web Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
-        developMenu.addItem(makeMenuItem("Site Settings...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
-        developMenu.addItem(makeMenuItem("Toggle Content Blocking for Current Site", action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: []))
-        developMenu.addItem(makeMenuItem("Clear Browsing Data", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
+        developMenu.addItem(makeMenuItem("Open Page Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        developMenu.addItem(makeMenuItem("Privacy & Site Controls...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
+        developMenu.addItem(makeMenuItem("Turn Ad Blocking On/Off for This Site", action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: []))
+        developMenu.addItem(makeMenuItem("Clear Cookies and Cache...", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
 
         let windowMenu = NSMenu(title: "Window")
         let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
@@ -415,10 +415,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuClearBrowsingData() {
         let confirmation = NSAlert()
         confirmation.alertStyle = .warning
-        confirmation.messageText = "サイトデータを削除しますか？"
-        confirmation.informativeText = "Cookie、キャッシュ、Webサイトの保存データを削除します。履歴、ブックマーク、ダウンロード履歴、サイト設定は削除しません。"
-        confirmation.addButton(withTitle: "削除")
-        confirmation.addButton(withTitle: "キャンセル")
+        confirmation.messageText = "Clear cookies and cache?"
+        confirmation.informativeText = "This removes cookies, cache, and saved website data. History, bookmarks, downloads, and site permissions stay as they are."
+        confirmation.addButton(withTitle: "Clear")
+        confirmation.addButton(withTitle: "Cancel")
 
         let runClear = { [weak self] in
             BrowserDataCleaner.clearPersistentBrowsingData { result in
@@ -427,11 +427,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     switch result {
                     case .success:
                         alert.alertStyle = .informational
-                        alert.messageText = "サイトデータを削除しました"
-                        alert.informativeText = "Cookie、キャッシュ、Webサイトの保存データを消去しました。"
+                        alert.messageText = "Cookies and cache cleared"
+                        alert.informativeText = "Saved website data was removed."
                     case .failure(let error):
                         alert.alertStyle = .warning
-                        alert.messageText = "サイトデータ削除に失敗しました"
+                        alert.messageText = "Couldn't clear cookies and cache"
                         alert.informativeText = error.localizedDescription
                     }
                     alert.addButton(withTitle: "OK")

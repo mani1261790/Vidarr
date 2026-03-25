@@ -672,9 +672,25 @@ final class MainWindowController: NSWindowController {
 
     func menuToggleWebInspector() {
         guard let webView = tabManager.currentWebView else { return }
-        let selector = NSSelectorFromString("_toggleWebInspector:")
-        guard webView.responds(to: selector) else { return }
-        webView.perform(selector, with: nil)
+        if #available(macOS 13.3, *) {
+            webView.isInspectable = true
+        }
+
+        let selectors = [
+            NSSelectorFromString("_showWebInspector:"),
+            NSSelectorFromString("_toggleWebInspector:")
+        ]
+
+        for selector in selectors where webView.responds(to: selector) {
+            webView.perform(selector, with: self)
+            return
+        }
+
+        presentTransientAlert(
+            title: "Page Inspectorを開けません",
+            message: "現在の環境ではWeb Inspectorを表示できませんでした。",
+            style: .warning
+        )
     }
 
     func menuPreparePasswordAutoFill() {
@@ -764,6 +780,18 @@ final class MainWindowController: NSWindowController {
             ? "\(host) で広告/追跡ブロックを再度有効化しました。"
             : "\(host) を広告/追跡ブロックの例外に追加しました。"
         presentTransientAlert(title: title, message: message, style: .informational)
+    }
+
+    func currentDevelopMenuState() -> (host: String?, adBlockingEnabledForSite: Bool, globalContentBlockingEnabled: Bool) {
+        let host = tabManager.currentWebView?.url?.host?.lowercased()
+        let prefs = BrowserPreferences.shared
+        let adBlockingEnabledForSite: Bool
+        if let host, !host.isEmpty {
+            adBlockingEnabledForSite = prefs.contentBlockingEnabled && !prefs.isContentBlockingDisabled(for: host)
+        } else {
+            adBlockingEnabledForSite = prefs.contentBlockingEnabled
+        }
+        return (host, adBlockingEnabledForSite, prefs.contentBlockingEnabled)
     }
 
     func menuOpenExternalListURL(_ url: URL) {

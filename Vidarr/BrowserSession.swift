@@ -43,6 +43,9 @@ final class BrowserSession {
         WebContentBlocker.shared.configure(userContentController: config.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: config)
+        if #available(macOS 13.3, *) {
+            webView.isInspectable = true
+        }
         webView.allowsBackForwardNavigationGestures = false
         webView.translatesAutoresizingMaskIntoConstraints = false
         return webView

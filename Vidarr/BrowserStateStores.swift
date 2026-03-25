@@ -1000,6 +1000,9 @@ private final class SelectionAwareTableView: NSTableView {
 final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
+    private let blockingSectionTitleLabel = NSTextField(labelWithString: "")
+    private let harmfulSectionTitleLabel = NSTextField(labelWithString: "")
+    private let mediaSectionTitleLabel = NSTextField(labelWithString: "")
     private let exceptionsTableView = SelectionAwareTableView()
     private let harmfulHostsTableView = SelectionAwareTableView()
     private let mediaPermissionsTableView = SelectionAwareTableView()
@@ -1068,6 +1071,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         ])
 
         root.addArrangedSubview(makeSectionHeader(
+            titleLabel: blockingSectionTitleLabel,
             title: "Sites where ad blocking is off",
             detail: "Use this if a site breaks when content blocking is enabled."
         ))
@@ -1079,6 +1083,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         ))
 
         root.addArrangedSubview(makeSectionHeader(
+            titleLabel: harmfulSectionTitleLabel,
             title: "Sites allowed past safety warnings",
             detail: "These sites were opened even after Vidarr showed a warning."
         ))
@@ -1090,6 +1095,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         ))
 
         root.addArrangedSubview(makeSectionHeader(
+            titleLabel: mediaSectionTitleLabel,
             title: "Saved camera and microphone permissions",
             detail: "Remove an entry if you want a site to ask again."
         ))
@@ -1101,13 +1107,13 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         ))
     }
 
-    private func makeSectionHeader(title: String, detail: String) -> NSView {
+    private func makeSectionHeader(titleLabel: NSTextField, title: String, detail: String) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 3
 
-        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.stringValue = title
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
         let detailLabel = NSTextField(wrappingLabelWithString: detail)
@@ -1176,6 +1182,10 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         exceptionHosts = BrowserPreferences.shared.contentBlockingDisabledHosts.sorted()
         harmfulAllowedHosts = BrowserPreferences.shared.harmfulSiteAllowedHosts.sorted()
         mediaPermissions = MediaPermissionStore.shared.all()
+        summaryLabel.stringValue = "\(exceptionHosts.count) ad-blocking exceptions, \(harmfulAllowedHosts.count) safety overrides, \(mediaPermissions.count) saved permissions"
+        blockingSectionTitleLabel.stringValue = "Sites where ad blocking is off (\(exceptionHosts.count))"
+        harmfulSectionTitleLabel.stringValue = "Sites allowed past safety warnings (\(harmfulAllowedHosts.count))"
+        mediaSectionTitleLabel.stringValue = "Saved camera and microphone permissions (\(mediaPermissions.count))"
         exceptionsTableView.reloadData()
         harmfulHostsTableView.reloadData()
         mediaPermissionsTableView.reloadData()
@@ -1203,7 +1213,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             case "host":
                 label.stringValue = host
             case "state":
-                label.stringValue = "Ad blocking is currently off"
+                label.stringValue = "Current state: Off for this site"
                 label.textColor = .secondaryLabelColor
             default:
                 break
@@ -1218,7 +1228,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             case "host":
                 label.stringValue = host
             case "state":
-                label.stringValue = "Safety warning is currently skipped"
+                label.stringValue = "Current state: Warning skipped"
                 label.textColor = .secondaryLabelColor
             default:
                 break
@@ -1235,7 +1245,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             label.stringValue = displayName(for: permission.kind)
             label.textColor = .secondaryLabelColor
         case "decision":
-            label.stringValue = permission.decision == .allow ? "Allowed" : "Denied"
+            label.stringValue = permission.decision == .allow ? "Current state: Allowed" : "Current state: Denied"
             label.textColor = permission.decision == .allow
                 ? NSColor.systemGreen
                 : NSColor.systemOrange

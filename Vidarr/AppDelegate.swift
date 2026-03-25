@@ -20,6 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hasPresentedUpdateAlert = false
     private weak var historyMenu: NSMenu?
     private weak var bookmarksMenu: NSMenu?
+    private weak var developMenu: NSMenu?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -201,11 +202,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let developMenuItem = NSMenuItem(title: "Develop", action: nil, keyEquivalent: "")
         developMenuItem.submenu = developMenu
         mainMenu.addItem(developMenuItem)
+        developMenu.delegate = self
+        self.developMenu = developMenu
 
-        developMenu.addItem(makeMenuItem("Open Page Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
-        developMenu.addItem(makeMenuItem("Privacy & Site Controls...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
-        developMenu.addItem(makeMenuItem("Turn Ad Blocking On/Off for This Site", action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: []))
-        developMenu.addItem(makeMenuItem("Clear Cookies and Cache...", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
+        rebuildDevelopMenu(developMenu)
 
         let windowMenu = NSMenu(title: "Window")
         let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
@@ -473,6 +473,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if menu === bookmarksMenu {
             rebuildBookmarksMenu(menu)
+            return
+        }
+        if menu === developMenu {
+            rebuildDevelopMenu(menu)
         }
     }
 
@@ -524,6 +528,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.toolTip = entry.urlString
             menu.addItem(item)
         }
+    }
+
+    private func rebuildDevelopMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        menu.addItem(makeMenuItem("Open Page Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        menu.addItem(makeMenuItem("Privacy & Site Controls...", action: #selector(menuOpenSiteSettings), key: ",", modifiers: [.command, .option]))
+        menu.addItem(NSMenuItem.separator())
+
+        let state = mainWindowController?.currentDevelopMenuState()
+        let currentSiteTitle: String
+        if let host = state?.host, !host.isEmpty {
+            currentSiteTitle = "Current Site: \(host)"
+        } else {
+            currentSiteTitle = "Current Site: none"
+        }
+        let currentSiteItem = NSMenuItem(title: currentSiteTitle, action: nil, keyEquivalent: "")
+        currentSiteItem.isEnabled = false
+        menu.addItem(currentSiteItem)
+
+        let blockingStatus = (state?.adBlockingEnabledForSite ?? BrowserPreferences.shared.contentBlockingEnabled) ? "On" : "Off"
+        let statusItem = NSMenuItem(title: "Ad Blocking for This Site: \(blockingStatus)", action: nil, keyEquivalent: "")
+        statusItem.isEnabled = false
+        menu.addItem(statusItem)
+
+        let toggleTitle: String
+        if let host = state?.host, !host.isEmpty {
+            toggleTitle = (state?.adBlockingEnabledForSite ?? false)
+                ? "Turn Off Ad Blocking for \(host)"
+                : "Turn On Ad Blocking for \(host)"
+        } else {
+            toggleTitle = "Change Ad Blocking for This Site"
+        }
+        let toggleItem = makeMenuItem(toggleTitle, action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: [])
+        toggleItem.isEnabled = state?.host != nil
+        menu.addItem(toggleItem)
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(makeMenuItem("Clear Cookies and Cache...", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
     }
 
     @objc private func openPreferences() {

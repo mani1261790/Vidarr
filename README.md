@@ -54,6 +54,13 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 指定10ジェスチャーの認識とアクション実行
 - [x] ジェスチャー中HUD（候補+スコア）と確定表示
 - [x] 最小UI（上部アドレスバー + 中央WebView）
+- [x] セッション復元（前回終了時のタブ状態を保存）
+- [x] ダウンロード対応と `Downloads` ウィンドウ
+- [x] ファイルアップロード用の `Open Panel` 対応
+- [x] JavaScript の `alert` / `confirm` / `prompt` 対応
+- [x] ページズーム、印刷、PDF書き出し
+- [x] カメラ/マイク要求時の権限確認ダイアログ
+- [x] 読み込み失敗時の簡易エラーページ
 - [x] `GestureRecognizer` 単体テスト
 
 ### テスト実行

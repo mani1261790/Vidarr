@@ -48,6 +48,11 @@ final class BrowsingHistoryStore {
         Array(items.prefix(max(0, limit)))
     }
 
+    func clear() {
+        items.removeAll()
+        persist()
+    }
+
     private func normalizedTitle(_ title: String?, fallbackURL: URL) -> String {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty { return trimmed }
@@ -98,6 +103,11 @@ final class BookmarkStore {
 
     func all() -> [BrowsingItem] {
         items
+    }
+
+    func clear() {
+        items.removeAll()
+        persist()
     }
 
     private func normalizedTitle(_ title: String?, fallbackURL: URL) -> String {

@@ -12,6 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var mainWindowController: MainWindowController?
     private var preferencesWindowController: PreferencesWindowController?
+    private var downloadsWindowController: DownloadsWindowController?
     private let updateChecker = UpdateChecker()
     private var hasPresentedUpdateAlert = false
     private weak var historyMenu: NSMenu?
@@ -26,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let windowController = MainWindowController()
         mainWindowController = windowController
+        windowController.restoreSavedSessionIfAvailable()
 
         windowController.showWindow(self)
         windowController.window?.makeKeyAndOrderFront(nil)
@@ -45,7 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
+        mainWindowController?.saveSessionSnapshot()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
@@ -126,6 +128,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fileMenu.addItem(makeMenuItem("Toggle Bookmark", action: #selector(menuToggleBookmark), key: "d"))
         fileMenu.addItem(makeMenuItem("Reopen Closed Tab", action: #selector(menuReopenClosedTab), key: "t", modifiers: [.command, .shift]))
         fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(makeMenuItem("Open Downloads", action: #selector(menuOpenDownloads), key: "j", modifiers: [.command, .option]))
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(makeMenuItem("Print...", action: #selector(menuPrintPage), key: "p"))
+        fileMenu.addItem(makeMenuItem("Export as PDF...", action: #selector(menuExportPDF), key: "p", modifiers: [.command, .shift]))
+        fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(makeMenuItem("Close Window", action: #selector(menuCloseWindow), key: "w", modifiers: [.command, .shift]))
 
         let editMenu = NSMenu(title: "Edit")
@@ -157,6 +164,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Focus Address Bar", action: #selector(menuFocusAddressBar), key: "l"))
         viewMenu.addItem(makeMenuItem("Focus Tab Search", action: #selector(menuFocusTabSearch), key: "f", modifiers: [.command, .shift]))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(makeMenuItem("Zoom In", action: #selector(menuZoomIn), key: "+"))
+        viewMenu.addItem(makeMenuItem("Zoom Out", action: #selector(menuZoomOut), key: "-"))
+        viewMenu.addItem(makeMenuItem("Actual Size", action: #selector(menuActualSize), key: "0"))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Enter Full Screen", action: #selector(menuToggleFullScreen), key: "f", modifiers: [.command, .control]))
 
@@ -236,6 +247,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainWindowController?.window?.performClose(nil)
     }
 
+    @objc private func menuOpenDownloads() {
+        if downloadsWindowController == nil {
+            downloadsWindowController = DownloadsWindowController()
+        }
+        downloadsWindowController?.showWindowAndReload()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc private func menuReload() {
         mainWindowController?.menuReload()
     }
@@ -250,6 +269,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func menuFocusTabSearch() {
         mainWindowController?.menuFocusTabSearch()
+    }
+
+    @objc private func menuZoomIn() {
+        mainWindowController?.menuZoomIn()
+    }
+
+    @objc private func menuZoomOut() {
+        mainWindowController?.menuZoomOut()
+    }
+
+    @objc private func menuActualSize() {
+        mainWindowController?.menuResetZoom()
     }
 
     @objc private func menuNextTab() {
@@ -289,6 +320,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func menuReopenClosedTab() {
         mainWindowController?.menuReopenClosedTab()
+    }
+
+    @objc private func menuPrintPage() {
+        mainWindowController?.menuPrintPage()
+    }
+
+    @objc private func menuExportPDF() {
+        mainWindowController?.menuExportPDF()
     }
 
     @objc private func menuOpenHistoryEntry(_ sender: NSMenuItem) {

@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import WebKit
 
-enum BrowserTabGroup: String, CaseIterable {
+enum BrowserTabGroup: String, CaseIterable, Codable {
     case regular
     case privateMode
     case work
@@ -36,6 +36,24 @@ struct TabStripItem {
     let thumbnail: NSImage?
 }
 
+struct TabSessionSnapshot: Codable {
+    let urlString: String?
+    let isProtected: Bool
+    let isBookmarked: Bool
+    let pageZoom: Double
+}
+
+struct TabGroupSessionSnapshot: Codable {
+    let group: BrowserTabGroup
+    let currentIndex: Int
+    let tabs: [TabSessionSnapshot]
+}
+
+struct BrowserSessionSnapshot: Codable {
+    let currentGroup: BrowserTabGroup
+    let groups: [TabGroupSessionSnapshot]
+}
+
 final class TabManager {
     weak var delegate: TabManagerDelegate?
 
@@ -45,6 +63,7 @@ final class TabManager {
         var thumbnail: NSImage?
         var isProtected: Bool
         var isBookmarked: Bool
+        var pageZoom: Double
     }
 
     private struct GroupState {
@@ -176,7 +195,8 @@ final class TabManager {
                 lastKnownURL: initialURL,
                 thumbnail: nil,
                 isProtected: false,
-                isBookmarked: false
+                isBookmarked: false,
+                pageZoom: 1.0
             )
             state.tabs.append(tab)
             let insertedIndex = state.tabs.count - 1
@@ -372,6 +392,84 @@ final class TabManager {
         }
     }
 
+    var currentPageZoom: Double {
+        let state = state(for: currentGroup)
+        guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return 1.0 }
+        return state.tabs[state.currentIndex].pageZoom
+    }
+
+    func setCurrentPageZoom(_ zoom: Double) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            var state = state(for: currentGroup)
+            guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return }
+            let clamped = min(3.0, max(0.5, zoom))
+            state.tabs[state.currentIndex].pageZoom = clamped
+            state.tabs[state.currentIndex].webView.pageZoom = clamped
+            setState(state, for: currentGroup)
+        }
+    }
+
+    func sessionSnapshot() -> BrowserSessionSnapshot {
+        let groups = BrowserTabGroup.allCases.map { group in
+            let state = state(for: group)
+            return TabGroupSessionSnapshot(
+                group: group,
+                currentIndex: state.currentIndex,
+                tabs: state.tabs.map { tab in
+                    TabSessionSnapshot(
+                        urlString: (tab.webView.url ?? tab.lastKnownURL)?.absoluteString,
+                        isProtected: tab.isProtected,
+                        isBookmarked: tab.isBookmarked,
+                        pageZoom: tab.pageZoom
+                    )
+                }
+            )
+        }
+        return BrowserSessionSnapshot(currentGroup: currentGroup, groups: groups)
+    }
+
+    func restoreSession(from snapshot: BrowserSessionSnapshot) {
+        performOnMain { [weak self] in
+            guard let self else { return }
+
+            var rebuilt: [BrowserTabGroup: GroupState] = [:]
+            for group in BrowserTabGroup.allCases {
+                rebuilt[group] = GroupState()
+            }
+
+            for groupSnapshot in snapshot.groups {
+                var state = GroupState()
+                state.tabs = groupSnapshot.tabs.map { snapshot in
+                    let webView = BrowserSession.makeConfiguredWebView(for: groupSnapshot.group)
+                    let resolvedURL = snapshot.urlString.flatMap(URL.init(string:))
+                    if let resolvedURL {
+                        webView.load(URLRequest(url: resolvedURL))
+                    }
+                    webView.pageZoom = snapshot.pageZoom
+                    return Tab(
+                        webView: webView,
+                        lastKnownURL: resolvedURL,
+                        thumbnail: nil,
+                        isProtected: snapshot.isProtected,
+                        isBookmarked: snapshot.isBookmarked,
+                        pageZoom: snapshot.pageZoom
+                    )
+                }
+                if state.tabs.isEmpty {
+                    state.currentIndex = -1
+                } else {
+                    state.currentIndex = min(max(0, groupSnapshot.currentIndex), state.tabs.count - 1)
+                }
+                rebuilt[groupSnapshot.group] = state
+            }
+
+            states = rebuilt
+            switchGroupInternal(snapshot.currentGroup, ensureTab: true)
+            notifyCurrentGroupUpdated(selectCurrent: true)
+        }
+    }
+
     func reconfigureAllTabsForCurrentPreferences() {
         performOnMain { [weak self] in
             guard let self else { return }
@@ -427,12 +525,14 @@ final class TabManager {
             if let url = snapshot.url {
                 webView.load(URLRequest(url: url))
             }
+            webView.pageZoom = 1.0
             return Tab(
                 webView: webView,
                 lastKnownURL: snapshot.url,
                 thumbnail: nil,
                 isProtected: snapshot.isProtected,
-                isBookmarked: snapshot.isBookmarked
+                isBookmarked: snapshot.isBookmarked,
+                pageZoom: 1.0
             )
         }
         state.currentIndex = min(max(0, selectedIndex), state.tabs.count - 1)

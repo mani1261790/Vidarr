@@ -1,4 +1,6 @@
 import Cocoa
+import AVFoundation
+import UniformTypeIdentifiers
 import WebKit
 
 final class MainWindowController: NSWindowController {
@@ -58,6 +60,8 @@ final class MainWindowController: NSWindowController {
     private var temporarilyAllowedHosts: Set<String> = []
     private var configuredLongPressControllers: Set<ObjectIdentifier> = []
     private var longPressHandlerBoxes: [ObjectIdentifier: WeakScriptMessageHandler] = [:]
+    private var downloadSourceURLs: [ObjectIdentifier: URL] = [:]
+    private var downloadDestinationURLs: [ObjectIdentifier: URL] = [:]
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -542,6 +546,58 @@ final class MainWindowController: NSWindowController {
         actions.tabPrev()
     }
 
+    func menuZoomIn() {
+        tabManager.setCurrentPageZoom(tabManager.currentPageZoom + 0.1)
+    }
+
+    func menuZoomOut() {
+        tabManager.setCurrentPageZoom(tabManager.currentPageZoom - 0.1)
+    }
+
+    func menuResetZoom() {
+        tabManager.setCurrentPageZoom(1.0)
+    }
+
+    func menuPrintPage() {
+        guard let webView = tabManager.currentWebView else { return }
+        let operation = webView.printOperation(with: .init())
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        operation.run()
+    }
+
+    func menuExportPDF() {
+        guard let webView = tabManager.currentWebView else { return }
+        let savePanel = NSSavePanel()
+        savePanel.canCreateDirectories = true
+        savePanel.nameFieldStringValue = (webView.title?.isEmpty == false ? webView.title! : "Page") + ".pdf"
+        savePanel.allowedContentTypes = [.pdf]
+        guard let modalWindow = window ?? NSApp.keyWindow else { return }
+        savePanel.beginSheetModal(for: modalWindow) { [weak self] response in
+            guard response == .OK, let destinationURL = savePanel.url else { return }
+            webView.createPDF(configuration: WKPDFConfiguration()) { result in
+                switch result {
+                case .success(let data):
+                    do {
+                        try data.write(to: destinationURL, options: .atomic)
+                    } catch {
+                        self?.presentTransientAlert(
+                            title: "PDF保存に失敗しました",
+                            message: error.localizedDescription,
+                            style: .warning
+                        )
+                    }
+                case .failure(let error):
+                    self?.presentTransientAlert(
+                        title: "PDF保存に失敗しました",
+                        message: error.localizedDescription,
+                        style: .warning
+                    )
+                }
+            }
+        }
+    }
+
     func menuToggleWebInspector() {
         guard let webView = tabManager.currentWebView else { return }
         let selector = NSSelectorFromString("_toggleWebInspector:")
@@ -624,6 +680,15 @@ final class MainWindowController: NSWindowController {
 
     func menuOpenExternalListURL(_ url: URL) {
         tabManager.newTab(url: url)
+    }
+
+    func restoreSavedSessionIfAvailable() {
+        guard let snapshot = BrowserSessionStore.shared.load() else { return }
+        tabManager.restoreSession(from: snapshot)
+    }
+
+    func saveSessionSnapshot() {
+        BrowserSessionStore.shared.save(tabManager.sessionSnapshot())
     }
 
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {
@@ -1739,6 +1804,14 @@ extension MainWindowController: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        if navigationAction.shouldPerformDownload {
+            if let url = navigationAction.request.url {
+                downloadSourceURLs[ObjectIdentifier(webView)] = url
+            }
+            decisionHandler(.download)
+            return
+        }
+
         guard navigationAction.targetFrame?.isMainFrame ?? true else {
             decisionHandler(.allow)
             return
@@ -1780,6 +1853,35 @@ extension MainWindowController: WKNavigationDelegate {
         webView.load(URLRequest(url: sanitized))
     }
 
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        if !navigationResponse.canShowMIMEType {
+            if let url = navigationResponse.response.url {
+                downloadSourceURLs[ObjectIdentifier(webView)] = url
+            }
+            decisionHandler(.download)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        if let url = navigationAction.request.url {
+            downloadSourceURLs[ObjectIdentifier(download)] = url
+        }
+        download.delegate = self
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        if let url = navigationResponse.response.url {
+            downloadSourceURLs[ObjectIdentifier(download)] = url
+        }
+        download.delegate = self
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         tabManager.updateMetadata(for: webView)
         captureThumbnail(for: webView)
@@ -1795,6 +1897,16 @@ extension MainWindowController: WKNavigationDelegate {
             applyAddressDisplayMode(display: webView.url?.absoluteString ?? "")
             rebuildTabStrip()
         }
+        refreshNavigationButtons()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        presentErrorPageIfNeeded(for: webView, error: error)
+        refreshNavigationButtons()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        presentErrorPageIfNeeded(for: webView, error: error)
         refreshNavigationButtons()
     }
 
@@ -1850,6 +1962,148 @@ extension MainWindowController: WKNavigationDelegate {
             DispatchQueue.main.async(execute: show)
         }
     }
+
+    private func presentAlert(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        if let modalWindow = window ?? NSApp.keyWindow {
+            alert.beginSheetModal(for: modalWindow, completionHandler: completion)
+        } else {
+            completion(alert.runModal())
+        }
+    }
+
+    private func presentTransientAlert(title: String, message: String, style: NSAlert.Style) {
+        let alert = NSAlert()
+        alert.alertStyle = style
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        presentAlert(alert) { _ in }
+    }
+
+    private func presentErrorPageIfNeeded(for webView: WKWebView, error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return
+        }
+
+        let failingURL = (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.absoluteString
+            ?? webView.url?.absoluteString
+            ?? "about:blank"
+        let title = htmlEscaped("This page could not be loaded")
+        let message = htmlEscaped(error.localizedDescription)
+        let urlString = htmlEscaped(failingURL)
+        let html = """
+        <!doctype html>
+        <html lang="en">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Error</title>
+        <style>
+        :root { color-scheme: light dark; }
+        body {
+          margin: 0;
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          background: #eef1f5;
+          color: #1b2128;
+          display: grid;
+          place-items: center;
+          min-height: 100vh;
+        }
+        .card {
+          width: min(560px, calc(100vw - 48px));
+          border-radius: 22px;
+          padding: 28px;
+          background: rgba(255,255,255,0.9);
+          box-shadow: 0 20px 60px rgba(28,35,44,0.14);
+        }
+        h1 { font-size: 24px; margin: 0 0 10px; }
+        p { margin: 0 0 12px; line-height: 1.6; }
+        code {
+          display: block;
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          background: rgba(25,30,38,0.08);
+          word-break: break-all;
+        }
+        </style>
+        <body>
+          <div class="card">
+            <h1>\(title)</h1>
+            <p>\(message)</p>
+            <code>\(urlString)</code>
+          </div>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    private func htmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    @available(macOS 12.0, *)
+    private func requestMediaPermission(originHost: String, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "サイト権限の確認"
+
+        switch type {
+        case .camera:
+            alert.informativeText = "\(originHost) がカメラへのアクセスを要求しています。"
+        case .microphone:
+            alert.informativeText = "\(originHost) がマイクへのアクセスを要求しています。"
+        case .cameraAndMicrophone:
+            alert.informativeText = "\(originHost) がカメラとマイクへのアクセスを要求しています。"
+        @unknown default:
+            alert.informativeText = "\(originHost) がメディアデバイスへのアクセスを要求しています。"
+        }
+
+        alert.addButton(withTitle: "許可")
+        alert.addButton(withTitle: "拒否")
+
+        presentAlert(alert) { response in
+            guard response == .alertFirstButtonReturn else {
+                decisionHandler(.deny)
+                return
+            }
+
+            let group = DispatchGroup()
+            var allowed = true
+
+            func requestAVPermission(_ mediaType: AVMediaType) {
+                group.enter()
+                AVCaptureDevice.requestAccess(for: mediaType) { granted in
+                    if !granted {
+                        allowed = false
+                    }
+                    group.leave()
+                }
+            }
+
+            switch type {
+            case .camera:
+                requestAVPermission(.video)
+            case .microphone:
+                requestAVPermission(.audio)
+            case .cameraAndMicrophone:
+                requestAVPermission(.video)
+                requestAVPermission(.audio)
+            @unknown default:
+                allowed = false
+            }
+
+            group.notify(queue: .main) {
+                decisionHandler(allowed ? .grant : .deny)
+            }
+        }
+    }
 }
 
 extension MainWindowController: WKUIDelegate {
@@ -1881,6 +2135,129 @@ extension MainWindowController: WKUIDelegate {
             )
         }
         return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = frame.securityOrigin.host
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        presentAlert(alert) { _ in completionHandler() }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = frame.securityOrigin.host
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        presentAlert(alert) { response in
+            completionHandler(response == .alertFirstButtonReturn)
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = frame.securityOrigin.host
+        alert.informativeText = prompt
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = defaultText ?? ""
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        presentAlert(alert) { response in
+            completionHandler(response == .alertFirstButtonReturn ? field.stringValue : nil)
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        _ = frame
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard let modalWindow = window ?? NSApp.keyWindow else {
+            completionHandler(nil)
+            return
+        }
+        panel.beginSheetModal(for: modalWindow) { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
+
+    @available(macOS 12.0, *)
+    func webView(
+        _ webView: WKWebView,
+        requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        type: WKMediaCaptureType,
+        decisionHandler: @escaping (WKPermissionDecision) -> Void
+    ) {
+        _ = frame
+        requestMediaPermission(originHost: origin.host, type: type, decisionHandler: decisionHandler)
+    }
+}
+
+extension MainWindowController: WKDownloadDelegate {
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        _ = response
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = suggestedFilename
+        if let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            panel.directoryURL = downloadsURL
+        }
+        guard let modalWindow = window ?? NSApp.keyWindow else {
+            completionHandler(nil)
+            return
+        }
+        panel.beginSheetModal(for: modalWindow) { [weak self] responseResult in
+            if responseResult == .OK, let destinationURL = panel.url {
+                self?.downloadDestinationURLs[ObjectIdentifier(download)] = destinationURL
+                completionHandler(destinationURL)
+            } else {
+                completionHandler(nil)
+            }
+        }
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        let sourceURL = downloadSourceURLs.removeValue(forKey: ObjectIdentifier(download))
+        guard let destinationURL = downloadDestinationURLs.removeValue(forKey: ObjectIdentifier(download)) else {
+            return
+        }
+        DownloadStore.shared.add(sourceURL: sourceURL, destinationURL: destinationURL)
+        presentTransientAlert(title: "ダウンロード完了", message: destinationURL.lastPathComponent, style: .informational)
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        _ = resumeData
+        downloadSourceURLs.removeValue(forKey: ObjectIdentifier(download))
+        presentTransientAlert(title: "ダウンロード失敗", message: error.localizedDescription, style: .warning)
     }
 }
 

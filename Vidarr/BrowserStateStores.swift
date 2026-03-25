@@ -173,6 +173,9 @@ final class MediaPermissionStore {
 
 final class DownloadsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let searchField = NSSearchField()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let summaryLabel = NSTextField(labelWithString: "")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private var items: [DownloadItem] = []
@@ -204,11 +207,21 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
+        titleLabel.stringValue = "Downloads"
+
+        summaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        summaryLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        summaryLabel.textColor = .secondaryLabelColor
+
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.target = self
         searchField.action = #selector(searchChanged(_:))
         searchField.sendsSearchStringImmediately = true
         searchField.placeholderString = "Search Downloads"
+        searchField.controlSize = .large
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -216,31 +229,40 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         scrollView.drawsBackground = false
 
         tableView.headerView = nil
-        tableView.rowHeight = 30
-        tableView.intercellSpacing = NSSize(width: 0, height: 4)
+        tableView.rowHeight = 72
+        tableView.intercellSpacing = NSSize(width: 0, height: 8)
         tableView.delegate = self
         tableView.dataSource = self
         tableView.target = self
         tableView.doubleAction = #selector(openSelectedDownload)
+        tableView.selectionHighlightStyle = .regular
 
-        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        nameColumn.title = "File"
-        nameColumn.width = 310
-        tableView.addTableColumn(nameColumn)
+        let itemColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("item"))
+        itemColumn.resizingMask = .autoresizingMask
+        tableView.addTableColumn(itemColumn)
 
-        let sourceColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("source"))
-        sourceColumn.title = "Source"
-        sourceColumn.width = 260
-        tableView.addTableColumn(sourceColumn)
+        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateLabel.alignment = .center
+        emptyStateLabel.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.stringValue = "No downloads yet"
+        emptyStateLabel.isHidden = true
 
-        let dateColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("date"))
-        dateColumn.title = "Date"
-        dateColumn.width = 120
-        tableView.addTableColumn(dateColumn)
+        let headerStack = NSStackView(views: [titleLabel, summaryLabel])
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 4
 
         scrollView.documentView = tableView
+        contentView.addSubview(headerStack)
         contentView.addSubview(searchField)
         contentView.addSubview(scrollView)
+        contentView.addSubview(emptyStateLabel)
+
+        let openButton = NSButton(title: "Open", target: self, action: #selector(openSelectedDownload))
+        openButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(openButton)
 
         let revealButton = NSButton(title: "Reveal", target: self, action: #selector(revealSelectedDownload))
         revealButton.translatesAutoresizingMaskIntoConstraints = false
@@ -251,20 +273,29 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         contentView.addSubview(clearButton)
 
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            searchField.widthAnchor.constraint(equalToConstant: 260),
+            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
 
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            scrollView.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -10),
+            searchField.centerYAnchor.constraint(equalTo: headerStack.centerYAnchor),
+            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            searchField.widthAnchor.constraint(equalToConstant: 280),
 
-            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            scrollView.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -12),
 
-            revealButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            revealButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            emptyStateLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyStateLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+
+            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+
+            revealButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            revealButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+
+            openButton.trailingAnchor.constraint(equalTo: revealButton.leadingAnchor, constant: -8),
+            openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
         ])
     }
 
@@ -288,6 +319,8 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
                 return haystacks.contains { $0.contains(query) }
             }
         }
+        updateSummary()
+        emptyStateLabel.isHidden = !filteredItems.isEmpty
         tableView.reloadData()
     }
 
@@ -298,25 +331,27 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row >= 0, row < filteredItems.count else { return nil }
         let item = filteredItems[row]
-        let identifier = tableColumn?.identifier ?? NSUserInterfaceItemIdentifier("cell")
-        let view = NSTextField(labelWithString: "")
-        view.identifier = identifier
-        view.lineBreakMode = .byTruncatingMiddle
+        let identifier = NSUserInterfaceItemIdentifier("DownloadItemCardView")
+        let cardView = (tableView.makeView(withIdentifier: identifier, owner: self) as? DownloadItemCardView)
+            ?? DownloadItemCardView(frame: .zero)
+        cardView.identifier = identifier
+        cardView.configure(item: item)
+        return cardView
+    }
 
-        switch identifier.rawValue {
-        case "name":
-            view.stringValue = item.destinationURL.lastPathComponent
-        case "source":
-            view.stringValue = item.sourceURL?.host ?? item.sourceURLString
-            view.textColor = NSColor.secondaryLabelColor
-        case "date":
-            view.stringValue = DateFormatter.localizedString(from: item.createdAt, dateStyle: .short, timeStyle: .short)
-            view.textColor = NSColor.secondaryLabelColor
-        default:
-            view.stringValue = ""
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let rowView = BrowsingItemRowView()
+        rowView.setSelected(row == tableView.selectedRow)
+        return rowView
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        _ = notification
+        for row in 0..<tableView.numberOfRows {
+            if let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) as? BrowsingItemRowView {
+                rowView.setSelected(row == tableView.selectedRow)
+            }
         }
-
-        return view
     }
 
     @objc private func openSelectedDownload() {
@@ -346,6 +381,15 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         applyFilter()
     }
 
+    private func updateSummary() {
+        let total = "\(items.count) downloads"
+        if filteredItems.count == items.count {
+            summaryLabel.stringValue = total
+        } else {
+            summaryLabel.stringValue = "\(filteredItems.count) shown of \(total)"
+        }
+    }
+
     private func presentConfirmation(title: String, message: String, confirmed: @escaping () -> Void) {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -364,6 +408,78 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         } else {
             handleResponse(alert.runModal())
         }
+    }
+}
+
+private final class DownloadItemCardView: NSTableCellView {
+    private let symbolView = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let metadataLabel = NSTextField(labelWithString: "")
+    private let pathLabel = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
+        symbolView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        symbolView.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
+        symbolView.contentTintColor = .secondaryLabelColor
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
+
+        metadataLabel.translatesAutoresizingMaskIntoConstraints = false
+        metadataLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        metadataLabel.textColor = .secondaryLabelColor
+        metadataLabel.lineBreakMode = .byTruncatingTail
+
+        pathLabel.translatesAutoresizingMaskIntoConstraints = false
+        pathLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        pathLabel.textColor = .tertiaryLabelColor
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+
+        addSubview(symbolView)
+        addSubview(titleLabel)
+        addSubview(metadataLabel)
+        addSubview(pathLabel)
+
+        NSLayoutConstraint.activate([
+            symbolView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            symbolView.widthAnchor.constraint(equalToConstant: 18),
+            symbolView.heightAnchor.constraint(equalToConstant: 18),
+
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            titleLabel.leadingAnchor.constraint(equalTo: symbolView.trailingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+
+            metadataLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
+            metadataLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metadataLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+
+            pathLabel.topAnchor.constraint(equalTo: metadataLabel.bottomAnchor, constant: 2),
+            pathLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            pathLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(item: DownloadItem) {
+        let sourceHost = item.sourceURL?.host ?? item.sourceURLString
+        titleLabel.stringValue = item.destinationURL.lastPathComponent
+        metadataLabel.stringValue = "\(sourceHost)  •  \(relativeDateString(for: item.createdAt))"
+        pathLabel.stringValue = item.destinationPath
+    }
+
+    private func relativeDateString(for date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

@@ -34,6 +34,7 @@ final class BrowserPreferences {
         static let gestureSensitivity = "prefs.gestureSensitivity"
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
+        static let contentBlockingDisabledHosts = "prefs.contentBlockingDisabledHosts"
         static let popupBlockingEnabled = "prefs.popupBlockingEnabled"
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
@@ -51,6 +52,7 @@ final class BrowserPreferences {
             Key.gestureSensitivity: GestureSensitivity.normal.rawValue,
             Key.antiTrackingEnabled: true,
             Key.contentBlockingEnabled: true,
+            Key.contentBlockingDisabledHosts: [],
             Key.popupBlockingEnabled: true,
             Key.harmfulSiteWarningEnabled: true,
             Key.ephemeralModeEnabled: false,
@@ -113,6 +115,18 @@ final class BrowserPreferences {
         get { defaults.bool(forKey: Key.popupBlockingEnabled) }
         set {
             defaults.set(newValue, forKey: Key.popupBlockingEnabled)
+            notifyChanged()
+        }
+    }
+
+    var contentBlockingDisabledHosts: Set<String> {
+        get {
+            let values = defaults.array(forKey: Key.contentBlockingDisabledHosts) as? [String] ?? []
+            return Set(values.compactMap(Self.normalizeHost(_:)))
+        }
+        set {
+            let normalized = newValue.compactMap(Self.normalizeHost(_:)).sorted()
+            defaults.set(normalized, forKey: Key.contentBlockingDisabledHosts)
             notifyChanged()
         }
     }
@@ -181,11 +195,37 @@ final class BrowserPreferences {
         gestureSensitivity = .normal
         antiTrackingEnabled = true
         contentBlockingEnabled = true
+        contentBlockingDisabledHosts = []
         popupBlockingEnabled = true
         harmfulSiteWarningEnabled = true
         ephemeralModeEnabled = false
         sendDoNotTrack = true
         notifyChanged()
+    }
+
+    func isContentBlockingDisabled(for host: String) -> Bool {
+        guard let normalized = Self.normalizeHost(host) else { return false }
+        return contentBlockingDisabledHosts.contains(normalized)
+    }
+
+    func setContentBlockingDisabled(_ disabled: Bool, for host: String) {
+        guard let normalized = Self.normalizeHost(host) else { return }
+        var hosts = contentBlockingDisabledHosts
+        if disabled {
+            hosts.insert(normalized)
+        } else {
+            hosts.remove(normalized)
+        }
+        contentBlockingDisabledHosts = hosts
+    }
+
+    var contentBlockingExceptionSignature: String {
+        contentBlockingDisabledHosts.sorted().joined(separator: "|")
+    }
+
+    nonisolated private static func normalizeHost(_ host: String) -> String? {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func notifyChanged() {

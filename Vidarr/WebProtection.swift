@@ -6,6 +6,7 @@ final class WebContentBlocker {
 
     private let ruleListIdentifier = "VidarrContentBlockRules"
     private var cachedRuleList: WKContentRuleList?
+    private var cachedRuleSource: String?
     private var isCompiling = false
     private var pending: [(WKContentRuleList?) -> Void] = []
 
@@ -42,7 +43,8 @@ final class WebContentBlocker {
     }
 
     private func loadRuleList(completion: @escaping (WKContentRuleList?) -> Void) {
-        if let cachedRuleList {
+        let encodedRules = Self.makeEncodedRules(disabledHosts: BrowserPreferences.shared.contentBlockingDisabledHosts)
+        if let cachedRuleList, cachedRuleSource == encodedRules {
             completion(cachedRuleList)
             return
         }
@@ -61,10 +63,11 @@ final class WebContentBlocker {
 
         store.compileContentRuleList(
             forIdentifier: ruleListIdentifier,
-            encodedContentRuleList: Self.encodedRules
+            encodedContentRuleList: encodedRules
         ) { [weak self] list, _ in
             guard let self else { return }
             self.cachedRuleList = list
+            self.cachedRuleSource = encodedRules
             self.isCompiling = false
             let callbacks = self.pending
             self.pending.removeAll()
@@ -193,48 +196,49 @@ final class WebContentBlocker {
         "iframe[id^='google_ads_iframe']"
     ].joined(separator: ", ")
 
-    private static var encodedRules: String = {
+    private static func makeEncodedRules(disabledHosts: Set<String>) -> String {
         var rules: [[String: Any]] = []
+        let excludedHosts = disabledHosts.sorted()
 
         rules.append([
-            "trigger": [
+            "trigger": makeTrigger([
                 "url-filter": ".*",
                 "if-domain": blockedDomains
-            ],
+            ], excludedHosts: excludedHosts),
             "action": ["type": "block"]
         ])
 
         for pattern in adScriptPatterns {
             rules.append([
-                "trigger": [
+                "trigger": makeTrigger([
                     "url-filter": pattern
-                ],
+                ], excludedHosts: excludedHosts),
                 "action": ["type": "block"]
             ])
         }
 
         rules.append([
-            "trigger": [
+            "trigger": makeTrigger([
                 "url-filter": "https?://.*(adservice|doubleclick|googlesyndication|analytics|tracking|telemetry|metrics|beacon|pixel|sponsor|affiliate|promo).*",
                 "resource-type": ["script", "raw", "image", "style-sheet"],
                 "load-type": ["third-party"],
                 "url-filter-is-case-sensitive": false
-            ],
+            ], excludedHosts: excludedHosts),
             "action": ["type": "block"]
         ])
 
         rules.append([
-            "trigger": [
+            "trigger": makeTrigger([
                 "url-filter": ".*",
                 "resource-type": ["popup"]
-            ],
+            ], excludedHosts: excludedHosts),
             "action": ["type": "block"]
         ])
 
         rules.append([
-            "trigger": [
+            "trigger": makeTrigger([
                 "url-filter": ".*"
-            ],
+            ], excludedHosts: excludedHosts),
             "action": [
                 "type": "css-display-none",
                 "selector": hideSelectors
@@ -243,7 +247,14 @@ final class WebContentBlocker {
 
         let data = try? JSONSerialization.data(withJSONObject: rules, options: [])
         return String(data: data ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
-    }()
+    }
+
+    private static func makeTrigger(_ base: [String: Any], excludedHosts: [String]) -> [String: Any] {
+        guard !excludedHosts.isEmpty else { return base }
+        var trigger = base
+        trigger["unless-domain"] = excludedHosts
+        return trigger
+    }
 }
 
 struct HarmfulSiteWarning {

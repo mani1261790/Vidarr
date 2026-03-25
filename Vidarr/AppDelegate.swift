@@ -201,6 +201,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainMenu.addItem(developMenuItem)
 
         developMenu.addItem(makeMenuItem("Toggle Web Inspector", action: #selector(menuToggleWebInspector), key: "i", modifiers: [.command, .option]))
+        developMenu.addItem(makeMenuItem("Toggle Content Blocking for Current Site", action: #selector(menuToggleContentBlockingForCurrentSite), key: "", modifiers: []))
         developMenu.addItem(makeMenuItem("Clear Browsing Data", action: #selector(menuClearBrowsingData), key: "", modifiers: []))
 
         let windowMenu = NSMenu(title: "Window")
@@ -369,6 +370,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func menuToggleWebInspector() {
         mainWindowController?.menuToggleWebInspector()
+    }
+
+    @objc private func menuToggleContentBlockingForCurrentSite() {
+        mainWindowController?.menuToggleContentBlockingForCurrentSite()
     }
 
     @objc private func menuClearBrowsingData() {

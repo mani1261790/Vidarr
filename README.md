@@ -63,6 +63,7 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 読み込み失敗時の簡易エラーページ
 - [x] 勝手に開くポップアップ/新規タブの抑止
 - [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
+- [x] サイトごとの広告/追跡ブロック例外設定（Develop > Toggle Content Blocking for Current Site）
 - [x] `GestureRecognizer` 単体テスト
 
 ### テスト実行

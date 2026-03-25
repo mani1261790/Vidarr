@@ -57,6 +57,7 @@ final class MainWindowController: NSWindowController {
     private var lastEphemeralMode = BrowserPreferences.shared.ephemeralModeEnabled
     private var lastDoNotTrack = BrowserPreferences.shared.sendDoNotTrack
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
+    private var lastContentBlockingExceptionSignature = BrowserPreferences.shared.contentBlockingExceptionSignature
     private var lastPopupBlockingEnabled = BrowserPreferences.shared.popupBlockingEnabled
     private var temporarilyAllowedHosts: Set<String> = []
     private var configuredLongPressControllers: Set<ObjectIdentifier> = []
@@ -410,11 +411,13 @@ final class MainWindowController: NSWindowController {
         let shouldReconfigureTabs = (prefs.ephemeralModeEnabled != lastEphemeralMode)
             || (prefs.sendDoNotTrack != lastDoNotTrack)
             || (prefs.contentBlockingEnabled != lastContentBlockingEnabled)
+            || (prefs.contentBlockingExceptionSignature != lastContentBlockingExceptionSignature)
             || (prefs.popupBlockingEnabled != lastPopupBlockingEnabled)
 
         lastEphemeralMode = prefs.ephemeralModeEnabled
         lastDoNotTrack = prefs.sendDoNotTrack
         lastContentBlockingEnabled = prefs.contentBlockingEnabled
+        lastContentBlockingExceptionSignature = prefs.contentBlockingExceptionSignature
         lastPopupBlockingEnabled = prefs.popupBlockingEnabled
 
         guard shouldReconfigureTabs else { return }
@@ -679,6 +682,23 @@ final class MainWindowController: NSWindowController {
         } else {
             BookmarkStore.shared.remove(url: url)
         }
+    }
+
+    func menuToggleContentBlockingForCurrentSite() {
+        guard let host = tabManager.currentWebView?.url?.host?.lowercased(), !host.isEmpty else {
+            presentTransientAlert(title: "このサイトでは変更できません", message: "現在のページに有効なホスト名がありません。", style: .warning)
+            return
+        }
+
+        let prefs = BrowserPreferences.shared
+        let isDisabled = prefs.isContentBlockingDisabled(for: host)
+        prefs.setContentBlockingDisabled(!isDisabled, for: host)
+
+        let title = isDisabled ? "広告ブロックを有効化" : "広告ブロックを無効化"
+        let message = isDisabled
+            ? "\(host) で広告/追跡ブロックを再度有効化しました。"
+            : "\(host) を広告/追跡ブロックの例外に追加しました。"
+        presentTransientAlert(title: title, message: message, style: .informational)
     }
 
     func menuOpenExternalListURL(_ url: URL) {

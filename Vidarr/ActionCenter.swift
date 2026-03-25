@@ -118,8 +118,13 @@ final class ActionCenter {
     }
 
     private func normalizeToURL(from input: String) -> URL {
-        if let url = URL(string: input), url.scheme != nil {
-            return url
+        if let url = URL(string: input), let scheme = url.scheme?.lowercased() {
+            switch scheme {
+            case "http", "https", "file", "about":
+                return url
+            default:
+                return searchURL(for: input)
+            }
         }
 
         if input.contains(" ") {

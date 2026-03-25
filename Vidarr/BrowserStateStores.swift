@@ -80,7 +80,11 @@ final class BrowserSessionStore {
 
     func load() -> BrowserSessionSnapshot? {
         guard let data = defaults.data(forKey: Key.snapshot) else { return nil }
-        return try? JSONDecoder().decode(BrowserSessionSnapshot.self, from: data)
+        guard let snapshot = try? JSONDecoder().decode(BrowserSessionSnapshot.self, from: data) else {
+            defaults.removeObject(forKey: Key.snapshot)
+            return nil
+        }
+        return snapshot
     }
 }
 
@@ -242,7 +246,7 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(revealButton)
 
-        let clearButton = NSButton(title: "Clear History", target: self, action: #selector(clearDownloads))
+        let clearButton = NSButton(title: "Clear Downloads", target: self, action: #selector(clearDownloads))
         clearButton.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(clearButton)
 
@@ -328,13 +332,38 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
     }
 
     @objc private func clearDownloads() {
-        DownloadStore.shared.clear()
-        reloadData()
+        presentConfirmation(
+            title: "Clear download history?",
+            message: "This removes the download list from Vidarr. Downloaded files themselves are not deleted."
+        ) { [weak self] in
+            DownloadStore.shared.clear()
+            self?.reloadData()
+        }
     }
 
     @objc private func searchChanged(_ sender: NSSearchField) {
         _ = sender
         applyFilter()
+    }
+
+    private func presentConfirmation(title: String, message: String, confirmed: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            confirmed()
+        }
+
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
     }
 }
 
@@ -511,18 +540,45 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
     }
 
     @objc private func clearAllItems() {
-        switch mode {
-        case .history:
-            BrowsingHistoryStore.shared.clear()
-        case .bookmarks:
-            BookmarkStore.shared.clear()
+        let title = mode == .history ? "Clear history?" : "Clear bookmarks?"
+        let message = mode == .history
+            ? "This removes all saved history entries from Vidarr."
+            : "This removes all saved bookmarks from Vidarr."
+        presentConfirmation(title: title, message: message) { [weak self] in
+            guard let self else { return }
+            switch self.mode {
+            case .history:
+                BrowsingHistoryStore.shared.clear()
+            case .bookmarks:
+                BookmarkStore.shared.clear()
+            }
+            self.reloadData()
         }
-        reloadData()
     }
 
     @objc private func searchChanged(_ sender: NSSearchField) {
         _ = sender
         applyFilter()
+    }
+
+    private func presentConfirmation(title: String, message: String, confirmed: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            confirmed()
+        }
+
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
     }
 }
 

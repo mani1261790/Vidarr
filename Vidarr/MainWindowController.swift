@@ -59,6 +59,7 @@ final class MainWindowController: NSWindowController {
     private var lastContentBlockingEnabled = BrowserPreferences.shared.contentBlockingEnabled
     private var lastContentBlockingExceptionSignature = BrowserPreferences.shared.contentBlockingExceptionSignature
     private var lastPopupBlockingEnabled = BrowserPreferences.shared.popupBlockingEnabled
+    private var lastHarmfulAllowedHosts = BrowserPreferences.shared.harmfulSiteAllowedHosts
     private var temporarilyAllowedHosts: Set<String> = []
     private var configuredLongPressControllers: Set<ObjectIdentifier> = []
     private var longPressHandlerBoxes: [ObjectIdentifier: WeakScriptMessageHandler] = [:]
@@ -408,6 +409,7 @@ final class MainWindowController: NSWindowController {
 
     private func applyPreferenceChangesIfNeeded() {
         let prefs = BrowserPreferences.shared
+        let removedPersistedHarmfulHosts = lastHarmfulAllowedHosts.subtracting(prefs.harmfulSiteAllowedHosts)
         let shouldReconfigureTabs = (prefs.ephemeralModeEnabled != lastEphemeralMode)
             || (prefs.sendDoNotTrack != lastDoNotTrack)
             || (prefs.contentBlockingEnabled != lastContentBlockingEnabled)
@@ -419,6 +421,8 @@ final class MainWindowController: NSWindowController {
         lastContentBlockingEnabled = prefs.contentBlockingEnabled
         lastContentBlockingExceptionSignature = prefs.contentBlockingExceptionSignature
         lastPopupBlockingEnabled = prefs.popupBlockingEnabled
+        lastHarmfulAllowedHosts = prefs.harmfulSiteAllowedHosts
+        temporarilyAllowedHosts.subtract(removedPersistedHarmfulHosts)
 
         guard shouldReconfigureTabs else { return }
         tabManager.reconfigureAllTabsForCurrentPreferences()

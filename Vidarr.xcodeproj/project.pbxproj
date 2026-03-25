@@ -407,8 +407,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Vidarr uses the camera for websites that request video capture.";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Passkey sign-in and nearby device authentication use Bluetooth.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Vidarr uses the camera for websites that request video capture.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Vidarr uses the microphone for websites that request audio capture.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -447,8 +447,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleIconFile = AppIcon.icns;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Vidarr uses the camera for websites that request video capture.";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Passkey sign-in and nearby device authentication use Bluetooth.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Vidarr uses the camera for websites that request video capture.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Vidarr uses the microphone for websites that request audio capture.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;

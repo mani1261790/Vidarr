@@ -387,26 +387,46 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func menuClearBrowsingData() {
-        BrowserDataCleaner.clearPersistentBrowsingData { [weak self] result in
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                switch result {
-                case .success:
-                    alert.alertStyle = .informational
-                    alert.messageText = "閲覧データを削除しました"
-                    alert.informativeText = "Cookie とキャッシュを消去しました。"
-                case .failure(let error):
-                    alert.alertStyle = .warning
-                    alert.messageText = "閲覧データ削除に失敗しました"
-                    alert.informativeText = error.localizedDescription
-                }
-                alert.addButton(withTitle: "OK")
-                if let window = self?.mainWindowController?.window {
-                    alert.beginSheetModal(for: window)
-                } else {
-                    alert.runModal()
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .warning
+        confirmation.messageText = "サイトデータを削除しますか？"
+        confirmation.informativeText = "Cookie、キャッシュ、Webサイトの保存データを削除します。履歴、ブックマーク、ダウンロード履歴、サイト設定は削除しません。"
+        confirmation.addButton(withTitle: "削除")
+        confirmation.addButton(withTitle: "キャンセル")
+
+        let runClear = { [weak self] in
+            BrowserDataCleaner.clearPersistentBrowsingData { result in
+                DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    switch result {
+                    case .success:
+                        alert.alertStyle = .informational
+                        alert.messageText = "サイトデータを削除しました"
+                        alert.informativeText = "Cookie、キャッシュ、Webサイトの保存データを消去しました。"
+                    case .failure(let error):
+                        alert.alertStyle = .warning
+                        alert.messageText = "サイトデータ削除に失敗しました"
+                        alert.informativeText = error.localizedDescription
+                    }
+                    alert.addButton(withTitle: "OK")
+                    if let window = self?.mainWindowController?.window {
+                        alert.beginSheetModal(for: window)
+                    } else {
+                        alert.runModal()
+                    }
                 }
             }
+        }
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            runClear()
+        }
+
+        if let window = mainWindowController?.window {
+            confirmation.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(confirmation.runModal())
         }
     }
 

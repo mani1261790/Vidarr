@@ -43,6 +43,8 @@ final class BrowserPreferences {
     }
 
     private let defaults: UserDefaults
+    private var isBatchUpdating = false
+    private var needsNotifyChanged = false
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -203,19 +205,20 @@ final class BrowserPreferences {
     }
 
     func resetDefaults() {
-        homePageURLString = "https://search.fenrir-inc.com/"
-        searchTemplate = "https://search.fenrir-inc.com/?q={query}"
-        updatesEnabled = true
-        gestureSensitivity = .normal
-        antiTrackingEnabled = true
-        contentBlockingEnabled = true
-        contentBlockingDisabledHosts = []
-        harmfulSiteAllowedHosts = []
-        popupBlockingEnabled = true
-        harmfulSiteWarningEnabled = true
-        ephemeralModeEnabled = false
-        sendDoNotTrack = true
-        notifyChanged()
+        performBatchUpdate {
+            defaults.set("https://search.fenrir-inc.com/", forKey: Key.homePageURL)
+            defaults.set("https://search.fenrir-inc.com/?q={query}", forKey: Key.searchTemplate)
+            defaults.set(true, forKey: Key.updatesEnabled)
+            defaults.set(GestureSensitivity.normal.rawValue, forKey: Key.gestureSensitivity)
+            defaults.set(true, forKey: Key.antiTrackingEnabled)
+            defaults.set(true, forKey: Key.contentBlockingEnabled)
+            defaults.set([], forKey: Key.contentBlockingDisabledHosts)
+            defaults.set([], forKey: Key.harmfulSiteAllowedHosts)
+            defaults.set(true, forKey: Key.popupBlockingEnabled)
+            defaults.set(true, forKey: Key.harmfulSiteWarningEnabled)
+            defaults.set(false, forKey: Key.ephemeralModeEnabled)
+            defaults.set(true, forKey: Key.sendDoNotTrack)
+        }
     }
 
     func isContentBlockingDisabled(for host: String) -> Bool {
@@ -260,6 +263,21 @@ final class BrowserPreferences {
     }
 
     private func notifyChanged() {
+        if isBatchUpdating {
+            needsNotifyChanged = true
+            return
+        }
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+
+    private func performBatchUpdate(_ updates: () -> Void) {
+        isBatchUpdating = true
+        updates()
+        isBatchUpdating = false
+
+        if needsNotifyChanged {
+            needsNotifyChanged = false
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+        }
     }
 }

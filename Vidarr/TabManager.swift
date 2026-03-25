@@ -74,6 +74,9 @@ final class TabManager {
     private struct ClosedTabSnapshot {
         let group: BrowserTabGroup
         let url: URL?
+        let isProtected: Bool
+        let isBookmarked: Bool
+        let pageZoom: Double
     }
 
     private var states: [BrowserTabGroup: GroupState]
@@ -184,7 +187,10 @@ final class TabManager {
         initialURL: URL?,
         shouldLoadInitialURL: Bool,
         group: BrowserTabGroup? = nil,
-        activate: Bool = true
+        activate: Bool = true,
+        isProtected: Bool = false,
+        isBookmarked: Bool = false,
+        pageZoom: Double = 1.0
     ) -> WKWebView {
         let work = { [weak self] in
             guard let self else { return }
@@ -194,15 +200,17 @@ final class TabManager {
                 webView: webView,
                 lastKnownURL: initialURL,
                 thumbnail: nil,
-                isProtected: false,
-                isBookmarked: false,
-                pageZoom: 1.0
+                isProtected: isProtected,
+                isBookmarked: isBookmarked,
+                pageZoom: pageZoom
             )
             state.tabs.append(tab)
             let insertedIndex = state.tabs.count - 1
             if activate || state.currentIndex < 0 {
                 state.currentIndex = insertedIndex
             }
+
+            webView.pageZoom = pageZoom
 
             if shouldLoadInitialURL, let targetURL = initialURL {
                 webView.load(URLRequest(url: targetURL))
@@ -272,7 +280,15 @@ final class TabManager {
             guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return }
 
             let removed = state.tabs.remove(at: state.currentIndex)
-            pushClosed(ClosedTabSnapshot(group: currentGroup, url: removed.webView.url ?? removed.lastKnownURL))
+            pushClosed(
+                ClosedTabSnapshot(
+                    group: currentGroup,
+                    url: removed.webView.url ?? removed.lastKnownURL,
+                    isProtected: removed.isProtected,
+                    isBookmarked: removed.isBookmarked,
+                    pageZoom: removed.pageZoom
+                )
+            )
 
             if state.tabs.isEmpty {
                 state.currentIndex = -1
@@ -298,7 +314,15 @@ final class TabManager {
                 if tab.isProtected {
                     retained.append(tab)
                 } else {
-                    pushClosed(ClosedTabSnapshot(group: currentGroup, url: tab.webView.url ?? tab.lastKnownURL))
+                    pushClosed(
+                        ClosedTabSnapshot(
+                            group: currentGroup,
+                            url: tab.webView.url ?? tab.lastKnownURL,
+                            isProtected: tab.isProtected,
+                            isBookmarked: tab.isBookmarked,
+                            pageZoom: tab.pageZoom
+                        )
+                    )
                 }
             }
 
@@ -372,7 +396,17 @@ final class TabManager {
         performOnMain { [weak self] in
             guard let self, let snapshot = closedStack.popLast() else { return }
             switchGroupInternal(snapshot.group, ensureTab: false)
-            newTab(url: snapshot.url, in: snapshot.group)
+            let webView = BrowserSession.makeConfiguredWebView(for: snapshot.group)
+            _ = addTab(
+                webView: webView,
+                initialURL: snapshot.url,
+                shouldLoadInitialURL: true,
+                group: snapshot.group,
+                activate: true,
+                isProtected: snapshot.isProtected,
+                isBookmarked: snapshot.isBookmarked,
+                pageZoom: snapshot.pageZoom
+            )
         }
     }
 
@@ -519,7 +553,8 @@ final class TabManager {
             (
                 url: tab.webView.url ?? tab.lastKnownURL,
                 isProtected: tab.isProtected,
-                isBookmarked: tab.isBookmarked
+                isBookmarked: tab.isBookmarked,
+                pageZoom: tab.pageZoom
             )
         }
 
@@ -528,14 +563,14 @@ final class TabManager {
             if let url = snapshot.url {
                 webView.load(URLRequest(url: url))
             }
-            webView.pageZoom = 1.0
+            webView.pageZoom = snapshot.pageZoom
             return Tab(
                 webView: webView,
                 lastKnownURL: snapshot.url,
                 thumbnail: nil,
                 isProtected: snapshot.isProtected,
                 isBookmarked: snapshot.isBookmarked,
-                pageZoom: 1.0
+                pageZoom: snapshot.pageZoom
             )
         }
         state.currentIndex = min(max(0, selectedIndex), state.tabs.count - 1)

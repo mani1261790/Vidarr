@@ -10,12 +10,6 @@ enum BrowserDataCleaner {
             dataStore.removeData(ofTypes: dataTypes, for: records) {
                 URLCache.shared.removeAllCachedResponses()
                 HTTPCookieStorage.shared.removeCookies(since: .distantPast)
-                BrowsingHistoryStore.shared.clear()
-                BookmarkStore.shared.clear()
-                DownloadStore.shared.clear()
-                MediaPermissionStore.shared.clear()
-                BrowserPreferences.shared.contentBlockingDisabledHosts = []
-                BrowserPreferences.shared.harmfulSiteAllowedHosts = []
                 completion(.success(()))
             }
         }

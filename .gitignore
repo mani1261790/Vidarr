@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode / Swift build artifacts
+build/
+Build/
+DerivedData/
+.build/
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+
+# User data
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+

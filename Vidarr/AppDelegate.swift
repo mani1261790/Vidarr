@@ -885,16 +885,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private func wrapTabContent(_ stack: NSStackView) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.wantsLayer = true
-        container.layer?.cornerRadius = 14
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
-        container.layer?.borderWidth = 1
-        container.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
         container.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -18),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -18)
         ])
         return container

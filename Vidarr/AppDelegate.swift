@@ -607,12 +607,12 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let dataSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
-    private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URLトラッキングパラメータを除去", target: nil, action: nil)
+    private let antiTrackingCheckbox = NSButton(checkboxWithTitle: "URL内の追跡パラメータを取り除く", target: nil, action: nil)
     private let contentBlockingCheckbox = NSButton(checkboxWithTitle: "広告/追跡スクリプトをブロック", target: nil, action: nil)
     private let popupBlockingCheckbox = NSButton(checkboxWithTitle: "勝手に開くポップアップ/新規タブを抑止", target: nil, action: nil)
     private let harmfulSiteWarningCheckbox = NSButton(checkboxWithTitle: "有害サイト警告を表示", target: nil, action: nil)
-    private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
-    private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
+    private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "プライバシー優先（終了時に履歴とCookieを残さない）", target: nil, action: nil)
+    private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "追跡拒否の信号（DNT / GPC）を送信", target: nil, action: nil)
     private let restoreClosedTabHistoryCheckbox = NSButton(checkboxWithTitle: "閉じたタブを復元したとき、前に見ていたページ履歴も戻す", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -701,14 +701,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         homePageField.placeholderString = "https://search.fenrir-inc.com/"
         homePageField.controlSize = .large
 
-        let searchLabel = makeFieldLabel("検索 URL テンプレート ({query} を使用)")
+        let searchLabel = makeFieldLabel("検索するときのURL ({query} が検索語に置き換わります)")
 
         searchTemplateField.translatesAutoresizingMaskIntoConstraints = false
         searchTemplateField.delegate = self
         searchTemplateField.placeholderString = "https://search.fenrir-inc.com/?q={query}"
         searchTemplateField.controlSize = .large
 
-        let contentLanguageLabel = makeFieldLabel("コンテンツ言語")
+        let contentLanguageLabel = makeFieldLabel("Webページの表示言語")
 
         contentLanguagePopup.translatesAutoresizingMaskIntoConstraints = false
         contentLanguagePopup.removeAllItems()
@@ -900,11 +900,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             downloadFolderButtons.widthAnchor.constraint(equalTo: dataSection.widthAnchor)
         ])
 
-        tabView.addTabViewItem(makeTab(title: "General", content: wrapTabContent(generalSection)))
-        tabView.addTabViewItem(makeTab(title: "Gestures", content: wrapTabContent(gestureSection)))
-        tabView.addTabViewItem(makeTab(title: "Privacy", content: wrapTabContent(privacySection)))
-        tabView.addTabViewItem(makeTab(title: "Saved Data", content: wrapTabContent(dataSection)))
-        tabView.addTabViewItem(makeTab(title: "Reset", content: wrapTabContent(resetSection)))
+        tabView.addTabViewItem(makeTab(title: "一般", content: wrapTabContent(generalSection)))
+        tabView.addTabViewItem(makeTab(title: "ジェスチャー", content: wrapTabContent(gestureSection)))
+        tabView.addTabViewItem(makeTab(title: "プライバシー", content: wrapTabContent(privacySection)))
+        tabView.addTabViewItem(makeTab(title: "保存データ", content: wrapTabContent(dataSection)))
+        tabView.addTabViewItem(makeTab(title: "リセット", content: wrapTabContent(resetSection)))
     }
 
     private func makeFieldLabel(_ text: String) -> NSTextField {
@@ -1025,7 +1025,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             contentLanguagePopup.selectItem(at: 0)
         }
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureListLabel.stringValue = [
@@ -1047,8 +1047,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             "広告ブロック \(prefs.contentBlockingEnabled ? "オン" : "オフ")",
             "ポップアップ抑止 \(prefs.popupBlockingEnabled ? "オン" : "オフ")",
             "有害サイト警告 \(prefs.harmfulSiteWarningEnabled ? "オン" : "オフ")",
-            "フットプリント最小化 \(prefs.ephemeralModeEnabled ? "オン" : "オフ")",
-            "DNT/GPC \(prefs.sendDoNotTrack ? "オン" : "オフ")"
+            "プライバシー優先 \(prefs.ephemeralModeEnabled ? "オン" : "オフ")",
+            "追跡拒否の信号 \(prefs.sendDoNotTrack ? "オン" : "オフ")"
         ].joined(separator: " / ")
 
         let historyCount = BrowsingHistoryStore.shared.all().count
@@ -1516,14 +1516,14 @@ private final class GesturePracticeView: NSView {
     private func updateLiveCandidate() {
         if let best = recognizer.bestPassingMatch(points: capturePoints, minimumScore: livePreviewScoreThreshold, allowedNames: allowedGestureNames) {
             lastResultName = best.name
-            detailLabel.stringValue = "候補: \(displayName(for: best.name))\nscore: \(String(format: "%.2f", best.score))"
+            detailLabel.stringValue = "候補: \(displayName(for: best.name))\n一致度: \(String(format: "%.2f", best.score))"
             detailLabel.textColor = .secondaryLabelColor
             return
         }
 
         if let best = recognizer.bestMatch(points: capturePoints, allowedNames: allowedGestureNames) {
             lastResultName = best.name
-            detailLabel.stringValue = "候補: \(displayName(for: best.name))\nscore: \(String(format: "%.2f", best.score))\nまだ確定条件に届いていません。"
+            detailLabel.stringValue = "候補: \(displayName(for: best.name))\n一致度: \(String(format: "%.2f", best.score))\nまだ確定条件に届いていません。"
             detailLabel.textColor = .secondaryLabelColor
         } else {
             detailLabel.stringValue = "判定中..."
@@ -1544,11 +1544,11 @@ private final class GesturePracticeView: NSView {
             )
 
         if let result {
-            detailLabel.stringValue = "確定: \(displayName(for: result.name))\nscore: \(String(format: "%.2f", result.score))"
+            detailLabel.stringValue = "確定: \(displayName(for: result.name))\n一致度: \(String(format: "%.2f", result.score))"
             detailLabel.textColor = .labelColor
             lastResultName = result.name
         } else if isLikelyDoubleLoop(capturePoints) {
-            detailLabel.stringValue = "確定: \(displayName(for: "OO"))\nscore: 0.30"
+            detailLabel.stringValue = "確定: \(displayName(for: "OO"))\n一致度: 0.30"
             detailLabel.textColor = .labelColor
             lastResultName = "OO"
         } else {

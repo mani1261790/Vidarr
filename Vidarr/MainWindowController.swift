@@ -279,7 +279,7 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.target = self
         groupSelectorButton.action = #selector(didTapGroupSelector)
         groupSelectorButton.isBordered = false
-        groupSelectorButton.image = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Tab Group")
+        groupSelectorButton.image = NSImage(systemSymbolName: "square.grid.3x3", accessibilityDescription: "Tab Group")
         groupSelectorButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
         groupSelectorButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.88)
         groupSelectorButton.wantsLayer = false

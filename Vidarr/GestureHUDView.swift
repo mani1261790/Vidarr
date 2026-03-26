@@ -119,14 +119,28 @@ final class GestureHUDView: NSView {
         let icon = NSImage(systemSymbolName: descriptor.actionSymbol, accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
         actionIconView.image = icon?.withSymbolConfiguration(iconConfig)
-        actionIconView.contentTintColor = NSColor.labelColor.withAlphaComponent(committed ? 1.0 : 0.86)
+        actionIconView.contentTintColor = iconTintColor(committed: committed)
 
         fallbackBorderLayer.borderColor = NSColor.white.withAlphaComponent(committed ? 0.40 : 0.28).cgColor
-        fallbackCardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(committed ? 0.86 : 0.80).cgColor
+        fallbackCardLayer.backgroundColor = fallbackBackgroundColor(committed: committed).cgColor
 
         if committed {
             animateCommitPop()
         }
+    }
+
+    private func iconTintColor(committed: Bool) -> NSColor {
+        if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.white.withAlphaComponent(committed ? 0.98 : 0.92)
+        }
+        return NSColor.labelColor.withAlphaComponent(committed ? 1.0 : 0.86)
+    }
+
+    private func fallbackBackgroundColor(committed: Bool) -> NSColor {
+        if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.black.withAlphaComponent(committed ? 0.74 : 0.66)
+        }
+        return NSColor.windowBackgroundColor.withAlphaComponent(committed ? 0.86 : 0.80)
     }
 
     private func positionInCenter() {

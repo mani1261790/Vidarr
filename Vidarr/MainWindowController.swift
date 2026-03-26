@@ -94,6 +94,33 @@ final class MainWindowController: NSWindowController {
     private static let longPressLinkMessageName = "vidarrLongPressLink"
     private static let selectionSearchMessageName = "vidarrSelectionSearch"
 
+    private static func makeTabGroupGridImage() -> NSImage {
+        let size = NSSize(width: 14, height: 14)
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        NSColor.labelColor.setFill()
+
+        let cell: CGFloat = 2.2
+        let gap: CGFloat = 2.45
+        let total = cell * 3 + gap * 2
+        let startX = (size.width - total) * 0.5
+        let startY = (size.height - total) * 0.5
+
+        for row in 0..<3 {
+            for column in 0..<3 {
+                let x = startX + CGFloat(column) * (cell + gap)
+                let y = startY + CGFloat(2 - row) * (cell + gap)
+                let rect = NSRect(x: x, y: y, width: cell, height: cell)
+                NSBezierPath(roundedRect: rect, xRadius: 0.55, yRadius: 0.55).fill()
+            }
+        }
+
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
+    }
+
     private struct InteractiveTabSwitchState {
         let fromWebView: WKWebView
         let toWebView: WKWebView
@@ -279,8 +306,7 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.target = self
         groupSelectorButton.action = #selector(didTapGroupSelector)
         groupSelectorButton.isBordered = false
-        groupSelectorButton.image = NSImage(systemSymbolName: "square.grid.3x3", accessibilityDescription: "Tab Group")
-        groupSelectorButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        groupSelectorButton.image = Self.makeTabGroupGridImage()
         groupSelectorButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.88)
         groupSelectorButton.wantsLayer = false
 

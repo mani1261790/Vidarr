@@ -1507,8 +1507,14 @@ final class MainWindowController: NSWindowController {
         let toMidX = width * (emphasizeBirth ? 0.18 : 0.12)
         let toOvershootX = -max(18, min(36, width * 0.03))
 
+        let dimView = NSView(frame: webContainer.bounds)
+        dimView.wantsLayer = true
+        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
+        dimView.alphaValue = 0
+        webContainer.addSubview(dimView, positioned: .above, relativeTo: state.fromWebView)
+
         let gapView = makeTransitionGapView(height: webContainer.bounds.height)
-        webContainer.addSubview(gapView, positioned: .above, relativeTo: state.toWebView)
+        webContainer.addSubview(gapView, positioned: .above, relativeTo: dimView)
 
         func gapOriginX(fromX: CGFloat, toX: CGFloat) -> CGFloat {
             let fromTrailing = fromX + width
@@ -1529,20 +1535,24 @@ final class MainWindowController: NSWindowController {
         state.toWebView.layer?.masksToBounds = true
         state.fromWebView.layer?.cornerRadius = 18
         state.toWebView.layer?.cornerRadius = 18
+        state.fromWebView.layer?.borderWidth = 0
+        state.toWebView.layer?.borderWidth = 1.2
+        state.toWebView.layer?.borderColor = NSColor.white.withAlphaComponent(0.26).cgColor
         state.toWebView.layer?.shadowOpacity = 0.22
         state.toWebView.layer?.shadowRadius = 18
         state.toWebView.layer?.shadowOffset = CGSize(width: 0, height: 0)
-        state.toWebView.alphaValue = 0.92
-        state.toWebView.layer?.transform = CATransform3DMakeScale(0.965, 0.965, 1)
+        state.toWebView.alphaValue = 0.9
+        state.toWebView.layer?.transform = CATransform3DMakeScale(0.94, 0.94, 1)
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = emphasizeBirth ? 0.20 : 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            dimView.animator().alphaValue = 1.0
             state.fromWebView.animator().frame.origin.x = pixelAligned(fromMidX)
-            state.fromWebView.animator().alphaValue = 0.96
+            state.fromWebView.animator().alphaValue = 0.78
             state.toWebView.animator().frame.origin.x = pixelAligned(toMidX)
             state.toWebView.animator().alphaValue = 1.0
-            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(0.982, 0.982, 1)
+            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(0.985, 0.985, 1)
             gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
         } completionHandler: { [weak self] in
             guard let self else { return }
@@ -1550,23 +1560,30 @@ final class MainWindowController: NSWindowController {
                 context.duration = 0.24
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
+                state.fromWebView.animator().alphaValue = 0.64
                 state.toWebView.animator().frame.origin.x = self.pixelAligned(toOvershootX)
-                state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.01, 1.01, 1)
+                state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.018, 1.018, 1)
+                state.toWebView.animator().layer?.shadowOpacity = 0.32
                 gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
             } completionHandler: {
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.18
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    dimView.animator().alphaValue = 0
                     state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
                     state.fromWebView.animator().alphaValue = 1.0
                     state.toWebView.animator().frame.origin.x = 0
                     state.toWebView.animator().layer?.transform = CATransform3DIdentity
+                    state.toWebView.animator().layer?.shadowOpacity = 0.12
                     gapView.animator().frame.origin.x = gapOriginX(fromX: fromFinalX, toX: 0)
                     gapView.animator().alphaValue = 0.18
                 } completionHandler: {
+                    dimView.removeFromSuperview()
                     gapView.removeFromSuperview()
                     state.fromWebView.layer?.cornerRadius = 0
+                    state.fromWebView.layer?.borderWidth = 0
                     state.toWebView.layer?.cornerRadius = 0
+                    state.toWebView.layer?.borderWidth = 0
                     state.toWebView.layer?.shadowOpacity = 0
                     self.tabManager.selectTab(index: state.targetIndex)
                 }

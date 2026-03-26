@@ -1249,29 +1249,50 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     @objc private func clearBrowsingData() {
-        clearDataButton.isEnabled = false
-        BrowserDataCleaner.clearPersistentBrowsingData { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.clearDataButton.isEnabled = true
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .warning
+        confirmation.messageText = "閲覧データを削除しますか？"
+        confirmation.informativeText = "Cookie、キャッシュ、保存済みサイトデータを削除します。履歴、ブックマーク、ダウンロード履歴、サイト設定は削除しません。"
+        confirmation.addButton(withTitle: "削除")
+        confirmation.addButton(withTitle: "キャンセル")
 
-                let alert = NSAlert()
-                switch result {
-                case .success:
-                    alert.alertStyle = .informational
-                    alert.messageText = "閲覧データを削除しました"
-                    alert.informativeText = "Cookie、キャッシュ、保存済みサイトデータを削除しました。"
-                case .failure(let error):
-                    alert.alertStyle = .warning
-                    alert.messageText = "閲覧データの削除に失敗しました"
-                    alert.informativeText = error.localizedDescription
-                }
-                if let window = self.window {
-                    alert.beginSheetModal(for: window)
-                } else {
-                    alert.runModal()
+        let runClear = { [weak self] in
+            guard let self else { return }
+            self.clearDataButton.isEnabled = false
+            BrowserDataCleaner.clearPersistentBrowsingData { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.clearDataButton.isEnabled = true
+
+                    let alert = NSAlert()
+                    switch result {
+                    case .success:
+                        alert.alertStyle = .informational
+                        alert.messageText = "閲覧データを削除しました"
+                        alert.informativeText = "Cookie、キャッシュ、保存済みサイトデータを削除しました。"
+                    case .failure(let error):
+                        alert.alertStyle = .warning
+                        alert.messageText = "閲覧データの削除に失敗しました"
+                        alert.informativeText = error.localizedDescription
+                    }
+                    if let window = self.window {
+                        alert.beginSheetModal(for: window)
+                    } else {
+                        alert.runModal()
+                    }
                 }
             }
+        }
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            runClear()
+        }
+
+        if let window = self.window {
+            confirmation.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(confirmation.runModal())
         }
     }
 
@@ -1283,8 +1304,28 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     @objc private func resetDefaults() {
-        prefs.resetDefaults()
-        loadValues()
+        let confirmation = NSAlert()
+        confirmation.alertStyle = .warning
+        confirmation.messageText = "設定をデフォルトに戻しますか？"
+        confirmation.informativeText = "ホームページ、検索、ジェスチャー感度、プライバシー設定を初期状態に戻します。保存済みの履歴、ブックマーク、ダウンロード履歴は削除しません。"
+        confirmation.addButton(withTitle: "戻す")
+        confirmation.addButton(withTitle: "キャンセル")
+
+        let runReset = {
+            self.prefs.resetDefaults()
+            self.loadValues()
+        }
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .alertFirstButtonReturn else { return }
+            runReset()
+        }
+
+        if let window = self.window {
+            confirmation.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(confirmation.runModal())
+        }
     }
 
     @objc private func openDownloads() {

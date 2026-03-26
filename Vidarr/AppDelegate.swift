@@ -977,13 +977,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         gestureListLabel.stringValue = [
             "→ : 次のタブ",
             "← : 前のタブ",
-            "↓→ : 現在のタブを閉じる",
-            "↓→↓→ : すべてのタブを閉じる",
-            "U : 閉じたタブを復元",
-            "O : 現在のタブを再読み込み",
+            "L（↓→）: 現在のタブを閉じる",
+            "LL（↓→↓→）: すべてのタブを閉じる",
+            "U（↓→↑）: 閉じたタブを復元",
+            "O（↑→↓←）: 現在のタブを再読み込み",
             "↑→ : 戻る",
             "↑← : 進む",
-            "S : 検索",
+            "S（←↓→↓←）: 検索",
             "↓← : 新規タブ"
         ].joined(separator: "\n")
         gestureTestView.sensitivityMultiplier = sensitivity.multiplier

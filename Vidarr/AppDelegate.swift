@@ -590,13 +590,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 }
 
-private final class PreferencesWindowController: NSWindowController, NSTextFieldDelegate {
+private final class PreferencesWindowController: NSWindowController, NSTextFieldDelegate, NSTabViewDelegate {
+    private final class PreferenceTabContentView: NSView {
+        let scrollView = NSScrollView()
+    }
+
     private let prefs = BrowserPreferences.shared
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
     private weak var rootLayoutView: NSView?
+    private weak var tabView: NSTabView?
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
@@ -639,12 +644,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         self.openSiteControlsAction = openSiteControls
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Preferences"
         window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 760, height: 620)
+        window.setContentSize(NSSize(width: 760, height: 620))
         super.init(window: window)
         setupUI()
         setupObservers()
@@ -675,6 +682,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         tabView.translatesAutoresizingMaskIntoConstraints = false
         tabView.tabViewType = .topTabsBezelBorder
         tabView.drawsBackground = false
+        tabView.delegate = self
+        self.tabView = tabView
         let tabHostView = makeTabHostView(content: tabView)
         contentView.addSubview(titleLabel)
         contentView.addSubview(summaryLabel)
@@ -766,6 +775,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         [openDownloadsButton, openHistoryButton, openBookmarksButton, openSiteControlsButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.target = self
+            $0.controlSize = .regular
         }
         [chooseDownloadFolderButton, clearDownloadFolderButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -845,18 +855,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
         privacyStack.setCustomSpacing(6, after: privacySummaryLabel)
         privacyStack.addArrangedSubview(makeControlRow(for: antiTrackingCheckbox, height: 24))
-        privacyStack.addArrangedSubview(contentBlockingCheckbox)
-        privacyStack.addArrangedSubview(popupBlockingCheckbox)
-        privacyStack.addArrangedSubview(harmfulSiteWarningCheckbox)
-        privacyStack.addArrangedSubview(ephemeralModeCheckbox)
-        privacyStack.addArrangedSubview(doNotTrackCheckbox)
+        privacyStack.addArrangedSubview(makeControlRow(for: contentBlockingCheckbox, height: 24))
+        privacyStack.addArrangedSubview(makeControlRow(for: popupBlockingCheckbox, height: 24))
+        privacyStack.addArrangedSubview(makeControlRow(for: harmfulSiteWarningCheckbox, height: 24))
+        privacyStack.addArrangedSubview(makeControlRow(for: ephemeralModeCheckbox, height: 24))
+        privacyStack.addArrangedSubview(makeControlRow(for: doNotTrackCheckbox, height: 24))
 
         let dataSection = makeSectionContentStack()
         let dataStack = dataSection
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         dataStack.setCustomSpacing(8, after: dataSummaryLabel)
         let dataGrid = makeTwoColumnGrid()
-        dataStack.addArrangedSubview(dataGrid)
+        dataStack.addArrangedSubview(makeControlRow(for: dataGrid, height: 30))
         dataGrid.addArrangedSubview(openBookmarksButton)
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
@@ -953,8 +963,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     private func wrapTabContent(_ stack: NSStackView) -> NSView {
-        let container = NSView()
-        let scrollView = NSScrollView()
+        let container = PreferenceTabContentView()
+        let scrollView = container.scrollView
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -1012,6 +1022,17 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor)
         ])
         return container
+    }
+
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        guard let content = tabViewItem?.view as? PreferenceTabContentView else { return }
+        DispatchQueue.main.async {
+            let contentHeight = content.scrollView.documentView?.bounds.height ?? 0
+            let visibleHeight = content.scrollView.contentView.bounds.height
+            let topY = max(0, contentHeight - visibleHeight)
+            content.scrollView.contentView.scroll(to: NSPoint(x: 0, y: topY))
+            content.scrollView.reflectScrolledClipView(content.scrollView.contentView)
+        }
     }
 
     private func loadValues() {

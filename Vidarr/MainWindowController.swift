@@ -94,6 +94,20 @@ final class MainWindowController: NSWindowController {
     private static let longPressLinkMessageName = "vidarrLongPressLink"
     private static let selectionSearchMessageName = "vidarrSelectionSearch"
 
+    private static let toolbarPrimaryForegroundColor = NSColor(name: nil) { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.white.withAlphaComponent(0.96)
+        }
+        return NSColor.labelColor.withAlphaComponent(0.96)
+    }
+
+    private static let toolbarSecondaryForegroundColor = NSColor(name: nil) { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.white.withAlphaComponent(0.88)
+        }
+        return NSColor.labelColor.withAlphaComponent(0.82)
+    }
+
     private static func makeTabGroupGridImage() -> NSImage {
         let size = NSSize(width: 14, height: 14)
         let image = NSImage(size: size)
@@ -307,7 +321,7 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.action = #selector(didTapGroupSelector)
         groupSelectorButton.isBordered = false
         groupSelectorButton.image = Self.makeTabGroupGridImage()
-        groupSelectorButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.88)
+        groupSelectorButton.contentTintColor = Self.toolbarSecondaryForegroundColor
         groupSelectorButton.wantsLayer = false
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
@@ -317,7 +331,7 @@ final class MainWindowController: NSWindowController {
         newTabButton.title = ""
         newTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New Tab")
         newTabButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .bold)
-        newTabButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.98)
+        newTabButton.contentTintColor = Self.toolbarPrimaryForegroundColor
         newTabButton.wantsLayer = false
 
         rightPanelView.translatesAutoresizingMaskIntoConstraints = false
@@ -330,7 +344,7 @@ final class MainWindowController: NSWindowController {
         addressBarDisplayLabel.isBordered = false
         addressBarDisplayLabel.drawsBackground = false
         addressBarDisplayLabel.alignment = .right
-        addressBarDisplayLabel.textColor = NSColor.labelColor.withAlphaComponent(0.94)
+        addressBarDisplayLabel.textColor = Self.toolbarPrimaryForegroundColor
         addressBarDisplayLabel.lineBreakMode = .byTruncatingMiddle
         addressBarDisplayLabel.onActivate = { [weak self] in
             self?.beginAddressEditing()
@@ -533,7 +547,7 @@ final class MainWindowController: NSWindowController {
         button.title = ""
         button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
         button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
-        button.contentTintColor = NSColor.labelColor.withAlphaComponent(0.82)
+        button.contentTintColor = Self.toolbarSecondaryForegroundColor
         button.setContentHuggingPriority(.required, for: .horizontal)
         NSLayoutConstraint.activate([
             button.widthAnchor.constraint(equalToConstant: 22),

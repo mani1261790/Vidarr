@@ -925,27 +925,33 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     private func wrapTabContent(_ stack: NSStackView) -> NSView {
+        let container = NSView()
         let scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         let documentView = NSView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = documentView
+        container.addSubview(scrollView)
         documentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 18),
             stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -18),
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -18)
         ])
-        return scrollView
+        return container
     }
 
     private func makeTab(title: String, content: NSView) -> NSTabViewItem {

@@ -595,6 +595,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let scrollView = NSScrollView()
     }
 
+    private static let preferredContentSize = NSSize(width: 760, height: 620)
+    private static let minimumTabHostSize = NSSize(width: 720, height: 520)
+
     private let prefs = BrowserPreferences.shared
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
@@ -643,15 +646,16 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         self.openBookmarksAction = openBookmarks
         self.openSiteControlsAction = openSiteControls
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            contentRect: NSRect(origin: .zero, size: Self.preferredContentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Preferences"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 760, height: 620)
-        window.setContentSize(NSSize(width: 760, height: 620))
+        window.contentMinSize = Self.preferredContentSize
+        window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: Self.preferredContentSize)).size
+        window.setContentSize(Self.preferredContentSize)
         super.init(window: window)
         setupUI()
         setupObservers()
@@ -700,7 +704,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             tabHostView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 14),
             tabHostView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             tabHostView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            tabHostView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
+            tabHostView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
+            tabHostView.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumTabHostSize.width),
+            tabHostView.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumTabHostSize.height)
         ])
 
         let homeLabel = makeFieldLabel("スタートページ URL")
@@ -915,6 +921,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         tabView.addTabViewItem(makeTab(title: "プライバシー", content: wrapTabContent(privacySection)))
         tabView.addTabViewItem(makeTab(title: "保存データ", content: wrapTabContent(dataSection)))
         tabView.addTabViewItem(makeTab(title: "リセット", content: wrapTabContent(resetSection)))
+        enforceMinimumWindowSize()
     }
 
     private func makeFieldLabel(_ text: String) -> NSTextField {
@@ -1025,6 +1032,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        enforceMinimumWindowSize()
         guard let content = tabViewItem?.view as? PreferenceTabContentView else { return }
         DispatchQueue.main.async {
             let contentHeight = content.scrollView.documentView?.bounds.height ?? 0
@@ -1032,6 +1040,27 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             let topY = max(0, contentHeight - visibleHeight)
             content.scrollView.contentView.scroll(to: NSPoint(x: 0, y: topY))
             content.scrollView.reflectScrolledClipView(content.scrollView.contentView)
+        }
+    }
+
+    private func enforceMinimumWindowSize() {
+        guard let window else { return }
+        window.contentMinSize = Self.preferredContentSize
+        let minimumFrameSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: Self.preferredContentSize)).size
+        window.minSize = minimumFrameSize
+
+        var frame = window.frame
+        var updated = false
+        if frame.width < minimumFrameSize.width {
+            frame.size.width = minimumFrameSize.width
+            updated = true
+        }
+        if frame.height < minimumFrameSize.height {
+            frame.size.height = minimumFrameSize.height
+            updated = true
+        }
+        if updated {
+            window.setFrame(frame, display: true, animate: false)
         }
     }
 

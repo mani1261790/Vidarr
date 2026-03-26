@@ -65,6 +65,9 @@ final class MainWindowController: NSWindowController {
     private var tabSearchQuery = ""
     private var currentAddressURLString = ""
     private var interactiveTabSwitchState: InteractiveTabSwitchState?
+    private var visualTransitionCurrentIndex: Int?
+    private weak var visualTransitionCurrentWebView: WKWebView?
+    private var tabTransitionGeneration: Int = 0
     private var dragFromTabIndex: Int?
     private var dragToTabIndex: Int?
     private var dragPreviewView: NSImageView?
@@ -1344,7 +1347,7 @@ final class MainWindowController: NSWindowController {
         guard direction == .left else { return false }
         let count = tabManager.tabCount
         guard count > 0 else { return false }
-        return tabManager.currentIndex == (count - 1)
+        return resolvedVisualCurrentIndex() == (count - 1)
     }
 
     private func animateNewTabOpenFromToolbar() {
@@ -1507,9 +1510,9 @@ final class MainWindowController: NSWindowController {
         let count = tabManager.tabCount
         guard count > 1 else { return false }
 
-        let currentIndex = tabManager.currentIndex
+        let currentIndex = resolvedVisualCurrentIndex()
         guard currentIndex >= 0, currentIndex < count else { return false }
-        guard let fromWebView = tabManager.currentWebView else { return false }
+        guard let fromWebView = resolvedVisualCurrentWebView() else { return false }
 
         let targetIndex: Int
         switch direction {
@@ -1670,6 +1673,7 @@ final class MainWindowController: NSWindowController {
                 state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
                 state.toWebView.animator().frame.origin.x = pixelAligned(toTargetX)
             } completionHandler: { [weak self] in
+                self?.clearVisualTransitionOverride()
                 self?.attachWebView(state.fromWebView)
             }
         }
@@ -1702,9 +1706,12 @@ final class MainWindowController: NSWindowController {
     ) {
         let width = webContainer.bounds.width
         guard width > 1 else {
+            clearVisualTransitionOverride()
             tabManager.selectTab(index: state.targetIndex)
             return
         }
+
+        let generation = beginVisualTransition(to: state.targetIndex, webView: state.toWebView)
 
         let directionSign: CGFloat = state.direction == .left ? -1 : 1
         let offscreenTravel = width + UI.tabSwitchGap
@@ -1745,6 +1752,8 @@ final class MainWindowController: NSWindowController {
 
         state.fromWebView.wantsLayer = true
         state.toWebView.wantsLayer = true
+        state.fromWebView.layer?.removeAllAnimations()
+        state.toWebView.layer?.removeAllAnimations()
         state.fromWebView.layer?.masksToBounds = true
         state.toWebView.layer?.masksToBounds = true
         state.fromWebView.layer?.cornerRadius = 18
@@ -1770,6 +1779,10 @@ final class MainWindowController: NSWindowController {
             gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
         } completionHandler: { [weak self] in
             guard let self else { return }
+            guard generation == self.tabTransitionGeneration else {
+                self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
+                return
+            }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = emphasizeBirth ? 0.18 : 0.16
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -1780,6 +1793,10 @@ final class MainWindowController: NSWindowController {
                 state.toWebView.animator().layer?.shadowOpacity = 0.32
                 gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
             } completionHandler: {
+                guard generation == self.tabTransitionGeneration else {
+                    self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
+                    return
+                }
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = emphasizeBirth ? 0.13 : 0.12
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -1792,17 +1809,52 @@ final class MainWindowController: NSWindowController {
                     gapView.animator().frame.origin.x = gapOriginX(fromX: fromFinalX, toX: 0)
                     gapView.animator().alphaValue = 0.16
                 } completionHandler: {
-                    dimView.removeFromSuperview()
-                    gapView.removeFromSuperview()
-                    state.fromWebView.layer?.cornerRadius = 0
-                    state.fromWebView.layer?.borderWidth = 0
-                    state.toWebView.layer?.cornerRadius = 0
-                    state.toWebView.layer?.borderWidth = 0
-                    state.toWebView.layer?.shadowOpacity = 0
+                    guard generation == self.tabTransitionGeneration else {
+                        self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
+                        return
+                    }
+                    self.clearVisualTransitionOverride()
+                    self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
                     self.tabManager.selectTab(index: state.targetIndex)
                 }
             }
         }
+    }
+
+    private func resolvedVisualCurrentIndex() -> Int {
+        visualTransitionCurrentIndex ?? tabManager.currentIndex
+    }
+
+    private func resolvedVisualCurrentWebView() -> WKWebView? {
+        visualTransitionCurrentWebView ?? tabManager.currentWebView
+    }
+
+    @discardableResult
+    private func beginVisualTransition(to index: Int, webView: WKWebView) -> Int {
+        tabTransitionGeneration += 1
+        visualTransitionCurrentIndex = index
+        visualTransitionCurrentWebView = webView
+        return tabTransitionGeneration
+    }
+
+    private func clearVisualTransitionOverride() {
+        visualTransitionCurrentIndex = nil
+        visualTransitionCurrentWebView = nil
+    }
+
+    private func cleanupTransitionDecoration(
+        for state: InteractiveTabSwitchState,
+        dimView: NSView,
+        gapView: NSView
+    ) {
+        dimView.removeFromSuperview()
+        gapView.removeFromSuperview()
+        state.fromWebView.layer?.cornerRadius = 0
+        state.fromWebView.layer?.borderWidth = 0
+        state.fromWebView.layer?.shadowOpacity = 0
+        state.toWebView.layer?.cornerRadius = 0
+        state.toWebView.layer?.borderWidth = 0
+        state.toWebView.layer?.shadowOpacity = 0
     }
 
     private func captureThumbnail(for webView: WKWebView) {
@@ -2226,6 +2278,7 @@ extension MainWindowController: NSWindowDelegate {
 
 extension MainWindowController: TabManagerDelegate {
     func tabManager(_ manager: TabManager, didSelect webView: WKWebView?) {
+        clearVisualTransitionOverride()
         guard let webView else {
             webContainer.subviews.forEach { $0.removeFromSuperview() }
             overlayView = nil

@@ -762,6 +762,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let resetButton = NSButton(title: "デフォルトに戻す", target: self, action: #selector(resetDefaults))
         resetButton.translatesAutoresizingMaskIntoConstraints = false
+        resetButton.controlSize = .regular
         [openDownloadsButton, openHistoryButton, openBookmarksButton, openSiteControlsButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.target = self
@@ -769,7 +770,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         [chooseDownloadFolderButton, clearDownloadFolderButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.target = self
+            $0.controlSize = .regular
         }
+        clearDataButton.controlSize = .regular
         openDownloadsButton.action = #selector(openDownloads)
         openHistoryButton.action = #selector(openHistory)
         openBookmarksButton.action = #selector(openBookmarks)
@@ -840,6 +843,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let privacySection = makeSectionContentStack()
         let privacyStack = privacySection
         privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
+        privacyStack.setCustomSpacing(6, after: privacySummaryLabel)
         privacyStack.addArrangedSubview(antiTrackingCheckbox)
         privacyStack.addArrangedSubview(contentBlockingCheckbox)
         privacyStack.addArrangedSubview(popupBlockingCheckbox)
@@ -850,11 +854,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let dataSection = makeSectionContentStack()
         let dataStack = dataSection
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
+        dataStack.setCustomSpacing(8, after: dataSummaryLabel)
         let dataGrid = makeTwoColumnGrid()
         dataStack.addArrangedSubview(dataGrid)
         dataGrid.addArrangedSubview(openBookmarksButton)
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
+        dataStack.setCustomSpacing(6, after: downloadFolderLabel)
         let downloadFolderButtons = NSStackView()
         downloadFolderButtons.translatesAutoresizingMaskIntoConstraints = false
         downloadFolderButtons.orientation = .horizontal
@@ -871,6 +877,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         resetNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         resetNote.textColor = .secondaryLabelColor
         resetStack.addArrangedSubview(resetNote)
+        resetStack.setCustomSpacing(8, after: resetNote)
         resetStack.addArrangedSubview(resetButton)
 
         NSLayoutConstraint.activate([

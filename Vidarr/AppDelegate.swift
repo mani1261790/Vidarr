@@ -813,7 +813,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         gestureTestNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         gestureTestNote.textColor = .secondaryLabelColor
         gestureStack.addArrangedSubview(gestureTestNote)
-        gestureStack.addArrangedSubview(gestureTestView)
+        let gestureTestContainer = NSView()
+        gestureTestContainer.translatesAutoresizingMaskIntoConstraints = false
+        gestureTestContainer.addSubview(gestureTestView)
+        gestureStack.addArrangedSubview(gestureTestContainer)
 
         let privacySection = makeSectionContentStack()
         let privacyStack = privacySection
@@ -860,7 +863,12 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             gestureListLabel.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             gestureTestNote.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
-            gestureTestView.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+            gestureTestContainer.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+            gestureTestContainer.heightAnchor.constraint(equalToConstant: 210),
+            gestureTestView.leadingAnchor.constraint(equalTo: gestureTestContainer.leadingAnchor),
+            gestureTestView.trailingAnchor.constraint(equalTo: gestureTestContainer.trailingAnchor),
+            gestureTestView.topAnchor.constraint(equalTo: gestureTestContainer.topAnchor),
+            gestureTestView.bottomAnchor.constraint(equalTo: gestureTestContainer.bottomAnchor),
 
             dataGrid.widthAnchor.constraint(equalTo: dataSection.widthAnchor),
             downloadFolderButtons.widthAnchor.constraint(equalTo: dataSection.widthAnchor)
@@ -917,16 +925,27 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     private func wrapTabContent(_ stack: NSStackView) -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(stack)
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+        documentView.addSubview(stack)
+
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -18)
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 18),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -18),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -18)
         ])
-        return container
+        return scrollView
     }
 
     private func makeTab(title: String, content: NSView) -> NSTabViewItem {

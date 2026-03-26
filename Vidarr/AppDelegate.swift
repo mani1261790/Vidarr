@@ -602,6 +602,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let contentLanguagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let generalSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let gestureListLabel = NSTextField(wrappingLabelWithString: "")
     private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let dataSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
@@ -797,6 +798,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let gestureSection = makeSectionContentStack()
         let gestureStack = gestureSection
         gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
+        let gestureListTitle = makeFieldLabel("使えるジェスチャー")
+        gestureStack.addArrangedSubview(gestureListTitle)
+        gestureStack.addArrangedSubview(configureSummaryLabel(gestureListLabel))
         let sensitivityRow = NSStackView()
         sensitivityRow.translatesAutoresizingMaskIntoConstraints = false
         sensitivityRow.orientation = .horizontal
@@ -853,6 +857,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             contentLanguageRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             generalGrid.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
 
+            gestureListLabel.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             gestureTestNote.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             gestureTestView.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
@@ -969,6 +974,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
+        gestureListLabel.stringValue = [
+            "→ : 次のタブ",
+            "← : 前のタブ",
+            "↓→ : 現在のタブを閉じる",
+            "↓→↓→ : すべてのタブを閉じる",
+            "U : 閉じたタブを復元",
+            "O : 現在のタブを再読み込み",
+            "↑→ : 戻る",
+            "↑← : 進む",
+            "S : 検索",
+            "↓← : 新規タブ"
+        ].joined(separator: "\n")
         gestureTestView.sensitivityMultiplier = sensitivity.multiplier
 
         privacySummaryLabel.stringValue = [

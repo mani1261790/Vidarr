@@ -591,6 +591,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 }
 
 private final class PreferencesWindowController: NSWindowController, NSTextFieldDelegate, NSTabViewDelegate {
+    private final class FlippedContentView: NSView {
+        override var isFlipped: Bool { true }
+    }
+
     private final class PreferenceTabContentView: NSView {
         let scrollView = NSScrollView()
     }
@@ -872,7 +876,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         dataStack.setCustomSpacing(8, after: dataSummaryLabel)
         let dataGrid = makeTwoColumnGrid()
-        dataStack.addArrangedSubview(makeControlRow(for: dataGrid, height: 30))
+        dataStack.addArrangedSubview(makeControlRow(for: dataGrid, height: 34))
         dataGrid.addArrangedSubview(openBookmarksButton)
         dataGrid.addArrangedSubview(openSiteControlsButton)
         dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
@@ -885,7 +889,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         downloadFolderButtons.addArrangedSubview(chooseDownloadFolderButton)
         downloadFolderButtons.addArrangedSubview(clearDownloadFolderButton)
         dataStack.addArrangedSubview(makeControlRow(for: downloadFolderButtons, height: 28))
-        dataStack.addArrangedSubview(clearDataButton)
+        dataStack.addArrangedSubview(makeControlRow(for: clearDataButton, height: 28))
 
         let resetSection = makeSectionContentStack()
         let resetStack = resetSection
@@ -979,7 +983,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         scrollView.autohidesScrollers = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        let documentView = NSView()
+        let documentView = FlippedContentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = documentView
         container.addSubview(scrollView)
@@ -1035,10 +1039,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         enforceMinimumWindowSize()
         guard let content = tabViewItem?.view as? PreferenceTabContentView else { return }
         DispatchQueue.main.async {
-            let contentHeight = content.scrollView.documentView?.bounds.height ?? 0
-            let visibleHeight = content.scrollView.contentView.bounds.height
-            let topY = max(0, contentHeight - visibleHeight)
-            content.scrollView.contentView.scroll(to: NSPoint(x: 0, y: topY))
+            content.scrollView.contentView.scroll(to: .zero)
             content.scrollView.reflectScrolledClipView(content.scrollView.contentView)
         }
     }

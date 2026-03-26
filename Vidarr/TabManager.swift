@@ -502,7 +502,11 @@ final class TabManager {
 
     func reloadCurrentTab() {
         performOnMain { [weak self] in
-            self?.currentWebView?.reload()
+            guard let self else { return }
+            guard var state = optionalStateForCurrentIndex() else { return }
+            let index = state.currentIndex
+            reload(tabAt: index, in: &state)
+            setState(state, for: currentGroup)
         }
     }
 
@@ -552,14 +556,11 @@ final class TabManager {
         performOnMain { [weak self] in
             guard let self else { return }
             for group in BrowserTabGroup.allCases {
-                let state = state(for: group)
-                for tab in state.tabs {
-                    if let url = tab.webView.url ?? tab.lastKnownURL {
-                        BrowserSession.load(url: url, in: tab.webView)
-                    } else {
-                        tab.webView.reload()
-                    }
+                var state = state(for: group)
+                for index in state.tabs.indices {
+                    reload(tabAt: index, in: &state)
                 }
+                setState(state, for: group)
             }
         }
     }
@@ -802,6 +803,28 @@ final class TabManager {
         let state = state(for: currentGroup)
         guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return nil }
         return state
+    }
+
+    private func reload(tabAt index: Int, in state: inout GroupState) {
+        guard index >= 0, index < state.tabs.count else { return }
+
+        let resolvedURL =
+            state.tabs[index].webView.url ??
+            state.tabs[index].lastKnownURL ??
+            currentHistoryURL(for: state.tabs[index])
+
+        guard let resolvedURL else {
+            state.tabs[index].webView.reload()
+            return
+        }
+
+        state.tabs[index].lastKnownURL = resolvedURL
+        BrowserSession.reload(url: resolvedURL, in: state.tabs[index].webView)
+    }
+
+    private func currentHistoryURL(for tab: Tab) -> URL? {
+        guard tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count else { return nil }
+        return tab.historyURLs[tab.historyIndex]
     }
 
     private func setState(_ state: GroupState, for group: BrowserTabGroup) {

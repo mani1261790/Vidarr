@@ -102,6 +102,20 @@ final class BrowserSession {
         }
     }
 
+    static func reload(url: URL, in webView: WKWebView) {
+        if url.isFileURL {
+            load(url: url, in: webView)
+            return
+        }
+
+        let request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 60
+        )
+        webView.load(request)
+    }
+
     static func load(url: URL, in webView: WKWebView) {
         if url.isFileURL {
             let readAccessURL: URL

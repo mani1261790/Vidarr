@@ -276,7 +276,8 @@ final class GestureOverlayView: NSView {
             if result.name == "Left" || result.name == "Right" {
                 hudView.hideImmediately()
             } else {
-                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint)
+                let duration = (result.name == "OO") ? 0.55 : 0.3
+                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint, duration: duration)
             }
             return
         }
@@ -285,11 +286,11 @@ final class GestureOverlayView: NSView {
         if isLikelyDoubleLoop(capturePoints) {
             if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.26, allowedNames: ["OO"]) {
                 performAction(for: oo.name)
-                hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint)
+                hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint, duration: 0.55)
                 return
             }
             performAction(for: "OO")
-            hudView.showCommittedAction(name: "OO", score: 0.30, at: hudAnchorPoint)
+            hudView.showCommittedAction(name: "OO", score: 0.30, at: hudAnchorPoint, duration: 0.55)
             return
         }
 

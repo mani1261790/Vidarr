@@ -1315,6 +1315,7 @@ private final class GesturePracticeView: NSView {
     private let pathLayer = CAShapeLayer()
     private let borderLayer = CALayer()
     private let fillLayer = CALayer()
+    private let outlineLayer = CALayer()
     private var glassBackgroundView: NSView?
 
     override init(frame frameRect: NSRect) {
@@ -1337,6 +1338,7 @@ private final class GesturePracticeView: NSView {
         glassBackgroundView?.frame = bounds
         fillLayer.frame = bounds
         borderLayer.frame = bounds
+        outlineLayer.frame = bounds
         pathLayer.frame = bounds
         canvasLayer.frame = bounds
     }
@@ -1396,6 +1398,11 @@ private final class GesturePracticeView: NSView {
             layer?.addSublayer(fillLayer)
             layer?.addSublayer(borderLayer)
         }
+
+        outlineLayer.cornerRadius = 14
+        outlineLayer.borderWidth = 1
+        outlineLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.58).cgColor
+        layer?.addSublayer(outlineLayer)
 
         pathLayer.strokeColor = NSColor.systemBlue.withAlphaComponent(0.72).cgColor
         pathLayer.fillColor = NSColor.clear.cgColor

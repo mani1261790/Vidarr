@@ -999,7 +999,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 18),
             stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -18),
-            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -18)
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor, constant: -18)
         ])
         return container
     }

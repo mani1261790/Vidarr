@@ -3024,30 +3024,20 @@ private final class LiquidGlassToolbarView: NSView {
         layer?.backgroundColor = NSColor.clear.cgColor
         contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
 
-        let backgroundView: NSView
-        if #available(macOS 26.0, *) {
-            let glassView = NonDraggableGlassEffectView()
-            glassView.translatesAutoresizingMaskIntoConstraints = false
-            glassView.style = .regular
-            glassView.cornerRadius = 18
-            glassView.contentView = contentLayoutView
-            backgroundView = glassView
-        } else {
-            let visualEffectView = NonDraggableVisualEffectView()
-            visualEffectView.translatesAutoresizingMaskIntoConstraints = false
-            visualEffectView.material = .underWindowBackground
-            visualEffectView.state = .followsWindowActiveState
-            visualEffectView.blendingMode = .behindWindow
-            visualEffectView.isEmphasized = false
-            visualEffectView.addSubview(contentLayoutView)
-            NSLayoutConstraint.activate([
-                contentLayoutView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
-                contentLayoutView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
-                contentLayoutView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
-                contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
-            ])
-            backgroundView = visualEffectView
-        }
+        let visualEffectView = NonDraggableVisualEffectView()
+        visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+        visualEffectView.material = .underWindowBackground
+        visualEffectView.state = .followsWindowActiveState
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.isEmphasized = false
+        visualEffectView.addSubview(contentLayoutView)
+        NSLayoutConstraint.activate([
+            contentLayoutView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+            contentLayoutView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
+            contentLayoutView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
+            contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
+        ])
+        let backgroundView: NSView = visualEffectView
 
         self.backgroundView = backgroundView
         addSubview(backgroundView)
@@ -3062,11 +3052,6 @@ private final class LiquidGlassToolbarView: NSView {
 }
 
 private final class NonDraggableVisualEffectView: NSVisualEffectView {
-    override var mouseDownCanMoveWindow: Bool { false }
-}
-
-@available(macOS 26.0, *)
-private final class NonDraggableGlassEffectView: NSGlassEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 

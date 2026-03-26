@@ -77,37 +77,27 @@ final class GestureHUDView: NSView {
         layer?.backgroundColor = NSColor.clear.cgColor
         contentHostView.translatesAutoresizingMaskIntoConstraints = false
 
-        if #available(macOS 26.0, *) {
-            let glassView = NSGlassEffectView()
-            glassView.translatesAutoresizingMaskIntoConstraints = true
-            glassView.style = .regular
-            glassView.cornerRadius = 34
-            glassView.contentView = contentHostView
-            glassBackgroundView = glassView
-            addSubview(glassView)
-        } else {
-            layer?.addSublayer(fallbackCardLayer)
-            layer?.addSublayer(fallbackBorderLayer)
+        layer?.addSublayer(fallbackCardLayer)
+        layer?.addSublayer(fallbackBorderLayer)
 
-            fallbackCardLayer.cornerRadius = 34
-            fallbackCardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
-            fallbackCardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
-            fallbackCardLayer.shadowOpacity = 0.34
-            fallbackCardLayer.shadowRadius = 24
-            fallbackCardLayer.shadowOffset = CGSize(width: 0, height: -2)
+        fallbackCardLayer.cornerRadius = 34
+        fallbackCardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
+        fallbackCardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
+        fallbackCardLayer.shadowOpacity = 0.34
+        fallbackCardLayer.shadowRadius = 24
+        fallbackCardLayer.shadowOffset = CGSize(width: 0, height: -2)
 
-            fallbackBorderLayer.cornerRadius = 34
-            fallbackBorderLayer.borderWidth = 1
-            fallbackBorderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
+        fallbackBorderLayer.cornerRadius = 34
+        fallbackBorderLayer.borderWidth = 1
+        fallbackBorderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
 
-            addSubview(contentHostView)
-            NSLayoutConstraint.activate([
-                contentHostView.topAnchor.constraint(equalTo: topAnchor),
-                contentHostView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                contentHostView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                contentHostView.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ])
-        }
+        addSubview(contentHostView)
+        NSLayoutConstraint.activate([
+            contentHostView.topAnchor.constraint(equalTo: topAnchor),
+            contentHostView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentHostView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentHostView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
         actionIconView.imageScaling = .scaleProportionallyUpOrDown
         contentHostView.addSubview(actionIconView)

@@ -1424,38 +1424,26 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
 }
 
 private func makeWindowRootContentView(for window: NSWindow) -> NSView {
-    if #available(macOS 26.0, *) {
-        let container = NSGlassEffectContainerView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.spacing = 12
-        let contentView = NSView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        container.contentView = contentView
-        window.contentView = container
-        return contentView
-    }
+    let hostView = NSVisualEffectView()
+    hostView.translatesAutoresizingMaskIntoConstraints = false
+    hostView.material = .underWindowBackground
+    hostView.state = .followsWindowActiveState
+    hostView.blendingMode = .withinWindow
 
-    if let contentView = window.contentView {
-        return contentView
-    }
-    let fallback = NSView()
-    fallback.translatesAutoresizingMaskIntoConstraints = false
-    window.contentView = fallback
-    return fallback
+    let contentView = NSView()
+    contentView.translatesAutoresizingMaskIntoConstraints = false
+    hostView.addSubview(contentView)
+    NSLayoutConstraint.activate([
+        contentView.topAnchor.constraint(equalTo: hostView.topAnchor),
+        contentView.leadingAnchor.constraint(equalTo: hostView.leadingAnchor),
+        contentView.trailingAnchor.constraint(equalTo: hostView.trailingAnchor),
+        contentView.bottomAnchor.constraint(equalTo: hostView.bottomAnchor)
+    ])
+    window.contentView = hostView
+    return contentView
 }
 
 private func makeGlassHostView(cornerRadius: CGFloat = 20) -> NSView {
-    if #available(macOS 26.0, *) {
-        let glassView = NSGlassEffectView()
-        glassView.translatesAutoresizingMaskIntoConstraints = false
-        glassView.style = .regular
-        glassView.cornerRadius = cornerRadius
-        let contentView = NSView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        glassView.contentView = contentView
-        return glassView
-    }
-
     let visualEffectView = NSVisualEffectView()
     visualEffectView.translatesAutoresizingMaskIntoConstraints = false
     visualEffectView.material = .underWindowBackground
@@ -1477,16 +1465,6 @@ private func makeGlassHostView(cornerRadius: CGFloat = 20) -> NSView {
 }
 
 private func hostedContentView(from hostView: NSView) -> NSView {
-    if #available(macOS 26.0, *), let glassView = hostView as? NSGlassEffectView {
-        if let contentView = glassView.contentView {
-            return contentView
-        }
-        let contentView = NSView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        glassView.contentView = contentView
-        return contentView
-    }
-
     if let visualEffectView = hostView as? NSVisualEffectView,
        let contentView = visualEffectView.subviews.first {
         return contentView
@@ -1496,6 +1474,5 @@ private func hostedContentView(from hostView: NSView) -> NSView {
 }
 
 private func applyGlassBezelIfAvailable(to buttons: [NSButton]) {
-    guard #available(macOS 26.0, *) else { return }
-    buttons.forEach { $0.bezelStyle = .glass }
+    buttons.forEach { $0.bezelStyle = .rounded }
 }

@@ -800,19 +800,17 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         chooseDownloadFolderButton.action = #selector(chooseDownloadFolder)
         clearDownloadFolderButton.action = #selector(clearDownloadFolder)
 
-        if #available(macOS 26.0, *) {
-            [
-                openDownloadsButton,
-                openHistoryButton,
-                openBookmarksButton,
-                openSiteControlsButton,
-                chooseDownloadFolderButton,
-                clearDownloadFolderButton,
-                clearDataButton,
-                resetButton
-            ].forEach {
-                $0.bezelStyle = .glass
-            }
+        [
+            openDownloadsButton,
+            openHistoryButton,
+            openBookmarksButton,
+            openSiteControlsButton,
+            chooseDownloadFolderButton,
+            clearDownloadFolderButton,
+            clearDataButton,
+            resetButton
+        ].forEach {
+            $0.bezelStyle = .rounded
         }
 
         let generalGrid = makeTwoColumnGrid()
@@ -1135,58 +1133,42 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     private func makeRootContentView(for window: NSWindow) -> NSView {
-        if #available(macOS 26.0, *) {
-            let container = NSGlassEffectContainerView()
-            container.translatesAutoresizingMaskIntoConstraints = false
-            let layoutView = NSView()
-            layoutView.translatesAutoresizingMaskIntoConstraints = false
-            container.contentView = layoutView
-            container.spacing = 12
-            window.contentView = container
-            rootLayoutView = layoutView
-            return layoutView
-        }
+        let rootHost = NSVisualEffectView()
+        rootHost.translatesAutoresizingMaskIntoConstraints = false
+        rootHost.material = .underWindowBackground
+        rootHost.state = .followsWindowActiveState
+        rootHost.blendingMode = .withinWindow
 
-        guard let contentView = window.contentView else {
-            let fallback = NSView()
-            fallback.translatesAutoresizingMaskIntoConstraints = false
-            window.contentView = fallback
-            rootLayoutView = fallback
-            return fallback
-        }
-        rootLayoutView = contentView
-        return contentView
+        let layoutView = NSView()
+        layoutView.translatesAutoresizingMaskIntoConstraints = false
+        rootHost.addSubview(layoutView)
+        NSLayoutConstraint.activate([
+            layoutView.topAnchor.constraint(equalTo: rootHost.topAnchor),
+            layoutView.leadingAnchor.constraint(equalTo: rootHost.leadingAnchor),
+            layoutView.trailingAnchor.constraint(equalTo: rootHost.trailingAnchor),
+            layoutView.bottomAnchor.constraint(equalTo: rootHost.bottomAnchor)
+        ])
+
+        window.contentView = rootHost
+        rootLayoutView = layoutView
+        return layoutView
     }
 
     private func makeTabHostView(content tabView: NSTabView) -> NSView {
-        if #available(macOS 26.0, *) {
-            let glassView = NSGlassEffectView()
-            glassView.translatesAutoresizingMaskIntoConstraints = false
-            glassView.style = .regular
-            glassView.cornerRadius = 24
-
-            let contentView = NSView()
-            contentView.translatesAutoresizingMaskIntoConstraints = false
-            glassView.contentView = contentView
-            contentView.addSubview(tabView)
-
-            NSLayoutConstraint.activate([
-                tabView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
-                tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
-                tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
-                tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14)
-            ])
-            return glassView
-        }
-
-        let container = NSView()
+        let container = NSVisualEffectView()
         container.translatesAutoresizingMaskIntoConstraints = false
+        container.material = .underWindowBackground
+        container.state = .followsWindowActiveState
+        container.blendingMode = .withinWindow
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 24
+        container.layer?.masksToBounds = true
         container.addSubview(tabView)
         NSLayoutConstraint.activate([
-            tabView.topAnchor.constraint(equalTo: container.topAnchor),
-            tabView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            tabView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            tabView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            tabView.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
+            tabView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+            tabView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            tabView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14)
         ])
         return container
     }
@@ -1493,25 +1475,13 @@ private final class GesturePracticeView: NSView {
         layer?.cornerRadius = 14
         layer?.masksToBounds = false
 
-        if #available(macOS 26.0, *) {
-            let glassView = NSGlassEffectView()
-            glassView.translatesAutoresizingMaskIntoConstraints = true
-            glassView.style = .regular
-            glassView.cornerRadius = 14
-            let glassContent = NSView()
-            glassContent.translatesAutoresizingMaskIntoConstraints = false
-            glassView.contentView = glassContent
-            glassBackgroundView = glassView
-            addSubview(glassView, positioned: .below, relativeTo: nil)
-        } else {
-            fillLayer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
-            fillLayer.cornerRadius = 14
-            borderLayer.borderWidth = 1
-            borderLayer.cornerRadius = 14
-            borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.9).cgColor
-            layer?.addSublayer(fillLayer)
-            layer?.addSublayer(borderLayer)
-        }
+        fillLayer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        fillLayer.cornerRadius = 14
+        borderLayer.borderWidth = 1
+        borderLayer.cornerRadius = 14
+        borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.9).cgColor
+        layer?.addSublayer(fillLayer)
+        layer?.addSublayer(borderLayer)
 
         outlineLayer.cornerRadius = 14
         outlineLayer.borderWidth = 1

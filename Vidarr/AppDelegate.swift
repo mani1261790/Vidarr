@@ -940,6 +940,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         stack.alignment = .leading
         stack.distribution = .gravityAreas
         stack.spacing = 12
+        stack.setHuggingPriority(.required, for: .vertical)
+        stack.setClippingResistancePriority(.required, for: .vertical)
         return stack
     }
 
@@ -965,6 +967,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
             stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 18),
             stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -18),

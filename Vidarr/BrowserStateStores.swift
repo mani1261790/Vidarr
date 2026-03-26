@@ -219,7 +219,8 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
     }
 
     private func setupUI() {
-        guard let contentView = window?.contentView else { return }
+        guard let window else { return }
+        let contentView = makeWindowRootContentView(for: window)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
@@ -270,57 +271,66 @@ final class DownloadsWindowController: NSWindowController, NSTableViewDataSource
         headerStack.spacing = 4
 
         scrollView.documentView = tableView
-        contentView.addSubview(headerStack)
-        contentView.addSubview(searchField)
-        contentView.addSubview(scrollView)
-        contentView.addSubview(emptyStateLabel)
+        let contentCard = makeGlassHostView()
+        let contentCardView = hostedContentView(from: contentCard)
+        contentView.addSubview(contentCard)
+        contentCardView.addSubview(headerStack)
+        contentCardView.addSubview(searchField)
+        contentCardView.addSubview(scrollView)
+        contentCardView.addSubview(emptyStateLabel)
 
         openButton.translatesAutoresizingMaskIntoConstraints = false
         openButton.target = self
         openButton.action = #selector(openSelectedDownload)
-        contentView.addSubview(openButton)
+        contentCardView.addSubview(openButton)
 
         revealButton.translatesAutoresizingMaskIntoConstraints = false
         revealButton.target = self
         revealButton.action = #selector(revealSelectedDownload)
-        contentView.addSubview(revealButton)
+        contentCardView.addSubview(revealButton)
 
         removeButton.translatesAutoresizingMaskIntoConstraints = false
         removeButton.target = self
         removeButton.action = #selector(removeSelectedDownloads)
-        contentView.addSubview(removeButton)
+        contentCardView.addSubview(removeButton)
 
         let clearButton = NSButton(title: "Clear Downloads", target: self, action: #selector(clearDownloads))
         clearButton.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(clearButton)
+        contentCardView.addSubview(clearButton)
+        applyGlassBezelIfAvailable(to: [openButton, revealButton, removeButton, clearButton])
 
         NSLayoutConstraint.activate([
-            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
-            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            contentCard.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            contentCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            contentCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            contentCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
+
+            headerStack.topAnchor.constraint(equalTo: contentCardView.topAnchor, constant: 18),
+            headerStack.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
 
             searchField.centerYAnchor.constraint(equalTo: headerStack.centerYAnchor),
-            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            searchField.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
             searchField.widthAnchor.constraint(equalToConstant: 280),
 
             scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            scrollView.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
+            scrollView.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
             scrollView.bottomAnchor.constraint(equalTo: revealButton.topAnchor, constant: -12),
 
             emptyStateLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
 
-            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
-            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+            clearButton.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
+            clearButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18),
 
-            revealButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
-            revealButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+            revealButton.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
+            revealButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18),
 
             removeButton.trailingAnchor.constraint(equalTo: revealButton.leadingAnchor, constant: -8),
-            removeButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+            removeButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18),
 
             openButton.trailingAnchor.constraint(equalTo: removeButton.leadingAnchor, constant: -8),
-            openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
+            openButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18)
         ])
 
         updateActionButtons()
@@ -603,7 +613,8 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
     }
 
     private func setupUI() {
-        guard let contentView = window?.contentView else { return }
+        guard let window else { return }
+        let contentView = makeWindowRootContentView(for: window)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
@@ -657,51 +668,59 @@ final class BrowsingItemsWindowController: NSWindowController, NSTableViewDataSo
         headerStack.spacing = 4
 
         scrollView.documentView = tableView
-        contentView.addSubview(headerStack)
-        contentView.addSubview(searchField)
-        contentView.addSubview(scrollView)
-        contentView.addSubview(emptyStateLabel)
+        let contentCard = makeGlassHostView()
+        let contentCardView = hostedContentView(from: contentCard)
+        contentView.addSubview(contentCard)
+        contentCardView.addSubview(headerStack)
+        contentCardView.addSubview(searchField)
+        contentCardView.addSubview(scrollView)
+        contentCardView.addSubview(emptyStateLabel)
 
         openButton.translatesAutoresizingMaskIntoConstraints = false
-        openButton.bezelStyle = .rounded
         openButton.target = self
         openButton.action = #selector(openSelectedItem)
-        contentView.addSubview(openButton)
+        contentCardView.addSubview(openButton)
 
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
         deleteButton.target = self
         deleteButton.action = #selector(deleteSelectedItem)
-        contentView.addSubview(deleteButton)
+        contentCardView.addSubview(deleteButton)
 
         let clearButton = NSButton(title: mode == .history ? "Clear History" : "Clear Bookmarks", target: self, action: #selector(clearAllItems))
         clearButton.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(clearButton)
+        contentCardView.addSubview(clearButton)
+        applyGlassBezelIfAvailable(to: [openButton, deleteButton, clearButton])
 
         NSLayoutConstraint.activate([
-            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
-            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
+            contentCard.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            contentCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            contentCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            contentCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
+
+            headerStack.topAnchor.constraint(equalTo: contentCardView.topAnchor, constant: 18),
+            headerStack.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
 
             searchField.centerYAnchor.constraint(equalTo: headerStack.centerYAnchor),
-            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            searchField.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
             searchField.widthAnchor.constraint(equalToConstant: 280),
 
             scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
+            scrollView.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
+            scrollView.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
             scrollView.bottomAnchor.constraint(equalTo: deleteButton.topAnchor, constant: -12),
 
             emptyStateLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             emptyStateLabel.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, multiplier: 0.7),
 
-            clearButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
-            clearButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+            clearButton.leadingAnchor.constraint(equalTo: contentCardView.leadingAnchor, constant: 18),
+            clearButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18),
 
-            deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
-            deleteButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18),
+            deleteButton.trailingAnchor.constraint(equalTo: contentCardView.trailingAnchor, constant: -18),
+            deleteButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18),
 
             openButton.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
-            openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -18)
+            openButton.bottomAnchor.constraint(equalTo: contentCardView.bottomAnchor, constant: -18)
         ])
 
         updateActionButtons()
@@ -1042,7 +1061,8 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
     }
 
     private func setupUI() {
-        guard let contentView = window?.contentView else { return }
+        guard let window else { return }
+        let contentView = makeWindowRootContentView(for: window)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
@@ -1056,10 +1076,14 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         let tabView = NSTabView()
         tabView.translatesAutoresizingMaskIntoConstraints = false
         tabView.tabViewType = .topTabsBezelBorder
+        tabView.drawsBackground = false
+        let tabHostView = makeGlassHostView(cornerRadius: 22)
+        let tabHostContentView = hostedContentView(from: tabHostView)
+        tabHostContentView.addSubview(tabView)
 
         contentView.addSubview(titleLabel)
         contentView.addSubview(summaryLabel)
-        contentView.addSubview(tabView)
+        contentView.addSubview(tabHostView)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
@@ -1069,10 +1093,15 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             summaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             summaryLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            tabView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 16),
-            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
+            tabHostView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 16),
+            tabHostView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            tabHostView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            tabHostView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
+
+            tabView.topAnchor.constraint(equalTo: tabHostContentView.topAnchor, constant: 12),
+            tabView.leadingAnchor.constraint(equalTo: tabHostContentView.leadingAnchor, constant: 12),
+            tabView.trailingAnchor.constraint(equalTo: tabHostContentView.trailingAnchor, constant: -12),
+            tabView.bottomAnchor.constraint(equalTo: tabHostContentView.bottomAnchor, constant: -12)
         ])
 
         tabView.addTabViewItem(makeTabItem(
@@ -1135,13 +1164,8 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
         deleteAction: Selector,
         deleteTitle: String
     ) -> NSView {
-        let root = NSView()
-        root.translatesAutoresizingMaskIntoConstraints = false
-        root.wantsLayer = true
-        root.layer?.cornerRadius = 14
-        root.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
-        root.layer?.borderWidth = 1
-        root.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        let root = makeGlassHostView(cornerRadius: 16)
+        let rootContentView = hostedContentView(from: root)
 
         let header = makeSectionHeader(titleLabel: titleLabel, title: title, detail: detail)
         let tableContainer = makeTableContainer(
@@ -1152,18 +1176,18 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             deleteTitle: deleteTitle
         )
 
-        root.addSubview(header)
-        root.addSubview(tableContainer)
+        rootContentView.addSubview(header)
+        rootContentView.addSubview(tableContainer)
 
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
-            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 18),
-            header.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -18),
+            header.topAnchor.constraint(equalTo: rootContentView.topAnchor, constant: 18),
+            header.leadingAnchor.constraint(equalTo: rootContentView.leadingAnchor, constant: 18),
+            header.trailingAnchor.constraint(equalTo: rootContentView.trailingAnchor, constant: -18),
 
             tableContainer.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 14),
-            tableContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 18),
-            tableContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -18),
-            tableContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18)
+            tableContainer.leadingAnchor.constraint(equalTo: rootContentView.leadingAnchor, constant: 18),
+            tableContainer.trailingAnchor.constraint(equalTo: rootContentView.trailingAnchor, constant: -18),
+            tableContainer.bottomAnchor.constraint(equalTo: rootContentView.bottomAnchor, constant: -18)
         ])
 
         return root
@@ -1232,6 +1256,7 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
 
         let deleteButton = NSButton(title: deleteTitle, target: self, action: deleteAction)
         deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        applyGlassBezelIfAvailable(to: [deleteButton])
         container.addSubview(deleteButton)
 
         NSLayoutConstraint.activate([
@@ -1396,4 +1421,81 @@ final class SiteSettingsWindowController: NSWindowController, NSTableViewDataSou
             return "Camera + Microphone"
         }
     }
+}
+
+private func makeWindowRootContentView(for window: NSWindow) -> NSView {
+    if #available(macOS 26.0, *) {
+        let container = NSGlassEffectContainerView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.spacing = 12
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        container.contentView = contentView
+        window.contentView = container
+        return contentView
+    }
+
+    if let contentView = window.contentView {
+        return contentView
+    }
+    let fallback = NSView()
+    fallback.translatesAutoresizingMaskIntoConstraints = false
+    window.contentView = fallback
+    return fallback
+}
+
+private func makeGlassHostView(cornerRadius: CGFloat = 20) -> NSView {
+    if #available(macOS 26.0, *) {
+        let glassView = NSGlassEffectView()
+        glassView.translatesAutoresizingMaskIntoConstraints = false
+        glassView.style = .regular
+        glassView.cornerRadius = cornerRadius
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        glassView.contentView = contentView
+        return glassView
+    }
+
+    let visualEffectView = NSVisualEffectView()
+    visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+    visualEffectView.material = .underWindowBackground
+    visualEffectView.state = .followsWindowActiveState
+    visualEffectView.blendingMode = .withinWindow
+    visualEffectView.wantsLayer = true
+    visualEffectView.layer?.cornerRadius = cornerRadius
+    visualEffectView.layer?.masksToBounds = true
+    let contentView = NSView()
+    contentView.translatesAutoresizingMaskIntoConstraints = false
+    visualEffectView.addSubview(contentView)
+    NSLayoutConstraint.activate([
+        contentView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+        contentView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
+        contentView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
+        contentView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
+    ])
+    return visualEffectView
+}
+
+private func hostedContentView(from hostView: NSView) -> NSView {
+    if #available(macOS 26.0, *), let glassView = hostView as? NSGlassEffectView {
+        if let contentView = glassView.contentView {
+            return contentView
+        }
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        glassView.contentView = contentView
+        return contentView
+    }
+
+    if let visualEffectView = hostView as? NSVisualEffectView,
+       let contentView = visualEffectView.subviews.first {
+        return contentView
+    }
+
+    return hostView
+}
+
+private func applyGlassBezelIfAvailable(to buttons: [NSButton]) {
+    guard #available(macOS 26.0, *) else { return }
+    buttons.forEach { $0.bezelStyle = .glass }
 }

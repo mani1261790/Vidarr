@@ -158,9 +158,9 @@ final class GestureRecognizer {
                 && estimatedLoopCount(raw) <= 1.45
 
         case "OO":
-            return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 2.35 * .pi, closeRatioLimit: 0.62)
-                && pathLength(raw) >= minPathLength * 1.08
-                && estimatedLoopCount(raw) >= 1.35
+            return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 2.75 * .pi, closeRatioLimit: 0.68)
+                && pathLength(raw) >= minPathLength * 0.94
+                && estimatedLoopCount(raw) >= 1.22
 
         case "UpRight":
             return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right)
@@ -215,7 +215,7 @@ final class GestureRecognizer {
 
         if best.name == "O",
            let doubleCircle = passing.first(where: { $0.name == "OO" }),
-           doubleCircle.score >= best.score - 0.14 {
+           (estimatedLoopCount(raw) >= 1.24 || doubleCircle.score >= best.score - 0.22) {
             return doubleCircle
         }
 

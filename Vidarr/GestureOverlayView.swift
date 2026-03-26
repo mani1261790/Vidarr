@@ -283,13 +283,13 @@ final class GestureOverlayView: NSView {
 
         // OO は入力ばらつきが大きいため専用フォールバックを使う。
         if isLikelyDoubleLoop(capturePoints) {
-            if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.32, allowedNames: ["OO"]) {
+            if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.26, allowedNames: ["OO"]) {
                 performAction(for: oo.name)
                 hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint)
                 return
             }
             performAction(for: "OO")
-            hudView.showCommittedAction(name: "OO", score: 0.32, at: hudAnchorPoint)
+            hudView.showCommittedAction(name: "OO", score: 0.30, at: hudAnchorPoint)
             return
         }
 
@@ -475,7 +475,7 @@ final class GestureOverlayView: NSView {
         guard ellipseCircumference > 1 else { return false }
 
         let loops = pathLength(points) / ellipseCircumference
-        return loops >= 1.4
+        return loops >= 1.22
     }
 
     private func commonInit() {

@@ -613,6 +613,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let gestureTestView = GesturePracticeView(frame: .zero)
     private let summaryLabel = NSTextField(labelWithString: "")
     private let openDownloadsButton = NSButton(title: "", target: nil, action: nil)
     private let openHistoryButton = NSButton(title: "", target: nil, action: nil)
@@ -798,6 +799,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         sensitivityRow.addArrangedSubview(sensitivityLabel)
         sensitivityRow.addArrangedSubview(sensitivityPopup)
         gestureStack.addArrangedSubview(sensitivityRow)
+        let gestureTestNote = NSTextField(wrappingLabelWithString: "この領域で Magic Mouse / トラックパッドのジェスチャー、または右クリックを押しながらのドラッグを試せます。ここでの入力はページ操作に影響しません。")
+        gestureTestNote.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        gestureTestNote.textColor = .secondaryLabelColor
+        gestureStack.addArrangedSubview(gestureTestNote)
+        gestureStack.addArrangedSubview(gestureTestView)
 
         let privacySection = makeSectionContentStack()
         let privacyStack = privacySection
@@ -842,6 +848,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             generalGrid.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
 
             sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+            gestureTestNote.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+            gestureTestView.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
 
             dataGrid.widthAnchor.constraint(equalTo: dataSection.widthAnchor),
             downloadFolderButtons.widthAnchor.constraint(equalTo: dataSection.widthAnchor)
@@ -954,6 +962,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")"
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
+        gestureTestView.sensitivityMultiplier = sensitivity.multiplier
 
         privacySummaryLabel.stringValue = [
             "追跡除去 \(prefs.antiTrackingEnabled ? "オン" : "オフ")",
@@ -1127,5 +1136,341 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     @objc private func clearDownloadFolder() {
         _ = try? prefs.setPreferredDownloadDirectory(nil)
         loadValues()
+    }
+}
+
+private final class GesturePracticeView: NSView {
+    var sensitivityMultiplier: CGFloat = 1.0 {
+        didSet { recognizer = makeRecognizer() }
+    }
+
+    private let allowedGestureNames: Set<String> = [
+        "UpRight", "UpLeft", "DownRight", "DownLeft",
+        "O", "U", "S", "OO", "DownRightDownRight",
+        "Right", "Left"
+    ]
+    private let livePreviewScoreThreshold: CGFloat = 0.52
+    private let triggerDominanceRatio: CGFloat = 1.65
+    private let triggerWindowMs: TimeInterval = 90
+    private let seedHistoryWindowMs: TimeInterval = 240
+    private let triggerHorizontalDelta: CGFloat = 4.5
+    private let baseMinPathLength: CGFloat = 90
+    private let baseMatchScoreThreshold: CGFloat = 0.68
+    private let upStrokeDominanceRatio: CGFloat = 2.0
+
+    private struct DeltaSample {
+        let dx: CGFloat
+        let dy: CGFloat
+        let timestamp: TimeInterval
+    }
+
+    private enum State {
+        case idle
+        case capturing
+    }
+
+    private var state: State = .idle
+    private var recentSamples: [DeltaSample] = []
+    private var capturePoints: [CGPoint] = []
+    private var rightDragLastPoint: NSPoint?
+    private var lastResultName: String?
+    private var recognizer = GestureRecognizer(matchScoreThreshold: 0.68, minPathLength: 90, dominanceRatio: 2.0)
+
+    private let titleLabel = NSTextField(labelWithString: "ジェスチャーテスト")
+    private let detailLabel = NSTextField(wrappingLabelWithString: "未入力")
+    private let canvasLayer = CAShapeLayer()
+    private let pathLayer = CAShapeLayer()
+    private let borderLayer = CALayer()
+    private let fillLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        recognizer = makeRecognizer()
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        recognizer = makeRecognizer()
+        commonInit()
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        fillLayer.frame = bounds
+        borderLayer.frame = bounds
+        pathLayer.frame = bounds
+        canvasLayer.frame = bounds
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let xSign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        let ySign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+        let dx = event.scrollingDeltaX * xSign
+        let dy = event.scrollingDeltaY * ySign
+        handleInput(dx: dx, dy: dy, timestamp: event.timestamp, anchorInView: convert(event.locationInWindow, from: nil), shouldCommit: shouldCommitImmediately(for: event))
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        rightDragLastPoint = convert(event.locationInWindow, from: nil)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        let current = convert(event.locationInWindow, from: nil)
+        guard let last = rightDragLastPoint else {
+            rightDragLastPoint = current
+            return
+        }
+        rightDragLastPoint = current
+        handleInput(dx: current.x - last.x, dy: current.y - last.y, timestamp: event.timestamp, anchorInView: current, shouldCommit: false)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        rightDragLastPoint = nil
+        if state == .capturing {
+            commitCapture()
+        }
+    }
+
+    private func commonInit() {
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+        layer?.cornerRadius = 14
+        layer?.masksToBounds = false
+
+        fillLayer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+        fillLayer.cornerRadius = 14
+        borderLayer.borderWidth = 1
+        borderLayer.cornerRadius = 14
+        borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.9).cgColor
+        pathLayer.strokeColor = NSColor.systemBlue.withAlphaComponent(0.72).cgColor
+        pathLayer.fillColor = NSColor.clear.cgColor
+        pathLayer.lineWidth = 2.5
+        pathLayer.lineCap = .round
+        pathLayer.lineJoin = .round
+
+        layer?.addSublayer(fillLayer)
+        layer?.addSublayer(borderLayer)
+        layer?.addSublayer(pathLayer)
+        layer?.addSublayer(canvasLayer)
+
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 3
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(titleLabel)
+        addSubview(detailLabel)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 210),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            detailLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            detailLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            detailLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
+        ])
+
+        detailLabel.stringValue = "ここで入力したジェスチャーは動作しません。判定結果だけ表示します。"
+    }
+
+    private func handleInput(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval, anchorInView: CGPoint, shouldCommit: Bool) {
+        switch state {
+        case .idle:
+            trackRecent(dx: dx, dy: dy, timestamp: timestamp)
+            if shouldStartCapture() {
+                startCapture(at: anchorInView, withSeed: recentSamples)
+                if shouldCommit {
+                    commitCapture()
+                }
+            }
+        case .capturing:
+            appendCaptureDelta(dx: dx, dy: dy)
+            updateLiveCandidate()
+            if shouldCommit {
+                commitCapture()
+            }
+        }
+    }
+
+    private func trackRecent(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval) {
+        recentSamples.append(DeltaSample(dx: dx, dy: dy, timestamp: timestamp))
+        let threshold = timestamp - (seedHistoryWindowMs / 1000)
+        recentSamples.removeAll { $0.timestamp < threshold }
+    }
+
+    private func shouldStartCapture() -> Bool {
+        guard let latestTimestamp = recentSamples.last?.timestamp else { return false }
+        let triggerThreshold = latestTimestamp - (triggerWindowMs / 1000)
+        let triggerSamples = recentSamples.filter { $0.timestamp >= triggerThreshold }
+        guard !triggerSamples.isEmpty else { return false }
+
+        let requiredHorizontal = triggerHorizontalDelta / max(0.75, sensitivityMultiplier)
+        if triggerSamples.contains(where: { abs($0.dx) > abs($0.dy) * triggerDominanceRatio && abs($0.dx) > requiredHorizontal }) {
+            return true
+        }
+
+        let lastSamples = triggerSamples.suffix(4)
+        let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }
+        let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
+        return abs(sumX) > abs(sumY) * triggerDominanceRatio && abs(sumX) > requiredHorizontal
+    }
+
+    private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
+        state = .capturing
+        capturePoints = [point]
+        recentSamples.removeAll()
+        for sample in seed {
+            appendCaptureDelta(dx: sample.dx, dy: sample.dy)
+        }
+        updateLiveCandidate()
+    }
+
+    private func appendCaptureDelta(dx: CGFloat, dy: CGFloat) {
+        guard let last = capturePoints.last else { return }
+        capturePoints.append(CGPoint(x: last.x + dx, y: last.y + dy))
+        redrawPath()
+    }
+
+    private func redrawPath() {
+        guard capturePoints.count >= 2 else {
+            pathLayer.path = nil
+            return
+        }
+        let path = CGMutablePath()
+        path.move(to: capturePoints[0])
+        for point in capturePoints.dropFirst() {
+            path.addLine(to: point)
+        }
+        pathLayer.path = path
+    }
+
+    private func updateLiveCandidate() {
+        if let best = recognizer.bestPassingMatch(points: capturePoints, minimumScore: livePreviewScoreThreshold, allowedNames: allowedGestureNames) {
+            lastResultName = best.name
+            detailLabel.stringValue = "候補: \(displayName(for: best.name))\nscore: \(String(format: "%.2f", best.score))"
+            detailLabel.textColor = .secondaryLabelColor
+            return
+        }
+
+        if let best = recognizer.bestMatch(points: capturePoints, allowedNames: allowedGestureNames) {
+            lastResultName = best.name
+            detailLabel.stringValue = "候補: \(displayName(for: best.name))\nscore: \(String(format: "%.2f", best.score))\nまだ確定条件に届いていません。"
+            detailLabel.textColor = .secondaryLabelColor
+        } else {
+            detailLabel.stringValue = "判定中..."
+            detailLabel.textColor = .secondaryLabelColor
+        }
+    }
+
+    private func commitCapture() {
+        defer { resetCapture() }
+
+        guard !capturePoints.isEmpty else { return }
+
+        let result = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
+            ?? recognizer.bestPassingMatch(
+                points: capturePoints,
+                minimumScore: max(0.58, baseMatchScoreThreshold - 0.16),
+                allowedNames: allowedGestureNames
+            )
+
+        if let result {
+            detailLabel.stringValue = "確定: \(displayName(for: result.name))\nscore: \(String(format: "%.2f", result.score))"
+            detailLabel.textColor = .labelColor
+            lastResultName = result.name
+        } else if isLikelyDoubleLoop(capturePoints) {
+            detailLabel.stringValue = "確定: \(displayName(for: "OO"))\nscore: 0.30"
+            detailLabel.textColor = .labelColor
+            lastResultName = "OO"
+        } else {
+            detailLabel.stringValue = "不成立\n認識できる形から外れています。"
+            detailLabel.textColor = .systemRed
+            lastResultName = nil
+        }
+    }
+
+    private func resetCapture() {
+        state = .idle
+        recentSamples.removeAll()
+        capturePoints.removeAll()
+        rightDragLastPoint = nil
+        pathLayer.path = nil
+    }
+
+    private func shouldCommitImmediately(for event: NSEvent) -> Bool {
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            return true
+        }
+        if event.phase == [] && event.momentumPhase.contains(.began) {
+            return true
+        }
+        return false
+    }
+
+    private func makeRecognizer() -> GestureRecognizer {
+        GestureRecognizer(
+            matchScoreThreshold: baseMatchScoreThreshold,
+            minPathLength: baseMinPathLength,
+            dominanceRatio: upStrokeDominanceRatio
+        )
+    }
+
+    private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {
+        guard points.count >= 16 else { return false }
+        var minX = points[0].x
+        var maxX = points[0].x
+        var minY = points[0].y
+        var maxY = points[0].y
+        for point in points {
+            minX = min(minX, point.x)
+            maxX = max(maxX, point.x)
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width > 24, height > 24 else { return false }
+        let diagonal = hypot(width, height)
+        guard diagonal > 1 else { return false }
+        let closeRatio = hypot(points[0].x - points[points.count - 1].x, points[0].y - points[points.count - 1].y) / diagonal
+        guard closeRatio <= 0.68 else { return false }
+        let a = max(width * 0.5, 1)
+        let b = max(height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return false }
+        return pathLength(points) / ellipseCircumference >= 1.22
+    }
+
+    private func pathLength(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+        var total: CGFloat = 0
+        for index in 1..<points.count {
+            total += hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y)
+        }
+        return total
+    }
+
+    private func displayName(for gesture: String) -> String {
+        switch gesture {
+        case "Left": return "← タブ切替"
+        case "Right": return "→ タブ切替"
+        case "DownRight": return "↓→ タブを閉じる"
+        case "DownRightDownRight": return "↓→↓→ 全タブを閉じる"
+        case "O": return "O リロード"
+        case "OO": return "OO 全タブ再読み込み"
+        case "U": return "U 閉じたタブを復元"
+        case "UpRight": return "↑→ 戻る"
+        case "UpLeft": return "↑← 進む"
+        case "DownLeft": return "↓← 新規タブ"
+        case "S": return "S 検索"
+        default: return gesture
+        }
     }
 }

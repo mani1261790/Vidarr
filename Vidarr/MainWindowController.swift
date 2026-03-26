@@ -1494,101 +1494,11 @@ final class MainWindowController: NSWindowController {
 
     private func completeNewTabTransition(_ state: InteractiveTabSwitchState, emphasizeBirth: Bool) {
         interactiveTabSwitchState = nil
-        let width = webContainer.bounds.width
-        guard width > 1 else {
-            tabManager.selectTab(index: state.targetIndex)
-            return
-        }
-
-        let fullTravel = width + UI.tabSwitchGap + UI.newTabTransitionExtraTravel
-        let fromMidX = -width * (emphasizeBirth ? 0.44 : 0.36)
-        let fromFinalX = -(width + UI.tabSwitchGap)
-        let fromOvershootX = fromFinalX - max(16, min(34, width * 0.03))
-        let toMidX = width * (emphasizeBirth ? 0.18 : 0.12)
-        let toOvershootX = -max(18, min(36, width * 0.03))
-
-        let dimView = NSView(frame: webContainer.bounds)
-        dimView.wantsLayer = true
-        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
-        dimView.alphaValue = 0
-        webContainer.addSubview(dimView, positioned: .above, relativeTo: state.fromWebView)
-
-        let gapView = makeTransitionGapView(height: webContainer.bounds.height)
-        webContainer.addSubview(gapView, positioned: .above, relativeTo: dimView)
-
-        func gapOriginX(fromX: CGFloat, toX: CGFloat) -> CGFloat {
-            let fromTrailing = fromX + width
-            let toLeading = toX
-            return pixelAligned(((fromTrailing + toLeading) * 0.5) - (UI.newTabTransitionGapWidth * 0.5))
-        }
-
-        gapView.frame = CGRect(
-            x: gapOriginX(fromX: 0, toX: fullTravel),
-            y: 0,
-            width: UI.newTabTransitionGapWidth,
-            height: webContainer.bounds.height
+        animateStyledTabCommitTransition(
+            state,
+            emphasizeBirth: emphasizeBirth,
+            startFromCurrentFrames: false
         )
-
-        state.fromWebView.wantsLayer = true
-        state.toWebView.wantsLayer = true
-        state.fromWebView.layer?.masksToBounds = true
-        state.toWebView.layer?.masksToBounds = true
-        state.fromWebView.layer?.cornerRadius = 18
-        state.toWebView.layer?.cornerRadius = 18
-        state.fromWebView.layer?.borderWidth = 0
-        state.toWebView.layer?.borderWidth = 1.2
-        state.toWebView.layer?.borderColor = NSColor.white.withAlphaComponent(0.26).cgColor
-        state.toWebView.layer?.shadowOpacity = 0.22
-        state.toWebView.layer?.shadowRadius = 18
-        state.toWebView.layer?.shadowOffset = CGSize(width: 0, height: 0)
-        state.toWebView.alphaValue = 0.9
-        state.toWebView.layer?.transform = CATransform3DMakeScale(0.94, 0.94, 1)
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = emphasizeBirth ? 0.20 : 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            dimView.animator().alphaValue = 1.0
-            state.fromWebView.animator().frame.origin.x = pixelAligned(fromMidX)
-            state.fromWebView.animator().alphaValue = 0.78
-            state.toWebView.animator().frame.origin.x = pixelAligned(toMidX)
-            state.toWebView.animator().alphaValue = 1.0
-            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(0.985, 0.985, 1)
-            gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.24
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
-                state.fromWebView.animator().alphaValue = 0.64
-                state.toWebView.animator().frame.origin.x = self.pixelAligned(toOvershootX)
-                state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.018, 1.018, 1)
-                state.toWebView.animator().layer?.shadowOpacity = 0.32
-                gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
-            } completionHandler: {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.18
-                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                    dimView.animator().alphaValue = 0
-                    state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
-                    state.fromWebView.animator().alphaValue = 1.0
-                    state.toWebView.animator().frame.origin.x = 0
-                    state.toWebView.animator().layer?.transform = CATransform3DIdentity
-                    state.toWebView.animator().layer?.shadowOpacity = 0.12
-                    gapView.animator().frame.origin.x = gapOriginX(fromX: fromFinalX, toX: 0)
-                    gapView.animator().alphaValue = 0.18
-                } completionHandler: {
-                    dimView.removeFromSuperview()
-                    gapView.removeFromSuperview()
-                    state.fromWebView.layer?.cornerRadius = 0
-                    state.fromWebView.layer?.borderWidth = 0
-                    state.toWebView.layer?.cornerRadius = 0
-                    state.toWebView.layer?.borderWidth = 0
-                    state.toWebView.layer?.shadowOpacity = 0
-                    self.tabManager.selectTab(index: state.targetIndex)
-                }
-            }
-        }
     }
 
     private func beginInteractiveTabSwitch(direction: ActionCenter.GestureTabSwitchDirection) -> Bool {
@@ -1665,24 +1575,11 @@ final class MainWindowController: NSWindowController {
 
     private func completeProgrammaticTabSwitch(_ state: InteractiveTabSwitchState) {
         interactiveTabSwitchState = nil
-        let width = webContainer.bounds.width
-        guard width > 1 else {
-            tabManager.selectTab(index: state.targetIndex)
-            return
-        }
-
-        let fromTargetX = state.direction == .left
-            ? -(width + UI.tabSwitchGap)
-            : (width + UI.tabSwitchGap)
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
-            state.toWebView.animator().frame.origin.x = 0
-        } completionHandler: { [weak self] in
-            self?.tabManager.selectTab(index: state.targetIndex)
-        }
+        animateStyledTabCommitTransition(
+            state,
+            emphasizeBirth: false,
+            startFromCurrentFrames: false
+        )
     }
 
     private func clearLayoutConstraints(for webView: WKWebView) {
@@ -1756,21 +1653,24 @@ final class MainWindowController: NSWindowController {
         let currentFromX = state.fromWebView.frame.origin.x
         let remaining = abs(fromTargetX - currentFromX)
         let normalized = min(1.0, max(0.0, remaining / max(width + UI.tabSwitchGap, 1)))
-        let minDuration: TimeInterval = shouldCommit ? 0.22 : 0.16
-        let maxDuration: TimeInterval = shouldCommit ? 0.34 : 0.24
+        let minDuration: TimeInterval = shouldCommit ? 0.16 : 0.16
+        let maxDuration: TimeInterval = shouldCommit ? 0.24 : 0.24
         let duration = minDuration + ((maxDuration - minDuration) * TimeInterval(normalized))
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: shouldCommit ? .easeOut : .easeInEaseOut)
-            state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
-            state.toWebView.animator().frame.origin.x = pixelAligned(toTargetX)
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            if shouldCommit {
-                self.tabManager.selectTab(index: state.targetIndex)
-            } else {
-                self.attachWebView(state.fromWebView)
+        if shouldCommit {
+            animateStyledTabCommitTransition(
+                state,
+                emphasizeBirth: false,
+                startFromCurrentFrames: true
+            )
+        } else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                state.fromWebView.animator().frame.origin.x = pixelAligned(fromTargetX)
+                state.toWebView.animator().frame.origin.x = pixelAligned(toTargetX)
+            } completionHandler: { [weak self] in
+                self?.attachWebView(state.fromWebView)
             }
         }
     }
@@ -1793,6 +1693,116 @@ final class MainWindowController: NSWindowController {
         view.layer?.shadowOffset = CGSize(width: 0, height: 0)
         view.alphaValue = 0.9
         return view
+    }
+
+    private func animateStyledTabCommitTransition(
+        _ state: InteractiveTabSwitchState,
+        emphasizeBirth: Bool,
+        startFromCurrentFrames: Bool
+    ) {
+        let width = webContainer.bounds.width
+        guard width > 1 else {
+            tabManager.selectTab(index: state.targetIndex)
+            return
+        }
+
+        let directionSign: CGFloat = state.direction == .left ? -1 : 1
+        let offscreenTravel = width + UI.tabSwitchGap
+        let entryStartX = startFromCurrentFrames
+            ? state.toWebView.frame.origin.x
+            : -directionSign * (offscreenTravel + (emphasizeBirth ? UI.newTabTransitionExtraTravel : 0))
+        let fromStartX = startFromCurrentFrames ? state.fromWebView.frame.origin.x : 0
+        let fromMidX = directionSign * width * (emphasizeBirth ? 0.44 : 0.34)
+        let fromFinalX = directionSign * offscreenTravel
+        let fromOvershootX = fromFinalX + (directionSign * max(16, min(34, width * 0.03)))
+        let toMidX = -directionSign * width * (emphasizeBirth ? 0.18 : 0.14)
+        let toOvershootX = directionSign * max(16, min(32, width * 0.028))
+
+        state.fromWebView.frame.origin.x = pixelAligned(fromStartX)
+        state.toWebView.frame.origin.x = pixelAligned(entryStartX)
+
+        let dimView = NSView(frame: webContainer.bounds)
+        dimView.wantsLayer = true
+        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(emphasizeBirth ? 0.2 : 0.16).cgColor
+        dimView.alphaValue = 0
+        webContainer.addSubview(dimView, positioned: .above, relativeTo: state.fromWebView)
+
+        let gapView = makeTransitionGapView(height: webContainer.bounds.height)
+        webContainer.addSubview(gapView, positioned: .above, relativeTo: dimView)
+
+        func gapOriginX(fromX: CGFloat, toX: CGFloat) -> CGFloat {
+            let fromLeading = min(fromX, toX)
+            let fromTrailing = max(fromX, toX)
+            return pixelAligned((((fromLeading + width) + fromTrailing) * 0.5) - (UI.newTabTransitionGapWidth * 0.5))
+        }
+
+        gapView.frame = CGRect(
+            x: gapOriginX(fromX: fromStartX, toX: entryStartX),
+            y: 0,
+            width: UI.newTabTransitionGapWidth,
+            height: webContainer.bounds.height
+        )
+
+        state.fromWebView.wantsLayer = true
+        state.toWebView.wantsLayer = true
+        state.fromWebView.layer?.masksToBounds = true
+        state.toWebView.layer?.masksToBounds = true
+        state.fromWebView.layer?.cornerRadius = 18
+        state.toWebView.layer?.cornerRadius = 18
+        state.fromWebView.layer?.borderWidth = 0
+        state.toWebView.layer?.borderWidth = 1.2
+        state.toWebView.layer?.borderColor = NSColor.white.withAlphaComponent(0.26).cgColor
+        state.toWebView.layer?.shadowOpacity = 0.22
+        state.toWebView.layer?.shadowRadius = 18
+        state.toWebView.layer?.shadowOffset = CGSize(width: 0, height: 0)
+        state.toWebView.alphaValue = 0.9
+        state.toWebView.layer?.transform = CATransform3DMakeScale(emphasizeBirth ? 0.94 : 0.955, emphasizeBirth ? 0.94 : 0.955, 1)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = emphasizeBirth ? 0.14 : 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            dimView.animator().alphaValue = 1.0
+            state.fromWebView.animator().frame.origin.x = pixelAligned(fromMidX)
+            state.fromWebView.animator().alphaValue = 0.76
+            state.toWebView.animator().frame.origin.x = pixelAligned(toMidX)
+            state.toWebView.animator().alphaValue = 1.0
+            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(0.988, 0.988, 1)
+            gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = emphasizeBirth ? 0.18 : 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
+                state.fromWebView.animator().alphaValue = 0.62
+                state.toWebView.animator().frame.origin.x = self.pixelAligned(toOvershootX)
+                state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.018, 1.018, 1)
+                state.toWebView.animator().layer?.shadowOpacity = 0.32
+                gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
+            } completionHandler: {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = emphasizeBirth ? 0.13 : 0.12
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    dimView.animator().alphaValue = 0
+                    state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
+                    state.fromWebView.animator().alphaValue = 1.0
+                    state.toWebView.animator().frame.origin.x = 0
+                    state.toWebView.animator().layer?.transform = CATransform3DIdentity
+                    state.toWebView.animator().layer?.shadowOpacity = 0.12
+                    gapView.animator().frame.origin.x = gapOriginX(fromX: fromFinalX, toX: 0)
+                    gapView.animator().alphaValue = 0.16
+                } completionHandler: {
+                    dimView.removeFromSuperview()
+                    gapView.removeFromSuperview()
+                    state.fromWebView.layer?.cornerRadius = 0
+                    state.fromWebView.layer?.borderWidth = 0
+                    state.toWebView.layer?.cornerRadius = 0
+                    state.toWebView.layer?.borderWidth = 0
+                    state.toWebView.layer?.shadowOpacity = 0
+                    self.tabManager.selectTab(index: state.targetIndex)
+                }
+            }
+        }
     }
 
     private func captureThumbnail(for webView: WKWebView) {

@@ -1722,12 +1722,12 @@ final class MainWindowController: NSWindowController {
             ? state.toWebView.frame.origin.x
             : -directionSign * (offscreenTravel + (emphasizeBirth ? UI.newTabTransitionExtraTravel : 0))
         let fromStartX = startFromCurrentFrames ? state.fromWebView.frame.origin.x : 0
-        let fromMidX = directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.38 : 0.44) : (isChainedTransition ? 0.28 : 0.34))
+        let fromMidX = directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.34 : 0.40) : (isChainedTransition ? 0.24 : 0.30))
         let fromFinalX = directionSign * offscreenTravel
-        let fromOvershootMagnitude = max(isChainedTransition ? 10 : 16, min(isChainedTransition ? 24 : 34, width * (isChainedTransition ? 0.022 : 0.03)))
+        let fromOvershootMagnitude = max(isChainedTransition ? 4 : 8, min(isChainedTransition ? 12 : 18, width * (isChainedTransition ? 0.010 : 0.016)))
         let fromOvershootX = fromFinalX + (directionSign * fromOvershootMagnitude)
-        let toMidX = -directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.13 : 0.18) : (isChainedTransition ? 0.10 : 0.14))
-        let toOvershootMagnitude = max(isChainedTransition ? 10 : 16, min(isChainedTransition ? 22 : 32, width * (isChainedTransition ? 0.02 : 0.028)))
+        let toMidX = -directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.10 : 0.14) : (isChainedTransition ? 0.08 : 0.11))
+        let toOvershootMagnitude = max(isChainedTransition ? 4 : 8, min(isChainedTransition ? 10 : 16, width * (isChainedTransition ? 0.009 : 0.014)))
         let toOvershootX = directionSign * toOvershootMagnitude
 
         state.fromWebView.frame.origin.x = pixelAligned(fromStartX)
@@ -1773,10 +1773,7 @@ final class MainWindowController: NSWindowController {
         state.toWebView.layer?.shadowRadius = 18
         state.toWebView.layer?.shadowOffset = CGSize(width: 0, height: 0)
         state.toWebView.alphaValue = 0.9
-        let initialScale: CGFloat = emphasizeBirth
-            ? (isChainedTransition ? 0.965 : 0.94)
-            : (isChainedTransition ? 0.975 : 0.955)
-        state.toWebView.layer?.transform = CATransform3DMakeScale(initialScale, initialScale, 1)
+        state.toWebView.layer?.transform = CATransform3DIdentity
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = emphasizeBirth
@@ -1788,7 +1785,6 @@ final class MainWindowController: NSWindowController {
             state.fromWebView.animator().alphaValue = isChainedTransition ? 0.82 : 0.76
             state.toWebView.animator().frame.origin.x = pixelAligned(toMidX)
             state.toWebView.animator().alphaValue = 1.0
-            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(isChainedTransition ? 0.995 : 0.988, isChainedTransition ? 0.995 : 0.988, 1)
             gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
         } completionHandler: { [weak self] in
             guard let self else { return }
@@ -1804,7 +1800,6 @@ final class MainWindowController: NSWindowController {
                 state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
                 state.fromWebView.animator().alphaValue = isChainedTransition ? 0.72 : 0.62
                 state.toWebView.animator().frame.origin.x = self.pixelAligned(toOvershootX)
-                state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.018, 1.018, 1)
                 state.toWebView.animator().layer?.shadowOpacity = isChainedTransition ? 0.24 : 0.32
                 gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
             } completionHandler: {
@@ -1821,7 +1816,6 @@ final class MainWindowController: NSWindowController {
                     state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
                     state.fromWebView.animator().alphaValue = 1.0
                     state.toWebView.animator().frame.origin.x = 0
-                    state.toWebView.animator().layer?.transform = CATransform3DIdentity
                     state.toWebView.animator().layer?.shadowOpacity = 0.12
                     gapView.animator().frame.origin.x = gapOriginX(fromX: fromFinalX, toX: 0)
                     gapView.animator().alphaValue = 0.16

@@ -8,9 +8,10 @@ final class GestureHUDView: NSView {
     }
 
     private let actionIconView = NSImageView()
-    private let cardLayer = CALayer()
-    private let borderLayer = CALayer()
-    private let iconCapsuleLayer = CALayer()
+    private let contentHostView = NSView()
+    private var glassBackgroundView: NSView?
+    private let fallbackCardLayer = CALayer()
+    private let fallbackBorderLayer = CALayer()
     private var hideWorkItem: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
@@ -55,18 +56,14 @@ final class GestureHUDView: NSView {
     override func layout() {
         super.layout()
 
-        cardLayer.frame = bounds
-        borderLayer.frame = bounds
+        glassBackgroundView?.frame = bounds
+        fallbackCardLayer.frame = bounds
+        fallbackBorderLayer.frame = bounds
 
-        let inset = bounds.width * 0.20
-        let iconCapsuleRect = bounds.insetBy(dx: inset, dy: inset)
-        iconCapsuleLayer.frame = iconCapsuleRect
-        iconCapsuleLayer.cornerRadius = iconCapsuleRect.height * 0.5
-
-        let iconSide = iconCapsuleRect.width * 0.66
+        let iconSide = bounds.width * 0.38
         actionIconView.frame = CGRect(
-            x: iconCapsuleRect.midX - iconSide * 0.5,
-            y: iconCapsuleRect.midY - iconSide * 0.5,
+            x: bounds.midX - iconSide * 0.5,
+            y: bounds.midY - iconSide * 0.5,
             width: iconSide,
             height: iconSide
         )
@@ -78,27 +75,42 @@ final class GestureHUDView: NSView {
         isHidden = true
 
         layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.addSublayer(cardLayer)
-        layer?.addSublayer(borderLayer)
-        layer?.addSublayer(iconCapsuleLayer)
+        contentHostView.translatesAutoresizingMaskIntoConstraints = false
 
-        cardLayer.cornerRadius = 34
-        cardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
-        cardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
-        cardLayer.shadowOpacity = 0.34
-        cardLayer.shadowRadius = 24
-        cardLayer.shadowOffset = CGSize(width: 0, height: -2)
+        if #available(macOS 26.0, *) {
+            let glassView = NSGlassEffectView()
+            glassView.translatesAutoresizingMaskIntoConstraints = true
+            glassView.style = .regular
+            glassView.cornerRadius = 34
+            glassView.contentView = contentHostView
+            glassBackgroundView = glassView
+            addSubview(glassView)
+        } else {
+            layer?.addSublayer(fallbackCardLayer)
+            layer?.addSublayer(fallbackBorderLayer)
 
-        borderLayer.cornerRadius = 34
-        borderLayer.borderWidth = 1
-        borderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
+            fallbackCardLayer.cornerRadius = 34
+            fallbackCardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.80).cgColor
+            fallbackCardLayer.shadowColor = NSColor.black.withAlphaComponent(0.7).cgColor
+            fallbackCardLayer.shadowOpacity = 0.34
+            fallbackCardLayer.shadowRadius = 24
+            fallbackCardLayer.shadowOffset = CGSize(width: 0, height: -2)
 
-        iconCapsuleLayer.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
-        iconCapsuleLayer.borderWidth = 1
-        iconCapsuleLayer.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
+            fallbackBorderLayer.cornerRadius = 34
+            fallbackBorderLayer.borderWidth = 1
+            fallbackBorderLayer.borderColor = NSColor.white.withAlphaComponent(0.28).cgColor
+
+            addSubview(contentHostView)
+            NSLayoutConstraint.activate([
+                contentHostView.topAnchor.constraint(equalTo: topAnchor),
+                contentHostView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                contentHostView.trailingAnchor.constraint(equalTo: trailingAnchor),
+                contentHostView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+        }
 
         actionIconView.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(actionIconView)
+        contentHostView.addSubview(actionIconView)
     }
 
     private func apply(name: String, committed: Bool) {
@@ -109,8 +121,8 @@ final class GestureHUDView: NSView {
         actionIconView.image = icon?.withSymbolConfiguration(iconConfig)
         actionIconView.contentTintColor = NSColor.labelColor.withAlphaComponent(committed ? 1.0 : 0.86)
 
-        borderLayer.borderColor = NSColor.white.withAlphaComponent(committed ? 0.40 : 0.28).cgColor
-        cardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(committed ? 0.86 : 0.80).cgColor
+        fallbackBorderLayer.borderColor = NSColor.white.withAlphaComponent(committed ? 0.40 : 0.28).cgColor
+        fallbackCardLayer.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(committed ? 0.86 : 0.80).cgColor
 
         if committed {
             animateCommitPop()

@@ -2789,9 +2789,7 @@ extension MainWindowController: WKScriptMessageHandler {
 
 private final class LiquidGlassToolbarView: NSView {
     let contentLayoutView = NonDraggableView()
-    private let separatorLayer = CALayer()
-    private let topShineLayer = CAGradientLayer()
-    private let bottomDepthLayer = CAGradientLayer()
+    private var backgroundView: NSView?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -2805,11 +2803,6 @@ private final class LiquidGlassToolbarView: NSView {
 
     override func layout() {
         super.layout()
-
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
-        separatorLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / scale)
-        topShineLayer.frame = CGRect(x: 0, y: bounds.height * 0.46, width: bounds.width, height: bounds.height * 0.54)
-        bottomDepthLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height * 0.42)
     }
 
     override var isOpaque: Bool { false }
@@ -2818,50 +2811,51 @@ private final class LiquidGlassToolbarView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.addSublayer(separatorLayer)
-        layer?.addSublayer(bottomDepthLayer)
-        layer?.addSublayer(topShineLayer)
-        separatorLayer.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
-        topShineLayer.colors = [
-            NSColor.white.withAlphaComponent(0.14).cgColor,
-            NSColor.white.withAlphaComponent(0.02).cgColor,
-            NSColor.clear.cgColor
-        ]
-        topShineLayer.startPoint = CGPoint(x: 0.5, y: 1.0)
-        topShineLayer.endPoint = CGPoint(x: 0.5, y: 0.0)
-        bottomDepthLayer.colors = [
-            NSColor.black.withAlphaComponent(0.03).cgColor,
-            NSColor.clear.cgColor
-        ]
-        bottomDepthLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
-        bottomDepthLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
-
         contentLayoutView.translatesAutoresizingMaskIntoConstraints = false
 
-        let visualEffectView = NonDraggableVisualEffectView()
-        visualEffectView.translatesAutoresizingMaskIntoConstraints = false
-        visualEffectView.material = .underWindowBackground
-        visualEffectView.state = .followsWindowActiveState
-        visualEffectView.blendingMode = .behindWindow
-        visualEffectView.isEmphasized = false
-        visualEffectView.addSubview(contentLayoutView)
-        addSubview(visualEffectView)
+        let backgroundView: NSView
+        if #available(macOS 26.0, *) {
+            let glassView = NonDraggableGlassEffectView()
+            glassView.translatesAutoresizingMaskIntoConstraints = false
+            glassView.style = .regular
+            glassView.cornerRadius = 18
+            glassView.contentView = contentLayoutView
+            backgroundView = glassView
+        } else {
+            let visualEffectView = NonDraggableVisualEffectView()
+            visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+            visualEffectView.material = .underWindowBackground
+            visualEffectView.state = .followsWindowActiveState
+            visualEffectView.blendingMode = .behindWindow
+            visualEffectView.isEmphasized = false
+            visualEffectView.addSubview(contentLayoutView)
+            NSLayoutConstraint.activate([
+                contentLayoutView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+                contentLayoutView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
+                contentLayoutView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
+                contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
+            ])
+            backgroundView = visualEffectView
+        }
+
+        self.backgroundView = backgroundView
+        addSubview(backgroundView)
 
         NSLayoutConstraint.activate([
-            visualEffectView.topAnchor.constraint(equalTo: topAnchor),
-            visualEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            visualEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            visualEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            contentLayoutView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
-            contentLayoutView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
-            contentLayoutView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
-            contentLayoutView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor)
+            backgroundView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 }
 
 private final class NonDraggableVisualEffectView: NSVisualEffectView {
+    override var mouseDownCanMoveWindow: Bool { false }
+}
+
+@available(macOS 26.0, *)
+private final class NonDraggableGlassEffectView: NSGlassEffectView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 

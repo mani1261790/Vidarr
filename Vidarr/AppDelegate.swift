@@ -596,6 +596,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
+    private weak var rootLayoutView: NSView?
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
@@ -659,7 +660,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     private func setupUI() {
-        guard let contentView = window?.contentView else { return }
+        guard let window else { return }
+        let contentView = makeRootContentView(for: window)
         let titleLabel = NSTextField(labelWithString: "Preferences")
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 24, weight: .semibold)
@@ -672,9 +674,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let tabView = NSTabView()
         tabView.translatesAutoresizingMaskIntoConstraints = false
         tabView.tabViewType = .topTabsBezelBorder
+        tabView.drawsBackground = false
+        let tabHostView = makeTabHostView(content: tabView)
         contentView.addSubview(titleLabel)
         contentView.addSubview(summaryLabel)
-        contentView.addSubview(tabView)
+        contentView.addSubview(tabHostView)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
@@ -684,10 +688,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             summaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             summaryLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
 
-            tabView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 14),
-            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
+            tabHostView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 14),
+            tabHostView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            tabHostView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            tabHostView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
         ])
 
         let homeLabel = makeFieldLabel("スタートページ URL")
@@ -772,6 +776,21 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openSiteControlsButton.action = #selector(openSiteControls)
         chooseDownloadFolderButton.action = #selector(chooseDownloadFolder)
         clearDownloadFolderButton.action = #selector(clearDownloadFolder)
+
+        if #available(macOS 26.0, *) {
+            [
+                openDownloadsButton,
+                openHistoryButton,
+                openBookmarksButton,
+                openSiteControlsButton,
+                chooseDownloadFolderButton,
+                clearDownloadFolderButton,
+                clearDataButton,
+                resetButton
+            ].forEach {
+                $0.bezelStyle = .glass
+            }
+        }
 
         let generalGrid = makeTwoColumnGrid()
         let generalSection = makeSectionContentStack()
@@ -1039,6 +1058,63 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         clearDownloadFolderButton.isEnabled = (downloadFolderPath != nil)
     }
 
+    private func makeRootContentView(for window: NSWindow) -> NSView {
+        if #available(macOS 26.0, *) {
+            let container = NSGlassEffectContainerView()
+            container.translatesAutoresizingMaskIntoConstraints = false
+            let layoutView = NSView()
+            layoutView.translatesAutoresizingMaskIntoConstraints = false
+            container.contentView = layoutView
+            container.spacing = 12
+            window.contentView = container
+            rootLayoutView = layoutView
+            return layoutView
+        }
+
+        guard let contentView = window.contentView else {
+            let fallback = NSView()
+            fallback.translatesAutoresizingMaskIntoConstraints = false
+            window.contentView = fallback
+            rootLayoutView = fallback
+            return fallback
+        }
+        rootLayoutView = contentView
+        return contentView
+    }
+
+    private func makeTabHostView(content tabView: NSTabView) -> NSView {
+        if #available(macOS 26.0, *) {
+            let glassView = NSGlassEffectView()
+            glassView.translatesAutoresizingMaskIntoConstraints = false
+            glassView.style = .regular
+            glassView.cornerRadius = 24
+
+            let contentView = NSView()
+            contentView.translatesAutoresizingMaskIntoConstraints = false
+            glassView.contentView = contentView
+            contentView.addSubview(tabView)
+
+            NSLayoutConstraint.activate([
+                tabView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
+                tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+                tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+                tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14)
+            ])
+            return glassView
+        }
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(tabView)
+        NSLayoutConstraint.activate([
+            tabView.topAnchor.constraint(equalTo: container.topAnchor),
+            tabView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            tabView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            tabView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
     func controlTextDidEndEditing(_ obj: Notification) {
         guard let field = obj.object as? NSTextField else { return }
         if field == homePageField {
@@ -1236,6 +1312,7 @@ private final class GesturePracticeView: NSView {
     private let pathLayer = CAShapeLayer()
     private let borderLayer = CALayer()
     private let fillLayer = CALayer()
+    private var glassBackgroundView: NSView?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1254,6 +1331,7 @@ private final class GesturePracticeView: NSView {
 
     override func layout() {
         super.layout()
+        glassBackgroundView?.frame = bounds
         fillLayer.frame = bounds
         borderLayer.frame = bounds
         pathLayer.frame = bounds
@@ -1296,19 +1374,32 @@ private final class GesturePracticeView: NSView {
         layer?.cornerRadius = 14
         layer?.masksToBounds = false
 
-        fillLayer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
-        fillLayer.cornerRadius = 14
-        borderLayer.borderWidth = 1
-        borderLayer.cornerRadius = 14
-        borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.9).cgColor
+        if #available(macOS 26.0, *) {
+            let glassView = NSGlassEffectView()
+            glassView.translatesAutoresizingMaskIntoConstraints = true
+            glassView.style = .regular
+            glassView.cornerRadius = 14
+            let glassContent = NSView()
+            glassContent.translatesAutoresizingMaskIntoConstraints = false
+            glassView.contentView = glassContent
+            glassBackgroundView = glassView
+            addSubview(glassView, positioned: .below, relativeTo: nil)
+        } else {
+            fillLayer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+            fillLayer.cornerRadius = 14
+            borderLayer.borderWidth = 1
+            borderLayer.cornerRadius = 14
+            borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.9).cgColor
+            layer?.addSublayer(fillLayer)
+            layer?.addSublayer(borderLayer)
+        }
+
         pathLayer.strokeColor = NSColor.systemBlue.withAlphaComponent(0.72).cgColor
         pathLayer.fillColor = NSColor.clear.cgColor
         pathLayer.lineWidth = 2.5
         pathLayer.lineCap = .round
         pathLayer.lineJoin = .round
 
-        layer?.addSublayer(fillLayer)
-        layer?.addSublayer(borderLayer)
         layer?.addSublayer(pathLayer)
         layer?.addSublayer(canvasLayer)
 

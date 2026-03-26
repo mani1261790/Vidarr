@@ -844,7 +844,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let privacyStack = privacySection
         privacyStack.addArrangedSubview(configureSummaryLabel(privacySummaryLabel))
         privacyStack.setCustomSpacing(6, after: privacySummaryLabel)
-        privacyStack.addArrangedSubview(antiTrackingCheckbox)
+        privacyStack.addArrangedSubview(makeControlRow(for: antiTrackingCheckbox, height: 24))
         privacyStack.addArrangedSubview(contentBlockingCheckbox)
         privacyStack.addArrangedSubview(popupBlockingCheckbox)
         privacyStack.addArrangedSubview(harmfulSiteWarningCheckbox)
@@ -868,7 +868,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         downloadFolderButtons.spacing = 10
         downloadFolderButtons.addArrangedSubview(chooseDownloadFolderButton)
         downloadFolderButtons.addArrangedSubview(clearDownloadFolderButton)
-        dataStack.addArrangedSubview(downloadFolderButtons)
+        dataStack.addArrangedSubview(makeControlRow(for: downloadFolderButtons, height: 28))
         dataStack.addArrangedSubview(clearDataButton)
 
         let resetSection = makeSectionContentStack()
@@ -878,7 +878,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         resetNote.textColor = .secondaryLabelColor
         resetStack.addArrangedSubview(resetNote)
         resetStack.setCustomSpacing(8, after: resetNote)
-        resetStack.addArrangedSubview(resetButton)
+        resetStack.addArrangedSubview(makeControlRow(for: resetButton, height: 28))
 
         NSLayoutConstraint.activate([
             homePageField.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
@@ -997,6 +997,21 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         stack.distribution = .fillEqually
         stack.spacing = 10
         return stack
+    }
+
+    private func makeControlRow(for control: NSView, height: CGFloat) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        control.removeFromSuperview()
+        container.addSubview(control)
+
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: height),
+            control.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            control.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor)
+        ])
+        return container
     }
 
     private func loadValues() {

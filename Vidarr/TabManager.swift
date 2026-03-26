@@ -451,9 +451,15 @@ final class TabManager {
     func reloadAllTabs() {
         performOnMain { [weak self] in
             guard let self else { return }
-            let state = state(for: currentGroup)
-            for tab in state.tabs {
-                tab.webView.reload()
+            for group in BrowserTabGroup.allCases {
+                let state = state(for: group)
+                for tab in state.tabs {
+                    if let url = tab.webView.url ?? tab.lastKnownURL {
+                        BrowserSession.load(url: url, in: tab.webView)
+                    } else {
+                        tab.webView.reload()
+                    }
+                }
             }
         }
     }

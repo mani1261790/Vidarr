@@ -611,6 +611,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let harmfulSiteWarningCheckbox = NSButton(checkboxWithTitle: "有害サイト警告を表示", target: nil, action: nil)
     private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "フットプリント最小化（終了時に履歴/Cookieを残さない）", target: nil, action: nil)
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "Do Not Track / GPC を送信", target: nil, action: nil)
+    private let restoreClosedTabHistoryCheckbox = NSButton(checkboxWithTitle: "閉じたタブを復元したとき、前に見ていたページ履歴も戻す", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let gestureTestView = GesturePracticeView(frame: .zero)
@@ -746,6 +747,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         doNotTrackCheckbox.target = self
         doNotTrackCheckbox.action = #selector(doNotTrackChanged(_:))
 
+        restoreClosedTabHistoryCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        restoreClosedTabHistoryCheckbox.target = self
+        restoreClosedTabHistoryCheckbox.action = #selector(restoreClosedTabHistoryChanged(_:))
+
         clearDataButton.translatesAutoresizingMaskIntoConstraints = false
         clearDataButton.target = self
         clearDataButton.action = #selector(clearBrowsingData)
@@ -784,6 +789,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         contentLanguageRow.addArrangedSubview(contentLanguagePopup)
         generalStack.addArrangedSubview(contentLanguageRow)
         generalStack.addArrangedSubview(updatesCheckbox)
+        generalStack.addArrangedSubview(restoreClosedTabHistoryCheckbox)
         generalStack.addArrangedSubview(generalGrid)
         generalGrid.addArrangedSubview(openDownloadsButton)
         generalGrid.addArrangedSubview(openHistoryButton)
@@ -944,6 +950,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         harmfulSiteWarningCheckbox.state = prefs.harmfulSiteWarningEnabled ? .on : .off
         ephemeralModeCheckbox.state = prefs.ephemeralModeEnabled ? .on : .off
         doNotTrackCheckbox.state = prefs.sendDoNotTrack ? .on : .off
+        restoreClosedTabHistoryCheckbox.state = prefs.restoreClosedTabPageHistory ? .on : .off
 
         let sensitivity = prefs.gestureSensitivity
         if let index = BrowserPreferences.GestureSensitivity.allCases.firstIndex(of: sensitivity) {
@@ -959,7 +966,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             contentLanguagePopup.selectItem(at: 0)
         }
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")"
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nコンテンツ言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureTestView.sensitivityMultiplier = sensitivity.multiplier
@@ -1039,6 +1046,11 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func doNotTrackChanged(_ sender: NSButton) {
         prefs.sendDoNotTrack = (sender.state == .on)
+        loadValues()
+    }
+
+    @objc private func restoreClosedTabHistoryChanged(_ sender: NSButton) {
+        prefs.restoreClosedTabPageHistory = (sender.state == .on)
         loadValues()
     }
 

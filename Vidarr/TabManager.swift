@@ -41,6 +41,43 @@ struct TabSessionSnapshot: Codable {
     let isProtected: Bool
     let isBookmarked: Bool
     let pageZoom: Double
+    let historyURLStrings: [String]
+    let historyIndex: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case urlString
+        case isProtected
+        case isBookmarked
+        case pageZoom
+        case historyURLStrings
+        case historyIndex
+    }
+
+    init(
+        urlString: String?,
+        isProtected: Bool,
+        isBookmarked: Bool,
+        pageZoom: Double,
+        historyURLStrings: [String],
+        historyIndex: Int
+    ) {
+        self.urlString = urlString
+        self.isProtected = isProtected
+        self.isBookmarked = isBookmarked
+        self.pageZoom = pageZoom
+        self.historyURLStrings = historyURLStrings
+        self.historyIndex = historyIndex
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        urlString = try container.decodeIfPresent(String.self, forKey: .urlString)
+        isProtected = try container.decode(Bool.self, forKey: .isProtected)
+        isBookmarked = try container.decode(Bool.self, forKey: .isBookmarked)
+        pageZoom = try container.decode(Double.self, forKey: .pageZoom)
+        historyURLStrings = try container.decodeIfPresent([String].self, forKey: .historyURLStrings) ?? []
+        historyIndex = try container.decodeIfPresent(Int.self, forKey: .historyIndex) ?? -1
+    }
 }
 
 struct TabGroupSessionSnapshot: Codable {
@@ -64,6 +101,9 @@ final class TabManager {
         var isProtected: Bool
         var isBookmarked: Bool
         var pageZoom: Double
+        var historyURLs: [URL]
+        var historyIndex: Int
+        var pendingHistoryIndex: Int?
     }
 
     private struct GroupState {
@@ -77,6 +117,8 @@ final class TabManager {
         let isProtected: Bool
         let isBookmarked: Bool
         let pageZoom: Double
+        let historyURLs: [URL]
+        let historyIndex: Int
     }
 
     private var states: [BrowserTabGroup: GroupState]
@@ -190,19 +232,29 @@ final class TabManager {
         activate: Bool = true,
         isProtected: Bool = false,
         isBookmarked: Bool = false,
-        pageZoom: Double = 1.0
+        pageZoom: Double = 1.0,
+        historyURLs: [URL]? = nil,
+        historyIndex: Int? = nil
     ) -> WKWebView {
         let work = { [weak self] in
             guard let self else { return }
             let targetGroup = group ?? self.currentGroup
             var state = self.state(for: targetGroup)
+            let resolvedHistory = ((historyURLs?.isEmpty == false) ? historyURLs : nil) ?? initialURL.map { [$0] } ?? []
+            let resolvedHistoryIndex = min(
+                max(historyIndex ?? (resolvedHistory.isEmpty ? -1 : resolvedHistory.count - 1), -1),
+                max(resolvedHistory.count - 1, -1)
+            )
             var tab = Tab(
                 webView: webView,
                 lastKnownURL: initialURL,
                 thumbnail: nil,
                 isProtected: isProtected,
                 isBookmarked: isBookmarked,
-                pageZoom: pageZoom
+                pageZoom: pageZoom,
+                historyURLs: resolvedHistory,
+                historyIndex: resolvedHistoryIndex,
+                pendingHistoryIndex: nil
             )
             state.tabs.append(tab)
             let insertedIndex = state.tabs.count - 1
@@ -286,7 +338,9 @@ final class TabManager {
                     url: removed.webView.url ?? removed.lastKnownURL,
                     isProtected: removed.isProtected,
                     isBookmarked: removed.isBookmarked,
-                    pageZoom: removed.pageZoom
+                    pageZoom: removed.pageZoom,
+                    historyURLs: BrowserPreferences.shared.restoreClosedTabPageHistory ? removed.historyURLs : [],
+                    historyIndex: BrowserPreferences.shared.restoreClosedTabPageHistory ? removed.historyIndex : -1
                 )
             )
 
@@ -320,7 +374,9 @@ final class TabManager {
                             url: tab.webView.url ?? tab.lastKnownURL,
                             isProtected: tab.isProtected,
                             isBookmarked: tab.isBookmarked,
-                            pageZoom: tab.pageZoom
+                            pageZoom: tab.pageZoom,
+                            historyURLs: BrowserPreferences.shared.restoreClosedTabPageHistory ? tab.historyURLs : [],
+                            historyIndex: BrowserPreferences.shared.restoreClosedTabPageHistory ? tab.historyIndex : -1
                         )
                     )
                 }
@@ -437,7 +493,9 @@ final class TabManager {
                 activate: true,
                 isProtected: snapshot.isProtected,
                 isBookmarked: snapshot.isBookmarked,
-                pageZoom: snapshot.pageZoom
+                pageZoom: snapshot.pageZoom,
+                historyURLs: snapshot.historyURLs,
+                historyIndex: snapshot.historyIndex
             )
         }
     }
@@ -445,6 +503,48 @@ final class TabManager {
     func reloadCurrentTab() {
         performOnMain { [weak self] in
             self?.currentWebView?.reload()
+        }
+    }
+
+    var canCurrentTabGoBack: Bool {
+        let state = state(for: currentGroup)
+        guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return false }
+        let tab = state.tabs[state.currentIndex]
+        return tab.webView.canGoBack || tab.historyIndex > 0
+    }
+
+    var canCurrentTabGoForward: Bool {
+        let state = state(for: currentGroup)
+        guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return false }
+        let tab = state.tabs[state.currentIndex]
+        return tab.webView.canGoForward || tab.historyIndex >= 0 && tab.historyIndex < tab.historyURLs.count - 1
+    }
+
+    func navigateCurrentHistoryBack() {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard var state = optionalStateForCurrentIndex() else { return }
+            let index = state.currentIndex
+            guard state.tabs[index].historyIndex > 0 else { return }
+            let targetIndex = state.tabs[index].historyIndex - 1
+            let url = state.tabs[index].historyURLs[targetIndex]
+            state.tabs[index].pendingHistoryIndex = targetIndex
+            setState(state, for: currentGroup)
+            BrowserSession.load(url: url, in: state.tabs[index].webView)
+        }
+    }
+
+    func navigateCurrentHistoryForward() {
+        performOnMain { [weak self] in
+            guard let self else { return }
+            guard var state = optionalStateForCurrentIndex() else { return }
+            let index = state.currentIndex
+            guard state.tabs[index].historyIndex >= 0, state.tabs[index].historyIndex < state.tabs[index].historyURLs.count - 1 else { return }
+            let targetIndex = state.tabs[index].historyIndex + 1
+            let url = state.tabs[index].historyURLs[targetIndex]
+            state.tabs[index].pendingHistoryIndex = targetIndex
+            setState(state, for: currentGroup)
+            BrowserSession.load(url: url, in: state.tabs[index].webView)
         }
     }
 
@@ -494,7 +594,9 @@ final class TabManager {
                         urlString: (tab.webView.url ?? tab.lastKnownURL)?.absoluteString,
                         isProtected: tab.isProtected,
                         isBookmarked: tab.isBookmarked,
-                        pageZoom: tab.pageZoom
+                        pageZoom: tab.pageZoom,
+                        historyURLStrings: tab.historyURLs.map(\.absoluteString),
+                        historyIndex: tab.historyIndex
                     )
                 }
             )
@@ -527,7 +629,13 @@ final class TabManager {
                         thumbnail: nil,
                         isProtected: snapshot.isProtected,
                         isBookmarked: snapshot.isBookmarked,
-                        pageZoom: snapshot.pageZoom
+                        pageZoom: snapshot.pageZoom,
+                        historyURLs: snapshot.historyURLStrings.compactMap(URL.init(string:)),
+                        historyIndex: min(
+                            max(-1, snapshot.historyIndex),
+                            max(snapshot.historyURLStrings.count - 1, -1)
+                        ),
+                        pendingHistoryIndex: nil
                     )
                 }
                 if state.tabs.isEmpty {
@@ -562,6 +670,39 @@ final class TabManager {
             guard let (group, index) = findTabIndex(for: webView) else { return }
             var state = state(for: group)
             state.tabs[index].lastKnownURL = webView.url
+            if let url = webView.url {
+                if let pendingIndex = state.tabs[index].pendingHistoryIndex,
+                   pendingIndex >= 0,
+                   pendingIndex < state.tabs[index].historyURLs.count,
+                   state.tabs[index].historyURLs[pendingIndex] == url {
+                    state.tabs[index].historyIndex = pendingIndex
+                    state.tabs[index].pendingHistoryIndex = nil
+                } else {
+                    let currentIndex = state.tabs[index].historyIndex
+                    let history = state.tabs[index].historyURLs
+                    if currentIndex >= 0, currentIndex < history.count, history[currentIndex] == url {
+                        state.tabs[index].pendingHistoryIndex = nil
+                    } else if currentIndex > 0, history[currentIndex - 1] == url {
+                        state.tabs[index].historyIndex = currentIndex - 1
+                        state.tabs[index].pendingHistoryIndex = nil
+                    } else if currentIndex >= 0, currentIndex + 1 < history.count, history[currentIndex + 1] == url {
+                        state.tabs[index].historyIndex = currentIndex + 1
+                        state.tabs[index].pendingHistoryIndex = nil
+                    } else {
+                        var nextHistory = history
+                        let nextIndex = max(currentIndex, -1)
+                        if nextIndex + 1 < nextHistory.count {
+                            nextHistory.removeSubrange((nextIndex + 1)..<nextHistory.count)
+                        }
+                        if nextHistory.last != url {
+                            nextHistory.append(url)
+                        }
+                        state.tabs[index].historyURLs = Array(nextHistory.suffix(50))
+                        state.tabs[index].historyIndex = state.tabs[index].historyURLs.count - 1
+                        state.tabs[index].pendingHistoryIndex = nil
+                    }
+                }
+            }
             if let urlString = (webView.url ?? state.tabs[index].lastKnownURL)?.absoluteString {
                 state.tabs[index].isBookmarked = BookmarkStore.shared.contains(urlString: urlString)
             } else {
@@ -597,7 +738,9 @@ final class TabManager {
                 url: tab.webView.url ?? tab.lastKnownURL,
                 isProtected: tab.isProtected,
                 isBookmarked: tab.isBookmarked,
-                pageZoom: tab.pageZoom
+                pageZoom: tab.pageZoom,
+                historyURLs: tab.historyURLs,
+                historyIndex: tab.historyIndex
             )
         }
 
@@ -613,7 +756,10 @@ final class TabManager {
                 thumbnail: nil,
                 isProtected: snapshot.isProtected,
                 isBookmarked: snapshot.isBookmarked,
-                pageZoom: snapshot.pageZoom
+                pageZoom: snapshot.pageZoom,
+                historyURLs: snapshot.historyURLs,
+                historyIndex: snapshot.historyIndex,
+                pendingHistoryIndex: nil
             )
         }
         state.currentIndex = min(max(0, selectedIndex), state.tabs.count - 1)
@@ -650,6 +796,12 @@ final class TabManager {
 
     private func state(for group: BrowserTabGroup) -> GroupState {
         states[group] ?? GroupState()
+    }
+
+    private func optionalStateForCurrentIndex() -> GroupState? {
+        let state = state(for: currentGroup)
+        guard state.currentIndex >= 0, state.currentIndex < state.tabs.count else { return nil }
+        return state
     }
 
     private func setState(_ state: GroupState, for group: BrowserTabGroup) {

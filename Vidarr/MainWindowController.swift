@@ -1727,9 +1727,8 @@ final class MainWindowController: NSWindowController {
     }
 
     private func refreshNavigationButtons() {
-        let current = tabManager.currentWebView
-        backButton.isEnabled = current?.canGoBack ?? false
-        forwardButton.isEnabled = current?.canGoForward ?? false
+        backButton.isEnabled = tabManager.canCurrentTabGoBack
+        forwardButton.isEnabled = tabManager.canCurrentTabGoForward
 
         let bookmarkSymbol = tabManager.isCurrentTabBookmarked ? "star.fill" : "star"
         bookmarkButton.image = NSImage(systemSymbolName: bookmarkSymbol, accessibilityDescription: nil)

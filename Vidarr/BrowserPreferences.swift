@@ -65,6 +65,7 @@ final class BrowserPreferences {
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
         static let sendDoNotTrack = "prefs.sendDoNotTrack"
+        static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
     }
 
     private let defaults: UserDefaults
@@ -86,7 +87,8 @@ final class BrowserPreferences {
             Key.popupBlockingEnabled: true,
             Key.harmfulSiteWarningEnabled: true,
             Key.ephemeralModeEnabled: false,
-            Key.sendDoNotTrack: true
+            Key.sendDoNotTrack: true,
+            Key.restoreClosedTabPageHistory: true
         ])
     }
 
@@ -245,6 +247,14 @@ final class BrowserPreferences {
         }
     }
 
+    var restoreClosedTabPageHistory: Bool {
+        get { defaults.bool(forKey: Key.restoreClosedTabPageHistory) }
+        set {
+            defaults.set(newValue, forKey: Key.restoreClosedTabPageHistory)
+            notifyChanged()
+        }
+    }
+
     var homePageURL: URL {
         if let url = URL(string: homePageURLString), url.scheme != nil {
             return url
@@ -295,6 +305,7 @@ final class BrowserPreferences {
             defaults.set(true, forKey: Key.harmfulSiteWarningEnabled)
             defaults.set(false, forKey: Key.ephemeralModeEnabled)
             defaults.set(true, forKey: Key.sendDoNotTrack)
+            defaults.set(true, forKey: Key.restoreClosedTabPageHistory)
         }
     }
 

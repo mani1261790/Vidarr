@@ -69,15 +69,23 @@ final class BrowserSession {
     // MARK: - Navigation
     func goBack() {
         performOnMain { [weak self] in
-            guard let webView = self?.currentWebView, webView.canGoBack else { return }
-            webView.goBack()
+            guard let self, let webView = self.currentWebView else { return }
+            if webView.canGoBack {
+                webView.goBack()
+            } else {
+                self.tabManager.navigateCurrentHistoryBack()
+            }
         }
     }
 
     func goForward() {
         performOnMain { [weak self] in
-            guard let webView = self?.currentWebView, webView.canGoForward else { return }
-            webView.goForward()
+            guard let self, let webView = self.currentWebView else { return }
+            if webView.canGoForward {
+                webView.goForward()
+            } else {
+                self.tabManager.navigateCurrentHistoryForward()
+            }
         }
     }
 

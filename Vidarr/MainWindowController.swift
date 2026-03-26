@@ -68,6 +68,7 @@ final class MainWindowController: NSWindowController {
     private var visualTransitionCurrentIndex: Int?
     private weak var visualTransitionCurrentWebView: WKWebView?
     private var tabTransitionGeneration: Int = 0
+    private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     private var dragFromTabIndex: Int?
     private var dragToTabIndex: Int?
     private var dragPreviewView: NSImageView?
@@ -1712,6 +1713,8 @@ final class MainWindowController: NSWindowController {
         }
 
         let generation = beginVisualTransition(to: state.targetIndex, webView: state.toWebView)
+        let now = CACurrentMediaTime()
+        let isChainedTransition = (now - lastCommittedTabTransitionAt) < 0.42
 
         let directionSign: CGFloat = state.direction == .left ? -1 : 1
         let offscreenTravel = width + UI.tabSwitchGap
@@ -1719,18 +1722,23 @@ final class MainWindowController: NSWindowController {
             ? state.toWebView.frame.origin.x
             : -directionSign * (offscreenTravel + (emphasizeBirth ? UI.newTabTransitionExtraTravel : 0))
         let fromStartX = startFromCurrentFrames ? state.fromWebView.frame.origin.x : 0
-        let fromMidX = directionSign * width * (emphasizeBirth ? 0.44 : 0.34)
+        let fromMidX = directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.38 : 0.44) : (isChainedTransition ? 0.28 : 0.34))
         let fromFinalX = directionSign * offscreenTravel
-        let fromOvershootX = fromFinalX + (directionSign * max(16, min(34, width * 0.03)))
-        let toMidX = -directionSign * width * (emphasizeBirth ? 0.18 : 0.14)
-        let toOvershootX = directionSign * max(16, min(32, width * 0.028))
+        let fromOvershootMagnitude = max(isChainedTransition ? 10 : 16, min(isChainedTransition ? 24 : 34, width * (isChainedTransition ? 0.022 : 0.03)))
+        let fromOvershootX = fromFinalX + (directionSign * fromOvershootMagnitude)
+        let toMidX = -directionSign * width * (emphasizeBirth ? (isChainedTransition ? 0.13 : 0.18) : (isChainedTransition ? 0.10 : 0.14))
+        let toOvershootMagnitude = max(isChainedTransition ? 10 : 16, min(isChainedTransition ? 22 : 32, width * (isChainedTransition ? 0.02 : 0.028)))
+        let toOvershootX = directionSign * toOvershootMagnitude
 
         state.fromWebView.frame.origin.x = pixelAligned(fromStartX)
         state.toWebView.frame.origin.x = pixelAligned(entryStartX)
 
         let dimView = NSView(frame: webContainer.bounds)
         dimView.wantsLayer = true
-        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(emphasizeBirth ? 0.2 : 0.16).cgColor
+        let dimAlpha: CGFloat = emphasizeBirth
+            ? (isChainedTransition ? 0.14 : 0.2)
+            : (isChainedTransition ? 0.10 : 0.16)
+        dimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(dimAlpha).cgColor
         dimView.alphaValue = 0
         webContainer.addSubview(dimView, positioned: .above, relativeTo: state.fromWebView)
 
@@ -1765,17 +1773,22 @@ final class MainWindowController: NSWindowController {
         state.toWebView.layer?.shadowRadius = 18
         state.toWebView.layer?.shadowOffset = CGSize(width: 0, height: 0)
         state.toWebView.alphaValue = 0.9
-        state.toWebView.layer?.transform = CATransform3DMakeScale(emphasizeBirth ? 0.94 : 0.955, emphasizeBirth ? 0.94 : 0.955, 1)
+        let initialScale: CGFloat = emphasizeBirth
+            ? (isChainedTransition ? 0.965 : 0.94)
+            : (isChainedTransition ? 0.975 : 0.955)
+        state.toWebView.layer?.transform = CATransform3DMakeScale(initialScale, initialScale, 1)
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = emphasizeBirth ? 0.14 : 0.12
+            context.duration = emphasizeBirth
+                ? (isChainedTransition ? 0.10 : 0.14)
+                : (isChainedTransition ? 0.09 : 0.12)
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             dimView.animator().alphaValue = 1.0
             state.fromWebView.animator().frame.origin.x = pixelAligned(fromMidX)
-            state.fromWebView.animator().alphaValue = 0.76
+            state.fromWebView.animator().alphaValue = isChainedTransition ? 0.82 : 0.76
             state.toWebView.animator().frame.origin.x = pixelAligned(toMidX)
             state.toWebView.animator().alphaValue = 1.0
-            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(0.988, 0.988, 1)
+            state.toWebView.animator().layer?.transform = CATransform3DMakeScale(isChainedTransition ? 0.995 : 0.988, isChainedTransition ? 0.995 : 0.988, 1)
             gapView.animator().frame.origin.x = gapOriginX(fromX: fromMidX, toX: toMidX)
         } completionHandler: { [weak self] in
             guard let self else { return }
@@ -1784,13 +1797,15 @@ final class MainWindowController: NSWindowController {
                 return
             }
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = emphasizeBirth ? 0.18 : 0.16
+                context.duration = emphasizeBirth
+                    ? (isChainedTransition ? 0.12 : 0.18)
+                    : (isChainedTransition ? 0.11 : 0.16)
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
-                state.fromWebView.animator().alphaValue = 0.62
+                state.fromWebView.animator().alphaValue = isChainedTransition ? 0.72 : 0.62
                 state.toWebView.animator().frame.origin.x = self.pixelAligned(toOvershootX)
                 state.toWebView.animator().layer?.transform = CATransform3DMakeScale(1.018, 1.018, 1)
-                state.toWebView.animator().layer?.shadowOpacity = 0.32
+                state.toWebView.animator().layer?.shadowOpacity = isChainedTransition ? 0.24 : 0.32
                 gapView.animator().frame.origin.x = gapOriginX(fromX: fromOvershootX, toX: toOvershootX)
             } completionHandler: {
                 guard generation == self.tabTransitionGeneration else {
@@ -1798,7 +1813,9 @@ final class MainWindowController: NSWindowController {
                     return
                 }
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = emphasizeBirth ? 0.13 : 0.12
+                    context.duration = emphasizeBirth
+                        ? (isChainedTransition ? 0.10 : 0.13)
+                        : (isChainedTransition ? 0.09 : 0.12)
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     dimView.animator().alphaValue = 0
                     state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)
@@ -1813,6 +1830,7 @@ final class MainWindowController: NSWindowController {
                         self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
                         return
                     }
+                    self.lastCommittedTabTransitionAt = CACurrentMediaTime()
                     self.clearVisualTransitionOverride()
                     self.cleanupTransitionDecoration(for: state, dimView: dimView, gapView: gapView)
                     self.tabManager.selectTab(index: state.targetIndex)

@@ -906,6 +906,10 @@ final class MainWindowController: NSWindowController {
 
     private func openLocalDocument(_ url: URL, preferNewTab: Bool) {
         guard isSafeStoredURL(url) else { return }
+        guard Self.isBrowserOpenableLocalDocument(url) else {
+            NSWorkspace.shared.open(url)
+            return
+        }
         retainSecurityScope(for: url)
         if preferNewTab || tabManager.currentWebView == nil {
             tabManager.newTab(url: url)
@@ -928,6 +932,15 @@ final class MainWindowController: NSWindowController {
            preferredDirectory.startAccessingSecurityScopedResource() {
             retainedDocumentSecurityScopes[preferredDirectory.path] = preferredDirectory
         }
+    }
+
+    nonisolated fileprivate static func isBrowserOpenableLocalDocument(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        let ext = url.pathExtension.lowercased()
+        if let type = UTType(filenameExtension: ext) {
+            return type.conforms(to: .pdf) || type.conforms(to: .html) || type.conforms(to: .plainText)
+        }
+        return ["pdf", "html", "htm", "txt"].contains(ext)
     }
 
     func restoreSavedSessionIfAvailable() {
@@ -2973,16 +2986,7 @@ private final class TabInteractionView: NonDraggableView {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else {
             return nil
         }
-        return urls.filter(Self.isSupportedDocumentURL(_:))
-    }
-
-    nonisolated private static func isSupportedDocumentURL(_ url: URL) -> Bool {
-        guard url.isFileURL else { return false }
-        let ext = url.pathExtension.lowercased()
-        if let type = UTType(filenameExtension: ext) {
-            return type.conforms(to: .pdf) || type.conforms(to: .html) || type.conforms(to: .plainText)
-        }
-        return ["pdf", "html", "htm", "txt"].contains(ext)
+        return urls.filter(MainWindowController.isBrowserOpenableLocalDocument(_:))
     }
 
     private func setDropTargetHighlighted(_ highlighted: Bool) {

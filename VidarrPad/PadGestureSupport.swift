@@ -312,7 +312,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             guard pathLength(capturePoints) >= (config.minPathLength * 0.38) / max(0.75, sensitivityMultiplier) else { return nil }
             return recognizer.bestPassingMatch(
                 points: capturePoints,
-                minimumScore: max(0.54, config.matchScoreThreshold - 0.18),
+                minimumScore: max(0.50, config.matchScoreThreshold - 0.22),
                 allowedNames: allowedGestureNames
             )
         }()
@@ -618,7 +618,7 @@ private final class PadGestureRecognizer {
         case "DownRight":
             return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .right)
         case "DownRightDownRight":
-            return isDoubleDownRight(raw) && pathLength(raw) >= minPathLength * 1.45
+            return isDoubleDownRight(raw) && pathLength(raw) >= minPathLength * 1.16
         case "S":
             return isSLike(raw)
         default:
@@ -740,8 +740,8 @@ private final class PadGestureRecognizer {
         guard raw.count >= 12 else { return false }
 
         let box = boundingBox(raw)
-        let minVerticalTravel = max(20, box.height * 0.18)
-        let minHorizontalTravel = max(20, box.width * 0.18)
+        let minVerticalTravel = max(16, box.height * 0.16)
+        let minHorizontalTravel = max(16, box.width * 0.16)
 
         for r1 in stride(from: 0.14, through: 0.32, by: 0.04) {
             let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
@@ -755,10 +755,10 @@ private final class PadGestureRecognizer {
                     let v3 = vector(from: raw[i2], to: raw[i3])
                     let v4 = vector(from: raw[i3], to: raw[raw.count - 1])
 
-                    guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.78 else { continue }
-                    guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
-                    guard v3.dy < 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.78 else { continue }
-                    guard v4.dx > 0, abs(v4.dx) >= minHorizontalTravel, abs(v4.dx) > abs(v4.dy) * 0.72 else { continue }
+                    guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.62 else { continue }
+                    guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.58 else { continue }
+                    guard v3.dy < 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.62 else { continue }
+                    guard v4.dx > 0, abs(v4.dx) >= minHorizontalTravel, abs(v4.dx) > abs(v4.dy) * 0.58 else { continue }
 
                     return true
                 }
@@ -772,8 +772,8 @@ private final class PadGestureRecognizer {
         guard raw.count >= 10 else { return false }
 
         let box = boundingBox(raw)
-        let minVerticalTravel = max(20, box.height * 0.28)
-        let minHorizontalTravel = max(20, box.width * 0.28)
+        let minVerticalTravel = max(16, box.height * 0.22)
+        let minHorizontalTravel = max(16, box.width * 0.22)
 
         for r1 in stride(from: 0.20, through: 0.42, by: 0.04) {
             let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
@@ -784,12 +784,12 @@ private final class PadGestureRecognizer {
                 let v2 = vector(from: raw[i1], to: raw[i2])
                 let v3 = vector(from: raw[i2], to: raw[raw.count - 1])
 
-                guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.82 else { continue }
-                guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
-                guard v3.dy > 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.82 else { continue }
+                guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.62 else { continue }
+                guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.58 else { continue }
+                guard v3.dy > 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.62 else { continue }
 
                 let shoulderGap = abs((raw.first?.y ?? 0) - (raw.last?.y ?? 0))
-                if shoulderGap <= max(26, box.height * 0.38) { return true }
+                if shoulderGap <= max(34, box.height * 0.52) { return true }
             }
         }
 

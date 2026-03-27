@@ -28,6 +28,8 @@ struct PadGestureHUDState: Equatable {
 struct PadGestureConfiguration {
     let sensitivity: PadGestureSensitivity
     let onPreview: (PadGestureHUDState?) -> Void
+    let onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
+    let onHorizontalSwipeCancel: () -> Void
     let onCommit: (PadGestureAction) -> Void
     let onCancel: () -> Void
 }
@@ -64,6 +66,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
     var sensitivity: PadGestureSensitivity
     private var onPreview: (PadGestureHUDState?) -> Void
+    private var onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
+    private var onHorizontalSwipeCancel: () -> Void
     private var onCommit: (PadGestureAction) -> Void
     private var onCancel: () -> Void
 
@@ -75,6 +79,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private var captureHasStrongVerticalComponent = false
     private var lastLocation: CGPoint?
     private var latestTimestamp: TimeInterval = 0
+    private var currentViewWidth: CGFloat = 0
+    private var activeHorizontalAction: PadGestureAction?
 
     private lazy var recognizer = PadGestureRecognizer(
         matchScoreThreshold: config.matchScoreThreshold,
@@ -85,11 +91,15 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     init(
         sensitivity: PadGestureSensitivity,
         onPreview: @escaping (PadGestureHUDState?) -> Void,
+        onHorizontalSwipeDrag: @escaping (PadGestureAction, CGFloat) -> Void,
+        onHorizontalSwipeCancel: @escaping () -> Void,
         onCommit: @escaping (PadGestureAction) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.sensitivity = sensitivity
         self.onPreview = onPreview
+        self.onHorizontalSwipeDrag = onHorizontalSwipeDrag
+        self.onHorizontalSwipeCancel = onHorizontalSwipeCancel
         self.onCommit = onCommit
         self.onCancel = onCancel
     }
@@ -97,6 +107,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     func update(configuration: PadGestureConfiguration) {
         sensitivity = configuration.sensitivity
         onPreview = configuration.onPreview
+        onHorizontalSwipeDrag = configuration.onHorizontalSwipeDrag
+        onHorizontalSwipeCancel = configuration.onHorizontalSwipeCancel
         onCommit = configuration.onCommit
         onCancel = configuration.onCancel
     }
@@ -105,6 +117,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let location = recognizer.location(in: recognizer.view)
         let timestamp = ProcessInfo.processInfo.systemUptime
         latestTimestamp = timestamp
+        currentViewWidth = recognizer.view?.bounds.width ?? 0
 
         switch recognizer.state {
         case .began:
@@ -238,9 +251,25 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
     private func updateHUDIfNeeded() {
         if captureInvalidated {
+            cancelHorizontalSwipePreviewIfNeeded()
             onPreview(nil)
             return
         }
+
+        if !captureHasStrongVerticalComponent,
+           let horizontal = recognizeHorizontalSwipe(points: capturePoints),
+           let action = mapAction(name: horizontal.name)
+        {
+            let total = abs((capturePoints.last?.x ?? 0) - (capturePoints.first?.x ?? 0))
+            let width = max(currentViewWidth, 1)
+            let progress = min(0.82, max(0, total / max(width + 16, 1)))
+            activeHorizontalAction = action
+            onHorizontalSwipeDrag(action, progress)
+            onPreview(nil)
+            return
+        }
+
+        cancelHorizontalSwipePreviewIfNeeded()
 
         if let best = recognizer.bestPassingMatch(
             points: capturePoints,
@@ -459,7 +488,14 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         lastLiveCandidate = nil
         captureInvalidated = false
         captureHasStrongVerticalComponent = false
+        cancelHorizontalSwipePreviewIfNeeded()
         onPreview(nil)
+    }
+
+    private func cancelHorizontalSwipePreviewIfNeeded() {
+        guard activeHorizontalAction != nil else { return }
+        activeHorizontalAction = nil
+        onHorizontalSwipeCancel()
     }
 }
 

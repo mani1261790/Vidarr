@@ -1,12 +1,6 @@
 import Foundation
 import CoreGraphics
 
-#if canImport(VidarrCore)
-import VidarrCore
-typealias PadBrowserPreferences = BrowserPreferences
-typealias PadPreferredContentLanguage = BrowserPreferences.PreferredContentLanguage
-typealias PadBrowserProfile = BrowserProfile
-#else
 struct PadBrowserProfile: Codable, Hashable, Identifiable {
     let id: String
     var name: String
@@ -216,4 +210,3 @@ final class PadBookmarkStore {
         return all().contains { $0.urlString == url.absoluteString }
     }
 }
-#endif

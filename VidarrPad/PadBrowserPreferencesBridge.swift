@@ -89,6 +89,7 @@ final class PadBrowserPreferences {
         static let preferredContentLanguage = "prefs.preferredContentLanguage"
         static let gestureSensitivity = "prefs.gestureSensitivity"
         static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
+        static let reopenTabsOnLaunch = "prefs.reopenTabsOnLaunch"
         static let autoHideBottomBar = "prefs.autoHideBottomBar"
         static let bottomBarAutoHideDelay = "prefs.bottomBarAutoHideDelay"
         static let allowsJavaScript = "prefs.allowsJavaScript"
@@ -124,12 +125,18 @@ final class PadBrowserPreferences {
 
     var homePageURLString: String {
         get { defaults.string(forKey: Key.homePageURL) ?? "https://search.fenrir-inc.com/" }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.homePageURL) }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? "https://search.fenrir-inc.com/" : trimmed, forKey: Key.homePageURL)
+        }
     }
 
     var searchTemplate: String {
         get { defaults.string(forKey: Key.searchTemplate) ?? "https://search.fenrir-inc.com/?q={query}" }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.searchTemplate) }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? "https://search.fenrir-inc.com/?q={query}" : trimmed, forKey: Key.searchTemplate)
+        }
     }
 
     var preferredContentLanguage: PadPreferredContentLanguage {
@@ -161,6 +168,18 @@ final class PadBrowserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Key.restoreClosedTabPageHistory)
+        }
+    }
+
+    var reopenTabsOnLaunch: Bool {
+        get {
+            if defaults.object(forKey: Key.reopenTabsOnLaunch) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.reopenTabsOnLaunch)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.reopenTabsOnLaunch)
         }
     }
 

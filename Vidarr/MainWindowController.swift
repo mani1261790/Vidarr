@@ -991,6 +991,10 @@ final class MainWindowController: NSWindowController {
     }
 
     func restoreSavedSessionIfAvailable() {
+        guard BrowserPreferences.shared.reopenTabsOnLaunch else {
+            BrowserSessionStore.shared.clear()
+            return
+        }
         guard let snapshot = BrowserSessionStore.shared.load() else { return }
         let currentProfileID = BrowserProfileManager.shared.currentProfile.id
         if let snapshotProfileID = snapshot.profileID, snapshotProfileID != currentProfileID {
@@ -1000,6 +1004,10 @@ final class MainWindowController: NSWindowController {
     }
 
     func saveSessionSnapshot() {
+        guard BrowserPreferences.shared.reopenTabsOnLaunch else {
+            BrowserSessionStore.shared.clear()
+            return
+        }
         BrowserSessionStore.shared.save(
             tabManager.sessionSnapshot(profileID: BrowserProfileManager.shared.currentProfile.id)
         )

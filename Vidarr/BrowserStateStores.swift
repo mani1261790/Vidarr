@@ -104,6 +104,10 @@ final class BrowserSessionStore {
         }
         return snapshot
     }
+
+    func clear() {
+        defaults.removeObject(forKey: Key.snapshot)
+    }
 }
 
 enum MediaPermissionKind: String, Codable {

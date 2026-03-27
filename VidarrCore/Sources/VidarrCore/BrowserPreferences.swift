@@ -67,6 +67,7 @@ public final class BrowserPreferences {
         static let ephemeralModeEnabled = "prefs.ephemeralModeEnabled"
         static let sendDoNotTrack = "prefs.sendDoNotTrack"
         static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
+        static let reopenTabsOnLaunch = "prefs.reopenTabsOnLaunch"
     }
 
     private let defaults: UserDefaults
@@ -89,7 +90,8 @@ public final class BrowserPreferences {
             Key.harmfulSiteWarningEnabled: true,
             Key.ephemeralModeEnabled: false,
             Key.sendDoNotTrack: true,
-            Key.restoreClosedTabPageHistory: true
+            Key.restoreClosedTabPageHistory: true,
+            Key.reopenTabsOnLaunch: true
         ])
     }
 
@@ -101,7 +103,8 @@ public final class BrowserPreferences {
     public var homePageURLString: String {
         get { defaults.string(forKey: Key.homePageURL) ?? "https://search.fenrir-inc.com/" }
         set {
-            defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.homePageURL)
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? "https://search.fenrir-inc.com/" : trimmed, forKey: Key.homePageURL)
             notifyChanged()
         }
     }
@@ -109,7 +112,8 @@ public final class BrowserPreferences {
     public var searchTemplate: String {
         get { defaults.string(forKey: Key.searchTemplate) ?? "https://search.fenrir-inc.com/?q={query}" }
         set {
-            defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.searchTemplate)
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? "https://search.fenrir-inc.com/?q={query}" : trimmed, forKey: Key.searchTemplate)
             notifyChanged()
         }
     }
@@ -271,6 +275,14 @@ public final class BrowserPreferences {
         }
     }
 
+    public var reopenTabsOnLaunch: Bool {
+        get { defaults.bool(forKey: Key.reopenTabsOnLaunch) }
+        set {
+            defaults.set(newValue, forKey: Key.reopenTabsOnLaunch)
+            notifyChanged()
+        }
+    }
+
     public var homePageURL: URL {
         if let url = URL(string: homePageURLString), url.scheme != nil {
             return url
@@ -322,6 +334,7 @@ public final class BrowserPreferences {
             defaults.set(false, forKey: Key.ephemeralModeEnabled)
             defaults.set(true, forKey: Key.sendDoNotTrack)
             defaults.set(true, forKey: Key.restoreClosedTabPageHistory)
+            defaults.set(true, forKey: Key.reopenTabsOnLaunch)
         }
     }
 

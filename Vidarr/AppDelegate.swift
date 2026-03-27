@@ -655,6 +655,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let ephemeralModeCheckbox = NSButton(checkboxWithTitle: "プライバシー優先（終了時に履歴とCookieを残さない）", target: nil, action: nil)
     private let doNotTrackCheckbox = NSButton(checkboxWithTitle: "追跡拒否の信号（DNT / GPC）を送信", target: nil, action: nil)
     private let restoreClosedTabHistoryCheckbox = NSButton(checkboxWithTitle: "閉じたタブを復元したとき、前に見ていたページ履歴も戻す", target: nil, action: nil)
+    private let reopenTabsOnLaunchCheckbox = NSButton(checkboxWithTitle: "前回終了時のタブを次回も開く", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let gestureTestView = GesturePracticeView(frame: .zero)
@@ -814,6 +815,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         restoreClosedTabHistoryCheckbox.translatesAutoresizingMaskIntoConstraints = false
         restoreClosedTabHistoryCheckbox.target = self
         restoreClosedTabHistoryCheckbox.action = #selector(restoreClosedTabHistoryChanged(_:))
+        reopenTabsOnLaunchCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        reopenTabsOnLaunchCheckbox.target = self
+        reopenTabsOnLaunchCheckbox.action = #selector(reopenTabsOnLaunchChanged(_:))
 
         clearDataButton.translatesAutoresizingMaskIntoConstraints = false
         clearDataButton.target = self
@@ -880,6 +884,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         contentLanguageRow.addArrangedSubview(contentLanguagePopup)
         generalStack.addArrangedSubview(contentLanguageRow)
         generalStack.addArrangedSubview(updatesCheckbox)
+        generalStack.addArrangedSubview(reopenTabsOnLaunchCheckbox)
         generalStack.addArrangedSubview(restoreClosedTabHistoryCheckbox)
         generalStack.addArrangedSubview(generalGrid)
         generalGrid.addArrangedSubview(openDownloadsButton)
@@ -1133,6 +1138,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         ephemeralModeCheckbox.state = prefs.ephemeralModeEnabled ? .on : .off
         doNotTrackCheckbox.state = prefs.sendDoNotTrack ? .on : .off
         restoreClosedTabHistoryCheckbox.state = prefs.restoreClosedTabPageHistory ? .on : .off
+        reopenTabsOnLaunchCheckbox.state = prefs.reopenTabsOnLaunch ? .on : .off
 
         let sensitivity = prefs.gestureSensitivity
         if let index = BrowserPreferences.GestureSensitivity.allCases.firstIndex(of: sensitivity) {
@@ -1148,7 +1154,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             contentLanguagePopup.selectItem(at: 0)
         }
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n前回タブの復元: \(prefs.reopenTabsOnLaunch ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
         if let summary = generalSummaryLabel.stringValue.isEmpty ? nil : Optional(generalSummaryLabel.stringValue) {
             generalSummaryLabel.stringValue = "現在のプロファイル: \(profileManager.currentProfile.name)\n" + summary
         }
@@ -1337,6 +1343,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     @objc private func restoreClosedTabHistoryChanged(_ sender: NSButton) {
         prefs.restoreClosedTabPageHistory = (sender.state == .on)
+        loadValues()
+    }
+
+    @objc private func reopenTabsOnLaunchChanged(_ sender: NSButton) {
+        prefs.reopenTabsOnLaunch = (sender.state == .on)
+        if prefs.reopenTabsOnLaunch == false {
+            BrowserSessionStore.shared.clear()
+        }
         loadValues()
     }
 

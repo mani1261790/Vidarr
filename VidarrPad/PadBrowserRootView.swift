@@ -2,25 +2,49 @@ import SwiftUI
 
 struct PadBrowserRootView: View {
     @StateObject private var model = PadBrowserModel()
-    @State private var isSettingsPresented = false
-    @State private var columnVisibility = NavigationSplitViewVisibility.all
     @State private var gestureHUD: PadGestureHUDState?
     @State private var gestureHUDTask: Task<Void, Never>?
-    @FocusState private var addressFieldFocused: Bool
+    @State private var editingTabID: UUID?
+    @State private var editingURL = ""
+    @FocusState private var editingURLFocused: Bool
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 260, ideal: 300)
-        } detail: {
-            VStack(spacing: 0) {
-                detailToolbar
-                Divider()
-                if let tab = model.selectedTab {
-                    ZStack {
-                        PadWebView(webView: tab.webView)
-                            .id(tab.id)
-                            .ignoresSafeArea(edges: .bottom)
+        ZStack(alignment: .bottom) {
+            webLayer
+            bottomBar
+                .padding(.horizontal, 22)
+                .padding(.bottom, 18)
+        }
+        .background(Color(uiColor: .systemBackground))
+        .sheet(item: editingTabBinding) { tab in
+            PadTabEditSheet(
+                tab: tab,
+                currentURL: bindingForEditingURL(),
+                isBookmarked: model.isBookmarked(tab),
+                onToggleBookmark: {
+                    model.selectTab(id: tab.id)
+                    model.toggleBookmarkForSelectedTab()
+                },
+                onOpenURL: {
+                    model.selectTab(id: tab.id)
+                    model.loadSelectedTab(with: editingURL)
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .onAppear {
+                editingURL = tab.urlString
+            }
+        }
+    }
+
+    private var webLayer: some View {
+        ZStack {
+            if let tab = model.selectedTab {
+                PadWebView(webView: tab.webView)
+                    .id(tab.id)
+                    .ignoresSafeArea()
+                    .overlay {
                         PadGestureOverlay(
                             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
                             onPreview: { state in
@@ -35,175 +59,78 @@ struct PadBrowserRootView: View {
                                 hideGestureHUD()
                             }
                         )
-                        if let gestureHUD {
-                            PadGestureHUD(state: gestureHUD)
-                                .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                        }
                     }
-                } else {
-                    ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                }
+            } else {
+                ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(Color(uiColor: .systemBackground))
-        }
-        .sheet(isPresented: $isSettingsPresented) {
-            PadSettingsView {
-                model.refreshPreferences()
+
+            if let gestureHUD {
+                PadGestureHUD(state: gestureHUD)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
     }
 
-    private var sidebar: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tabs")
-                        .font(.headline)
-                    Text(PadBrowserPreferences.shared.currentProfile.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    model.newTab()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .semibold))
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
-
-            List(selection: selectedTabBinding) {
-                if !model.recentHistory().isEmpty {
-                    Section("Recent History") {
-                        ForEach(model.recentHistory()) { entry in
-                            Button {
-                                if let url = URL(string: entry.urlString) {
-                                    model.newTab(initialURL: url)
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(entry.title)
-                                        .lineLimit(1)
-                                    Text(URL(string: entry.urlString)?.host ?? entry.urlString)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                Section("Open Tabs") {
-                ForEach(model.tabs) { tab in
-                    PadTabRow(tab: tab, isSelected: model.selectedTab?.id == tab.id) {
-                        model.selectTab(id: tab.id)
-                    } onClose: {
-                        model.closeTab(id: tab.id)
-                    }
-                    .buttonStyle(.plain)
-                }
-                }
-            }
-            .listStyle(.sidebar)
-        }
-        .background(
-            PadLiquidGlassBackground()
-                .ignoresSafeArea()
-        )
-    }
-
-    private var detailToolbar: some View {
-        VStack(spacing: 10) {
+    private var bottomBar: some View {
+        HStack(spacing: 18) {
             HStack(spacing: 10) {
-                Button(action: model.goBack) {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.bordered)
-                .disabled(!model.canGoBack())
-
-                Button(action: model.goForward) {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.bordered)
-                .disabled(!model.canGoForward())
-
-                Button(action: model.reload) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: model.toggleBookmarkForSelectedTab) {
-                    Image(systemName: model.selectedTab.map(model.isBookmarked) == true ? "star.fill" : "star")
-                }
-                .buttonStyle(.bordered)
-
-                TextField("Search or enter website name", text: $model.addressInput)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($addressFieldFocused)
-                    .onSubmit {
-                        model.commitAddressBar()
-                    }
-
-                Button {
-                    isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: { model.newTab() }) {
-                    Label("New Tab", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
+                chromeButton(systemName: "chevron.left", disabled: !model.canGoBack(), action: model.goBack)
+                chromeButton(systemName: "chevron.right", disabled: !model.canGoForward(), action: model.goForward)
+                chromeButton(systemName: "arrow.clockwise", disabled: false, action: model.reload)
             }
-            .padding(.horizontal, 16)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(model.tabs) { tab in
-                        Button {
-                            model.selectTab(id: tab.id)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(tab.title)
-                                    .lineLimit(1)
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text(tab.urlString.isEmpty ? "New Tab" : tab.urlString)
-                                    .lineLimit(1)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(width: 200, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(model.selectedTab?.id == tab.id ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.10))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
+            tabStrip
+
+            chromeButton(systemName: "plus", disabled: false) {
+                model.newTab()
             }
         }
-        .padding(.top, 14)
-        .padding(.bottom, 12)
-        .background(PadLiquidGlassBackground())
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(
+            PadLiquidGlassBackground(cornerRadius: 28)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.16), radius: 20, y: 10)
     }
 
-    private var selectedTabBinding: Binding<UUID?> {
-        Binding(
-            get: { model.selectedSidebarTabID },
-            set: { newValue in
-                guard let newValue else { return }
-                model.selectTab(id: newValue)
+    private var tabStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(model.tabs) { tab in
+                    PadTabThumbnail(
+                        tab: tab,
+                        isSelected: model.selectedTab?.id == tab.id,
+                        onSelect: {
+                            model.selectTab(id: tab.id)
+                        },
+                        onLongPress: {
+                            model.selectTab(id: tab.id)
+                            editingURL = tab.urlString
+                            editingTabID = tab.id
+                        }
+                    )
+                }
             }
-        )
+            .padding(.horizontal, 4)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func chromeButton(systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 38, height: 38)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(disabled ? Color.secondary.opacity(0.45) : Color.primary)
+        .disabled(disabled)
     }
 
     private func performGesture(_ action: PadGestureAction) {
@@ -227,7 +154,10 @@ struct PadBrowserRootView: View {
         case .forward:
             model.goForward()
         case .search:
-            addressFieldFocused = true
+            if let tab = model.selectedTab {
+                editingURL = tab.urlString
+                editingTabID = tab.id
+            }
         case .newTab:
             model.newTab()
         }
@@ -288,51 +218,116 @@ struct PadBrowserRootView: View {
         case .newTab: return "plus.circle"
         }
     }
+
+    private var editingTabBinding: Binding<PadBrowserModel.Tab?> {
+        Binding(
+            get: {
+                guard let editingTabID else { return nil }
+                return model.tabs.first(where: { $0.id == editingTabID })
+            },
+            set: { newValue in
+                editingTabID = newValue?.id
+            }
+        )
+    }
+
+    private func bindingForEditingURL() -> Binding<String> {
+        Binding(
+            get: { editingURL },
+            set: { editingURL = $0 }
+        )
+    }
 }
 
-private struct PadTabRow: View {
+private struct PadTabThumbnail: View {
     @ObservedObject var tab: PadBrowserModel.Tab
     let isSelected: Bool
     let onSelect: () -> Void
-    let onClose: () -> Void
+    let onLongPress: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: onSelect) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(tab.title)
-                        .lineLimit(1)
-                        .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                    Text(hostText)
-                        .lineLimit(1)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+        Button(action: onSelect) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.22) : Color.black.opacity(0.14))
+                Group {
+                    if let image = tab.thumbnail {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        ZStack {
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.18), Color.black.opacity(0.12)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            Image(systemName: "globe")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .padding(3)
             }
-            .buttonStyle(.plain)
-
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
+            .frame(width: 118, height: 70)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)
+            )
+            .shadow(color: isSelected ? Color.accentColor.opacity(0.24) : .clear, radius: 16, y: 6)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 4)
-        .contentShape(Rectangle())
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private var hostText: String {
-        URL(string: tab.urlString)?.host ?? tab.urlString.ifEmpty("New Tab")
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in
+                    onLongPress()
+                }
+        )
     }
 }
 
-private extension String {
-    func ifEmpty(_ fallback: String) -> String {
-        isEmpty ? fallback : self
+private struct PadTabEditSheet: View {
+    @ObservedObject var tab: PadBrowserModel.Tab
+    @Binding var currentURL: String
+    let isBookmarked: Bool
+    let onToggleBookmark: () -> Void
+    let onOpenURL: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Edit Tab")
+                    .font(.title3.weight(.semibold))
+                Text(tab.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            TextField("Enter URL or search", text: $currentURL)
+                .textFieldStyle(.roundedBorder)
+                .submitLabel(.go)
+                .onSubmit {
+                    onOpenURL()
+                }
+
+            HStack(spacing: 12) {
+                Button(action: onOpenURL) {
+                    Label("Open", systemImage: "arrow.forward.circle")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(action: onToggleBookmark) {
+                    Label(isBookmarked ? "Remove Bookmark" : "Add Bookmark", systemImage: isBookmarked ? "star.slash" : "star")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .presentationBackground(.regularMaterial)
     }
 }

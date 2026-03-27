@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 import WebKit
 
 @MainActor
@@ -20,6 +21,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let webView: WKWebView
         @Published var title: String = "New Tab"
         @Published var urlString: String = ""
+        @Published var thumbnail: UIImage?
 
         init(webView: WKWebView) {
             self.webView = webView
@@ -65,6 +67,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         selectedSidebarTabID = tab.id
         if let initialURL {
             webView.load(URLRequest(url: initialURL))
+        } else {
+            captureThumbnail(for: tab)
         }
         syncAddressBar()
         saveSessionSnapshot()
@@ -197,6 +201,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
         navigationStateToken = UUID()
     }
 
+    func loadSelectedTab(with input: String) {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let url = resolvedURL(from: trimmed)
+        selectedTab?.webView.load(URLRequest(url: url))
+    }
+
     func recentHistory(limit: Int = 8) -> [PadBrowsingItem] {
         Array(PadBrowsingHistoryStore.shared.all().prefix(limit))
     }
@@ -242,6 +253,17 @@ final class PadBrowserModel: NSObject, ObservableObject {
             defaults.set(data, forKey: "browser.session.snapshot")
         }
     }
+
+    private func captureThumbnail(for tab: Tab) {
+        let configuration = WKSnapshotConfiguration()
+        configuration.afterScreenUpdates = false
+        configuration.snapshotWidth = 280
+        tab.webView.takeSnapshot(with: configuration) { image, _ in
+            Task { @MainActor in
+                tab.thumbnail = image
+            }
+        }
+    }
 }
 
 extension PadBrowserModel: WKNavigationDelegate {
@@ -255,6 +277,7 @@ extension PadBrowserModel: WKNavigationDelegate {
             if let url = webView.url {
                 PadBrowsingHistoryStore.shared.recordVisit(url: url, title: tab.title)
             }
+            self.captureThumbnail(for: tab)
             if self.selectedTab === tab {
                 self.syncAddressBar()
             }

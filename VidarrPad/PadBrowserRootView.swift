@@ -138,7 +138,10 @@ struct PadBrowserRootView: View {
                     let gapX = ((fromEdge + toEdge) * 0.5) - (gap * 0.5)
                     let dimOpacity = transition.mode == .newTab ? 0.14 : 0.10
 
-                    PadWebView(webView: transition.fromTab.webView)
+                    PadWebView(
+                        webView: transition.fromTab.webView,
+                        gestureConfiguration: interactiveTargetID != nil ? gestureConfiguration : nil
+                    )
                         .id("from-\(transition.id)")
                         .ignoresSafeArea()
                         .offset(x: fromX)

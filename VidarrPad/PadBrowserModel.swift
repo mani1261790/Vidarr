@@ -68,9 +68,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func newTab(initialURL: URL? = nil, historyURLs: [URL] = [], historyIndex: Int = -1) {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = makeWebView()
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
@@ -172,18 +170,40 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     private func resolvedURL(from raw: String) -> URL {
         if let directURL = URL(string: raw), let scheme = directURL.scheme, ["http", "https"].contains(scheme.lowercased()) {
-            return directURL
+            return PadBrowserPreferences.shared.normalizedNavigableURL(from: directURL)
         }
         if raw.contains("."), let httpsURL = URL(string: "https://\(raw)") {
-            return httpsURL
+            return PadBrowserPreferences.shared.normalizedNavigableURL(from: httpsURL)
         }
-        return PadBrowserPreferences.shared.searchURL(for: raw)
+        return PadBrowserPreferences.shared.normalizedNavigableURL(from: PadBrowserPreferences.shared.searchURL(for: raw))
     }
 
     func refreshPreferences() {
+        let currentURL = selectedTab?.webView.url
+        let currentTabID = selectedTab?.id
+        let currentIndex = selectedIndex
+        let currentThumbnails = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0.thumbnail) })
+
+        tabs = tabs.map { oldTab in
+            let webView = makeWebView()
+            let newTab = Tab(webView: webView)
+            newTab.title = oldTab.title
+            newTab.urlString = oldTab.urlString
+            newTab.thumbnail = currentThumbnails[oldTab.id] ?? nil
+            newTab.historyURLs = oldTab.historyURLs
+            newTab.historyIndex = oldTab.historyIndex
+            webView.navigationDelegate = self
+            if let url = currentTabID == oldTab.id ? currentURL : URL(string: oldTab.urlString) {
+                webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: url)))
+            }
+            return newTab
+        }
+
         if tabs.isEmpty {
             newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
         } else {
+            selectedIndex = min(currentIndex, max(tabs.count - 1, 0))
+            syncAddressBar()
             saveSessionSnapshot()
         }
     }
@@ -279,9 +299,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
 
         for tabSnapshot in snapshot.tabs {
-            let configuration = WKWebViewConfiguration()
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-            let webView = WKWebView(frame: .zero, configuration: configuration)
+            let webView = makeWebView()
             let tab = Tab(webView: webView)
             tab.title = tabSnapshot.title
             tab.urlString = tabSnapshot.urlString ?? ""
@@ -298,7 +316,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 initialURL = nil
             }
             if let initialURL {
-                webView.load(URLRequest(url: initialURL))
+                webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: initialURL)))
             }
         }
 
@@ -333,6 +351,16 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 tab.thumbnail = image
             }
         }
+    }
+
+    private func makeWebView() -> WKWebView {
+        let prefs = PadBrowserPreferences.shared
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = prefs.allowsJavaScript
+        if prefs.cookiePolicy == .privateOnly {
+            configuration.websiteDataStore = .nonPersistent()
+        }
+        return WKWebView(frame: .zero, configuration: configuration)
     }
 
     private func syncTabHistory(for tab: Tab, currentURL: URL) {
@@ -374,6 +402,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
 }
 
 extension PadBrowserModel: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
+        if normalized != url {
+            webView.load(URLRequest(url: normalized))
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
             guard let self, let tab = self.tabs.first(where: { $0.webView === webView }) else { return }

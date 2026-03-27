@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct PadBrowserRootView: View {
     private struct TabSwitchTransition: Identifiable {
@@ -395,6 +396,26 @@ struct PadBrowserRootView: View {
 }
 
 private struct PadSettingsSheet: View {
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case general
+        case gestures
+        case privacy
+        case data
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .general: return "基本"
+            case .gestures: return "ジェスチャー"
+            case .privacy: return "プライバシー"
+            case .data: return "保存データ"
+            }
+        }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab: SettingsTab = .general
     @State private var homePageURLString = PadBrowserPreferences.shared.homePageURLString
     @State private var searchTemplate = PadBrowserPreferences.shared.searchTemplate
     @State private var preferredContentLanguage = PadBrowserPreferences.shared.preferredContentLanguage
@@ -402,52 +423,136 @@ private struct PadSettingsSheet: View {
     @State private var restoreClosedTabPageHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
     @State private var autoHideBottomBar = PadBrowserPreferences.shared.autoHideBottomBar
     @State private var bottomBarAutoHideDelay = PadBrowserPreferences.shared.bottomBarAutoHideDelay
+    @State private var allowsJavaScript = PadBrowserPreferences.shared.allowsJavaScript
+    @State private var preferHTTPS = PadBrowserPreferences.shared.preferHTTPS
+    @State private var stripTrackingParameters = PadBrowserPreferences.shared.stripTrackingParameters
+    @State private var harmfulSiteWarningEnabled = PadBrowserPreferences.shared.harmfulSiteWarningEnabled
+    @State private var cookiePolicy = PadBrowserPreferences.shared.cookiePolicy
+    @State private var historyCount = PadBrowsingHistoryStore.shared.all().count
+    @State private var bookmarkCount = PadBookmarkStore.shared.all().count
 
     let onDone: () -> Void
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("基本") {
-                    TextField("スタートページ", text: $homePageURLString)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("検索するときのURL", text: $searchTemplate)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Picker("Webページの表示言語", selection: $preferredContentLanguage) {
-                        ForEach(PadPreferredContentLanguage.allCases, id: \.self) { language in
-                            Text(language.displayName).tag(language)
-                        }
+            VStack(spacing: 0) {
+                Picker("設定", selection: $selectedTab) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
                     }
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
 
-                Section("ジェスチャー") {
-                    Picker("感度", selection: $gestureSensitivity) {
-                        ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
-                            Text(sensitivity.displayName).tag(sensitivity)
+                Form {
+                    switch selectedTab {
+                    case .general:
+                        Section("新しく開くページ") {
+                            TextField("スタートページのURL", text: $homePageURLString)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            LabeledContent("新規タブ") {
+                                Text("このURLを開く")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
-                }
 
-                Section("下部バー") {
-                    Toggle("自動で隠す", isOn: $autoHideBottomBar)
-                    if autoHideBottomBar {
-                        Picker("再表示までの時間", selection: $bottomBarAutoHideDelay) {
-                            ForEach(PadBottomBarAutoHideDelay.allCases, id: \.self) { delay in
-                                Text(delay.displayName).tag(delay)
+                        Section("検索") {
+                            TextField("検索するときのURL", text: $searchTemplate)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            Text("検索語は {query} に入ります。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Section("Webページの表示") {
+                            Picker("表示言語", selection: $preferredContentLanguage) {
+                                ForEach(PadPreferredContentLanguage.allCases, id: \.self) { language in
+                                    Text(language.displayName).tag(language)
+                                }
+                            }
+                            Toggle("JavaScript を使う", isOn: $allowsJavaScript)
+                            Toggle("HTTPS を優先する", isOn: $preferHTTPS)
+                        }
+
+                    case .gestures:
+                        Section("ジェスチャーの反応") {
+                            Picker("感度", selection: $gestureSensitivity) {
+                                ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
+                                    Text(sensitivity.displayName).tag(sensitivity)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
+                        Section("下部バー") {
+                            Toggle("自動で隠す", isOn: $autoHideBottomBar)
+                            if autoHideBottomBar {
+                                Picker("隠れるまでの時間", selection: $bottomBarAutoHideDelay) {
+                                    ForEach(PadBottomBarAutoHideDelay.allCases, id: \.self) { delay in
+                                        Text(delay.displayName).tag(delay)
+                                    }
+                                }
+                            }
+                        }
+
+                        Section("タブの復元") {
+                            Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
+                        }
+
+                    case .privacy:
+                        Section("プライバシー") {
+                            Picker("Cookie の扱い", selection: $cookiePolicy) {
+                                ForEach(PadCookiePolicy.allCases, id: \.self) { policy in
+                                    Text(policy.displayName).tag(policy)
+                                }
+                            }
+                            Toggle("URL 内の追跡パラメータを取り除く", isOn: $stripTrackingParameters)
+                            Toggle("危険なサイトを警告する", isOn: $harmfulSiteWarningEnabled)
+                        }
+                        Section("メモ") {
+                            Text("広告や追跡の強いブロック、サイトごとの権限管理、ダウンロード一覧は iPad 版で順次追加します。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                    case .data:
+                        Section("保存データ") {
+                            LabeledContent("履歴") {
+                                Text("\(historyCount)件")
+                            }
+                            LabeledContent("ブックマーク") {
+                                Text("\(bookmarkCount)件")
+                            }
+                        }
+                        Section("消去") {
+                            Button("履歴を削除") {
+                                PadBrowsingHistoryStore.shared.clear()
+                                historyCount = 0
+                            }
+                            Button("ブックマークを削除") {
+                                PadBookmarkStore.shared.clear()
+                                bookmarkCount = 0
+                            }
+                            Button("Cookie とキャッシュを削除") {
+                                Task {
+                                    await PadWebsiteDataCleaner.clearCookiesAndCache()
+                                }
                             }
                         }
                     }
                 }
-
-                Section("タブ") {
-                    Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
-                }
             }
             .navigationTitle("設定")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完了") {
                         PadBrowserPreferences.shared.homePageURLString = homePageURLString
@@ -457,11 +562,34 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.autoHideBottomBar = autoHideBottomBar
                         PadBrowserPreferences.shared.bottomBarAutoHideDelay = bottomBarAutoHideDelay
                         PadBrowserPreferences.shared.restoreClosedTabPageHistory = restoreClosedTabPageHistory
+                        PadBrowserPreferences.shared.allowsJavaScript = allowsJavaScript
+                        PadBrowserPreferences.shared.preferHTTPS = preferHTTPS
+                        PadBrowserPreferences.shared.stripTrackingParameters = stripTrackingParameters
+                        PadBrowserPreferences.shared.harmfulSiteWarningEnabled = harmfulSiteWarningEnabled
+                        PadBrowserPreferences.shared.cookiePolicy = cookiePolicy
                         onDone()
+                        dismiss()
                     }
                 }
             }
         }
+    }
+}
+
+private enum PadWebsiteDataCleaner {
+    static func clearCookiesAndCache() async {
+        let store = WKWebsiteDataStore.default()
+        let types: Set<String> = [
+            WKWebsiteDataTypeCookies,
+            WKWebsiteDataTypeDiskCache,
+            WKWebsiteDataTypeMemoryCache,
+            WKWebsiteDataTypeSessionStorage,
+            WKWebsiteDataTypeLocalStorage,
+            WKWebsiteDataTypeIndexedDBDatabases,
+            WKWebsiteDataTypeOfflineWebApplicationCache
+        ]
+        let records = await store.dataRecords(ofTypes: types)
+        await store.removeData(ofTypes: types, for: records)
     }
 }
 

@@ -44,6 +44,18 @@ enum PadPreferredContentLanguage: String, CaseIterable {
     }
 }
 
+enum PadCookiePolicy: String, CaseIterable {
+    case standard
+    case privateOnly
+
+    var displayName: String {
+        switch self {
+        case .standard: return "通常"
+        case .privateOnly: return "毎回プライベート"
+        }
+    }
+}
+
 enum PadBottomBarAutoHideDelay: String, CaseIterable {
     case short
     case normal
@@ -79,6 +91,11 @@ final class PadBrowserPreferences {
         static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
         static let autoHideBottomBar = "prefs.autoHideBottomBar"
         static let bottomBarAutoHideDelay = "prefs.bottomBarAutoHideDelay"
+        static let allowsJavaScript = "prefs.allowsJavaScript"
+        static let stripTrackingParameters = "prefs.stripTrackingParameters"
+        static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
+        static let preferHTTPS = "prefs.preferHTTPS"
+        static let cookiePolicy = "prefs.cookiePolicy"
     }
 
     private var defaults: UserDefaults {
@@ -168,6 +185,64 @@ final class PadBrowserPreferences {
         }
     }
 
+    var allowsJavaScript: Bool {
+        get {
+            if defaults.object(forKey: Key.allowsJavaScript) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.allowsJavaScript)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.allowsJavaScript)
+        }
+    }
+
+    var stripTrackingParameters: Bool {
+        get {
+            if defaults.object(forKey: Key.stripTrackingParameters) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.stripTrackingParameters)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.stripTrackingParameters)
+        }
+    }
+
+    var harmfulSiteWarningEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.harmfulSiteWarningEnabled) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.harmfulSiteWarningEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.harmfulSiteWarningEnabled)
+        }
+    }
+
+    var preferHTTPS: Bool {
+        get {
+            if defaults.object(forKey: Key.preferHTTPS) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.preferHTTPS)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.preferHTTPS)
+        }
+    }
+
+    var cookiePolicy: PadCookiePolicy {
+        get {
+            let raw = defaults.string(forKey: Key.cookiePolicy) ?? PadCookiePolicy.standard.rawValue
+            return PadCookiePolicy(rawValue: raw) ?? .standard
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.cookiePolicy)
+        }
+    }
+
     var homePageURL: URL {
         if let url = URL(string: homePageURLString), url.scheme != nil {
             return url
@@ -182,6 +257,41 @@ final class PadBrowserPreferences {
             : "\(searchTemplate)\(encodedQuery)"
         return URL(string: rawURL) ?? URL(string: "https://search.fenrir-inc.com/?q=\(encodedQuery)")!
     }
+
+    func normalizedNavigableURL(from url: URL) -> URL {
+        var normalized = url
+        if preferHTTPS,
+           normalized.scheme?.lowercased() == "http",
+           var components = URLComponents(url: normalized, resolvingAgainstBaseURL: false) {
+            components.scheme = "https"
+            if let httpsURL = components.url {
+                normalized = httpsURL
+            }
+        }
+
+        if stripTrackingParameters,
+           let scheme = normalized.scheme?.lowercased(),
+           scheme == "http" || scheme == "https",
+           var components = URLComponents(url: normalized, resolvingAgainstBaseURL: false),
+           let items = components.queryItems,
+           !items.isEmpty {
+            let filtered = items.filter { !Self.trackingQueryKeys.contains($0.name.lowercased()) }
+            if filtered.count != items.count {
+                components.queryItems = filtered.isEmpty ? nil : filtered
+                if let filteredURL = components.url {
+                    normalized = filteredURL
+                }
+            }
+        }
+
+        return normalized
+    }
+
+    private static let trackingQueryKeys: Set<String> = [
+        "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "mkt_tok",
+        "igshid", "yclid", "_openstat", "vero_conv", "vero_id", "wickedid",
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"
+    ]
 
     func userDefaultsForCurrentProfile() -> UserDefaults {
         let profile = currentProfile
@@ -230,6 +340,10 @@ final class PadBrowsingHistoryStore {
             defaults.set(data, forKey: Key.historyItems)
         }
     }
+
+    func clear() {
+        defaults.removeObject(forKey: Key.historyItems)
+    }
 }
 
 final class PadBookmarkStore {
@@ -267,5 +381,9 @@ final class PadBookmarkStore {
     func contains(url: URL?) -> Bool {
         guard let url else { return false }
         return all().contains { $0.urlString == url.absoluteString }
+    }
+
+    func clear() {
+        defaults.removeObject(forKey: Key.bookmarkItems)
     }
 }

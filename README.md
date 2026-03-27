@@ -49,24 +49,46 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 5. Run destination を `My Mac` にして `Run` (⌘R)
 
 ### 現在の実装状況
+
+ブラウザ本体:
 - [x] 起動時に `MainWindowController` が立ち上がり、`WKWebView` を表示
 - [x] 複数タブ管理（新規、前/次切替、現在閉じる、全閉じ、復元20件）
-- [x] 指定10ジェスチャーの認識とアクション実行
-- [x] ジェスチャー中HUD（候補+スコア）と確定表示
-- [x] 最小UI（上部アドレスバー + 中央WebView）
+- [x] 保護タブ、ブックマーク状態、タブ並び替え
 - [x] セッション復元（前回終了時のタブ状態を保存）
-- [x] ダウンロード対応と `Downloads` ウィンドウ
-- [x] ファイルアップロード用の `Open Panel` 対応
+- [x] ローカル `html / pdf / txt` の表示
+- [x] ダウンロード、ファイルアップロード、印刷、PDF書き出し
+
+ジェスチャー / UI:
+- [x] 指定ジェスチャーの認識とアクション実行
+- [x] ジェスチャーHUD表示
+- [x] 左右タブ切替と新規タブ生成のアニメーション
+- [x] 最小UI（上部ツールバー + タブバー + 中央WebView）
+- [x] 全画面時のツールバー自動非表示 / 再表示
+- [x] Preferences 内のジェスチャーテスト領域
+
+ページ互換性 / 安全性:
 - [x] JavaScript の `alert` / `confirm` / `prompt` 対応
-- [x] ページズーム、印刷、PDF書き出し
+- [x] ページズーム
 - [x] カメラ/マイク要求時の権限確認ダイアログ
 - [x] 読み込み失敗時の簡易エラーページ
 - [x] 勝手に開くポップアップ/新規タブの抑止
 - [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
-- [x] サイトごとの広告/追跡ブロック例外設定（Develop > Toggle Content Blocking for Current Site）
-- [x] Site Settings ウィンドウで例外ホストと保存済み権限を管理
-- [x] Downloads / History / Bookmarks ウィンドウの検索と基本操作
+- [x] サイトごとの広告/追跡ブロック例外設定
+- [x] `Privacy & Site Controls` で例外ホストと保存済み権限を管理
+
+データ管理:
+- [x] `Downloads / History / Bookmarks` ウィンドウ
+- [x] 検索、複数選択、右クリックメニュー、削除操作
+- [x] ダウンロード先フォルダ設定
+- [x] 閲覧データ削除、設定リセット
+- [x] プロファイル切替の土台実装
+
+開発基盤:
+- [x] `VidarrCore` 共有パッケージを追加
+- [x] `BrowserPreferences / BrowsingStores / GestureRecognizer` を `VidarrCore` に移設
 - [x] `GestureRecognizer` 単体テスト
+- [ ] iPad target 追加
+- [ ] iPad UI 実装
 
 ### テスト実行
 ```bash
@@ -93,6 +115,4 @@ git push origin v0.1.8
 
 ### Legal Notice
 - 本プロジェクトは Fenrir Inc.（フェンリル株式会社）とは一切関係ありません。
-- 本プロジェクトは Sleipnir への愛好に基づく非公式な個人プロジェクトです。
-- `Sleipnir` などの名称・ロゴ・関連商標は各権利者に帰属します。
 - 権利者（Fenrir Inc. 含む）から申し立て・要請があった場合、公開状態（public/private）を含め、速やかに対応します。

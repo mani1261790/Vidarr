@@ -4,6 +4,9 @@ struct PadBrowserRootView: View {
     @StateObject private var model = PadBrowserModel()
     @State private var isSettingsPresented = false
     @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var gestureHUD: PadGestureHUDState?
+    @State private var gestureHUDTask: Task<Void, Never>?
+    @FocusState private var addressFieldFocused: Bool
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -14,9 +17,29 @@ struct PadBrowserRootView: View {
                 detailToolbar
                 Divider()
                 if let tab = model.selectedTab {
-                    PadWebView(webView: tab.webView)
-                        .id(tab.id)
-                        .ignoresSafeArea(edges: .bottom)
+                    ZStack {
+                        PadWebView(webView: tab.webView)
+                            .id(tab.id)
+                            .ignoresSafeArea(edges: .bottom)
+                        PadGestureOverlay(
+                            sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
+                            onPreview: { state in
+                                withAnimation(.easeOut(duration: 0.16)) {
+                                    gestureHUD = state
+                                }
+                            },
+                            onCommit: { action in
+                                performGesture(action)
+                            },
+                            onCancel: {
+                                hideGestureHUD()
+                            }
+                        )
+                        if let gestureHUD {
+                            PadGestureHUD(state: gestureHUD)
+                                .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                        }
+                    }
                 } else {
                     ContentUnavailableView("No Tab", systemImage: "square.on.square")
                 }
@@ -33,8 +56,13 @@ struct PadBrowserRootView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Tabs")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tabs")
+                        .font(.headline)
+                    Text(PadBrowserPreferences.shared.currentProfile.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     model.newTab()
@@ -49,6 +77,29 @@ struct PadBrowserRootView: View {
             .padding(.bottom, 10)
 
             List(selection: selectedTabBinding) {
+                if !model.recentHistory().isEmpty {
+                    Section("Recent History") {
+                        ForEach(model.recentHistory()) { entry in
+                            Button {
+                                if let url = URL(string: entry.urlString) {
+                                    model.newTab(initialURL: url)
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(entry.title)
+                                        .lineLimit(1)
+                                    Text(URL(string: entry.urlString)?.host ?? entry.urlString)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Section("Open Tabs") {
                 ForEach(model.tabs) { tab in
                     PadTabRow(tab: tab, isSelected: model.selectedTab?.id == tab.id) {
                         model.selectTab(id: tab.id)
@@ -57,10 +108,14 @@ struct PadBrowserRootView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                }
             }
             .listStyle(.sidebar)
         }
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(
+            PadLiquidGlassBackground()
+                .ignoresSafeArea()
+        )
     }
 
     private var detailToolbar: some View {
@@ -83,8 +138,14 @@ struct PadBrowserRootView: View {
                 }
                 .buttonStyle(.bordered)
 
+                Button(action: model.toggleBookmarkForSelectedTab) {
+                    Image(systemName: model.selectedTab.map(model.isBookmarked) == true ? "star.fill" : "star")
+                }
+                .buttonStyle(.bordered)
+
                 TextField("Search or enter website name", text: $model.addressInput)
                     .textFieldStyle(.roundedBorder)
+                    .focused($addressFieldFocused)
                     .onSubmit {
                         model.commitAddressBar()
                     }
@@ -132,17 +193,100 @@ struct PadBrowserRootView: View {
         }
         .padding(.top, 14)
         .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
+        .background(PadLiquidGlassBackground())
     }
 
     private var selectedTabBinding: Binding<UUID?> {
         Binding(
-            get: { model.selectedTab?.id },
+            get: { model.selectedSidebarTabID },
             set: { newValue in
                 guard let newValue else { return }
                 model.selectTab(id: newValue)
             }
         )
+    }
+
+    private func performGesture(_ action: PadGestureAction) {
+        switch action {
+        case .previousTab:
+            model.selectPreviousTab()
+        case .nextTab:
+            model.selectNextTab()
+        case .closeTab:
+            if let id = model.selectedTab?.id {
+                model.closeTab(id: id)
+            }
+        case .closeAllTabs:
+            model.closeAllTabs()
+        case .restoreClosedTab:
+            model.restoreClosedTab()
+        case .reload:
+            model.reload()
+        case .back:
+            model.goBack()
+        case .forward:
+            model.goForward()
+        case .search:
+            addressFieldFocused = true
+        case .newTab:
+            model.newTab()
+        }
+        showCommittedGestureHUD(for: action)
+    }
+
+    private func showCommittedGestureHUD(for action: PadGestureAction) {
+        let committedState = PadGestureHUDState(
+            action: action,
+            title: title(for: action),
+            systemImageName: symbol(for: action),
+            confidence: 1,
+            isCommitted: true
+        )
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
+            gestureHUD = committedState
+        }
+        gestureHUDTask?.cancel()
+        gestureHUDTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(650))
+            hideGestureHUD()
+        }
+    }
+
+    private func hideGestureHUD() {
+        gestureHUDTask?.cancel()
+        withAnimation(.easeOut(duration: 0.16)) {
+            gestureHUD = nil
+        }
+    }
+
+    private func title(for action: PadGestureAction) -> String {
+        switch action {
+        case .previousTab: return "Previous Tab"
+        case .nextTab: return "Next Tab"
+        case .closeTab: return "Close Tab"
+        case .closeAllTabs: return "Close All Tabs"
+        case .restoreClosedTab: return "Restore Tab"
+        case .reload: return "Reload"
+        case .back: return "Back"
+        case .forward: return "Forward"
+        case .search: return "Search"
+        case .newTab: return "New Tab"
+        }
+    }
+
+    private func symbol(for action: PadGestureAction) -> String {
+        switch action {
+        case .previousTab: return "arrow.left.circle"
+        case .nextTab: return "arrow.right.circle"
+        case .closeTab: return "xmark.circle"
+        case .closeAllTabs: return "xmark.circle.fill"
+        case .restoreClosedTab: return "arrow.uturn.backward.circle"
+        case .reload: return "arrow.clockwise.circle"
+        case .back: return "arrow.uturn.backward"
+        case .forward: return "arrow.uturn.forward"
+        case .search: return "magnifyingglass.circle"
+        case .newTab: return "plus.circle"
+        }
     }
 }
 

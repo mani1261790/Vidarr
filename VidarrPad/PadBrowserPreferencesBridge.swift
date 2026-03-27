@@ -1,10 +1,41 @@
 import Foundation
+import CoreGraphics
 
 #if canImport(VidarrCore)
 import VidarrCore
 typealias PadBrowserPreferences = BrowserPreferences
 typealias PadPreferredContentLanguage = BrowserPreferences.PreferredContentLanguage
+typealias PadBrowserProfile = BrowserProfile
 #else
+struct PadBrowserProfile: Codable, Hashable, Identifiable {
+    let id: String
+    var name: String
+
+    static let `default` = PadBrowserProfile(id: "default", name: "Default")
+}
+
+enum PadGestureSensitivity: String, CaseIterable {
+    case low
+    case normal
+    case high
+
+    var displayName: String {
+        switch self {
+        case .low: return "Low"
+        case .normal: return "Normal"
+        case .high: return "High"
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .low: return 0.85
+        case .normal: return 1.0
+        case .high: return 1.18
+        }
+    }
+}
+
 enum PadPreferredContentLanguage: String, CaseIterable {
     case system
     case japanese
@@ -23,12 +54,36 @@ final class PadBrowserPreferences {
     static let shared = PadBrowserPreferences()
 
     private enum Key {
+        static let profiles = "profiles.items"
+        static let currentProfileID = "profiles.currentID"
         static let homePageURL = "prefs.homePageURL"
         static let searchTemplate = "prefs.searchTemplate"
         static let preferredContentLanguage = "prefs.preferredContentLanguage"
+        static let gestureSensitivity = "prefs.gestureSensitivity"
     }
 
-    private let defaults = UserDefaults.standard
+    private var defaults: UserDefaults {
+        userDefaultsForCurrentProfile()
+    }
+
+    var currentProfile: PadBrowserProfile {
+        let registryDefaults = UserDefaults.standard
+        let currentID = registryDefaults.string(forKey: Key.currentProfileID) ?? PadBrowserProfile.default.id
+        return allProfiles().first(where: { $0.id == currentID }) ?? .default
+    }
+
+    func allProfiles() -> [PadBrowserProfile] {
+        let registryDefaults = UserDefaults.standard
+        guard let data = registryDefaults.data(forKey: Key.profiles),
+              let decoded = try? JSONDecoder().decode([PadBrowserProfile].self, from: data),
+              !decoded.isEmpty else {
+            return [.default]
+        }
+        if decoded.contains(where: { $0.id == PadBrowserProfile.default.id }) {
+            return decoded
+        }
+        return [.default] + decoded
+    }
 
     var homePageURLString: String {
         get { defaults.string(forKey: Key.homePageURL) ?? "https://search.fenrir-inc.com/" }
@@ -50,6 +105,16 @@ final class PadBrowserPreferences {
         }
     }
 
+    var gestureSensitivity: PadGestureSensitivity {
+        get {
+            let raw = defaults.string(forKey: Key.gestureSensitivity) ?? PadGestureSensitivity.normal.rawValue
+            return PadGestureSensitivity(rawValue: raw) ?? .normal
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.gestureSensitivity)
+        }
+    }
+
     var homePageURL: URL {
         if let url = URL(string: homePageURLString), url.scheme != nil {
             return url
@@ -63,6 +128,92 @@ final class PadBrowserPreferences {
             ? searchTemplate.replacingOccurrences(of: "{query}", with: encodedQuery)
             : "\(searchTemplate)\(encodedQuery)"
         return URL(string: rawURL) ?? URL(string: "https://search.fenrir-inc.com/?q=\(encodedQuery)")!
+    }
+
+    func userDefaultsForCurrentProfile() -> UserDefaults {
+        let profile = currentProfile
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.mani.VidarrPad"
+        let suiteName = "\(bundleIdentifier).profile.\(profile.id)"
+        return UserDefaults(suiteName: suiteName) ?? .standard
+    }
+}
+
+struct PadBrowsingItem: Codable, Identifiable {
+    var id: String { urlString }
+    let urlString: String
+    var title: String
+    var visitedAt: Date
+}
+
+final class PadBrowsingHistoryStore {
+    static let shared = PadBrowsingHistoryStore()
+
+    private enum Key {
+        static let historyItems = "history.items"
+    }
+
+    private var defaults: UserDefaults {
+        PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
+    }
+
+    func all() -> [PadBrowsingItem] {
+        guard let data = defaults.data(forKey: Key.historyItems),
+              let decoded = try? JSONDecoder().decode([PadBrowsingItem].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    func recordVisit(url: URL, title: String?) {
+        var items = all()
+        let resolvedTitle = (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? (title ?? "") : (url.host ?? url.absoluteString)
+        let item = PadBrowsingItem(urlString: url.absoluteString, title: resolvedTitle, visitedAt: Date())
+        items.removeAll { $0.urlString == item.urlString }
+        items.insert(item, at: 0)
+        if items.count > 250 {
+            items.removeLast(items.count - 250)
+        }
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: Key.historyItems)
+        }
+    }
+}
+
+final class PadBookmarkStore {
+    static let shared = PadBookmarkStore()
+
+    private enum Key {
+        static let bookmarkItems = "bookmarks.items"
+    }
+
+    private var defaults: UserDefaults {
+        PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
+    }
+
+    func all() -> [PadBrowsingItem] {
+        guard let data = defaults.data(forKey: Key.bookmarkItems),
+              let decoded = try? JSONDecoder().decode([PadBrowsingItem].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    func toggle(url: URL, title: String?) {
+        var items = all()
+        if items.contains(where: { $0.urlString == url.absoluteString }) {
+            items.removeAll { $0.urlString == url.absoluteString }
+        } else {
+            let resolvedTitle = (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? (title ?? "") : (url.host ?? url.absoluteString)
+            items.insert(PadBrowsingItem(urlString: url.absoluteString, title: resolvedTitle, visitedAt: Date()), at: 0)
+        }
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: Key.bookmarkItems)
+        }
+    }
+
+    func contains(url: URL?) -> Bool {
+        guard let url else { return false }
+        return all().contains { $0.urlString == url.absoluteString }
     }
 }
 #endif

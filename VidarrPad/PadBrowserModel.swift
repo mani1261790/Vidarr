@@ -57,6 +57,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
 
     private var closedTabs: [ClosedTabSnapshot] = []
+    private let blankPageBaseURL = URL(string: "https://vidarr.local/blank")!
 
     override init() {
         super.init()
@@ -76,7 +77,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         tabs.firstIndex(where: { $0.id == id })
     }
 
-    func newTab(initialURL: URL? = nil, historyURLs: [URL] = [], historyIndex: Int = -1) {
+    func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1) {
         let webView = makeWebView()
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
@@ -87,8 +88,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         selectedIndex = tabs.count - 1
         selectedSidebarTabID = tab.id
         if let initialURL {
-            webView.load(URLRequest(url: initialURL))
+            load(initialURL, in: webView)
         } else {
+            loadBlankStartPage(in: webView)
             captureThumbnail(for: tab)
         }
         syncAddressBar()
@@ -141,7 +143,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard tab.historyIndex > 0 else { return }
         let targetIndex = tab.historyIndex - 1
         tab.pendingHistoryNavigationIndex = targetIndex
-        tab.webView.load(URLRequest(url: tab.historyURLs[targetIndex]))
+        load(tab.historyURLs[targetIndex], in: tab.webView)
     }
 
     func goForward() {
@@ -153,16 +155,25 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count - 1 else { return }
         let targetIndex = tab.historyIndex + 1
         tab.pendingHistoryNavigationIndex = targetIndex
-        tab.webView.load(URLRequest(url: tab.historyURLs[targetIndex]))
+        load(tab.historyURLs[targetIndex], in: tab.webView)
     }
 
     func reload() {
-        selectedTab?.webView.reload()
+        guard let tab = selectedTab else { return }
+        if let url = tab.webView.url ?? URL(string: tab.urlString) {
+            load(url, in: tab.webView)
+        } else {
+            loadBlankStartPage(in: tab.webView)
+        }
     }
 
     func reloadAllTabs() {
         for tab in tabs {
-            tab.webView.reload()
+            if let url = tab.webView.url ?? URL(string: tab.urlString) {
+                load(url, in: tab.webView)
+            } else {
+                loadBlankStartPage(in: tab.webView)
+            }
         }
     }
 
@@ -170,7 +181,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let trimmed = addressInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
-        selectedTab?.webView.load(URLRequest(url: url))
+        if let webView = selectedTab?.webView {
+            load(url, in: webView)
+        }
     }
 
     func syncAddressBar() {
@@ -203,7 +216,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             newTab.historyIndex = oldTab.historyIndex
             webView.navigationDelegate = self
             if let url = currentTabID == oldTab.id ? currentURL : URL(string: oldTab.urlString) {
-                webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: url)))
+                load(url, in: webView)
             }
             return newTab
         }
@@ -313,7 +326,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     func openHistoryItem(_ item: PadBrowsingItem) {
         guard let url = URL(string: item.urlString) else { return }
-        selectedTab?.webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: url)))
+        if let webView = selectedTab?.webView {
+            load(url, in: webView)
+        }
     }
 
     func openBookmarkItem(_ item: PadBrowsingItem) {
@@ -365,7 +380,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 initialURL = nil
             }
             if let initialURL {
-                webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: initialURL)))
+                load(initialURL, in: webView)
+            } else {
+                loadBlankStartPage(in: webView)
             }
         }
 
@@ -414,6 +431,68 @@ final class PadBrowserModel: NSObject, ObservableObject {
             configuration.websiteDataStore = .nonPersistent()
         }
         return WKWebView(frame: .zero, configuration: configuration)
+    }
+
+    private func load(_ url: URL, in webView: WKWebView) {
+        let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
+        if normalized.absoluteString == "about:blank" {
+            loadBlankStartPage(in: webView)
+            return
+        }
+        webView.load(URLRequest(url: normalized))
+    }
+
+    private func loadBlankStartPage(in webView: WKWebView) {
+        let home = PadBrowserPreferences.shared.homePageURL.absoluteString
+        let html = """
+        <!doctype html>
+        <html lang="ja">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>New Tab</title>
+        <style>
+        :root { color-scheme: light dark; }
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          background: linear-gradient(180deg, #eef3f9 0%, #f8fafc 100%);
+          color: #1f2937;
+        }
+        .card {
+          width: min(560px, calc(100vw - 48px));
+          padding: 30px 28px;
+          border-radius: 26px;
+          background: rgba(255,255,255,0.84);
+          box-shadow: 0 22px 54px rgba(15, 23, 42, 0.12);
+          backdrop-filter: blur(18px);
+        }
+        h1 { margin: 0 0 10px; font-size: 30px; }
+        p { margin: 0 0 12px; line-height: 1.6; color: #4b5563; }
+        a {
+          display: inline-block;
+          margin-top: 12px;
+          padding: 10px 14px;
+          border-radius: 12px;
+          text-decoration: none;
+          background: rgba(17,24,39,0.92);
+          color: white;
+          font-weight: 600;
+        }
+        </style>
+        <body>
+          <div class="card">
+            <h1>New Tab</h1>
+            <p>ページが指定されていないため、空白ではなく Vidarr の開始ページを開ける状態にしています。</p>
+            <p>下部バーからタブ切替や再読み込み、長押しで URL 編集ができます。</p>
+            <a href="\(home)">開始ページを開く</a>
+          </div>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(html, baseURL: blankPageBaseURL)
     }
 
     private func syncTabHistory(for tab: Tab, currentURL: URL) {
@@ -491,11 +570,14 @@ extension PadBrowserModel: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
             guard let self, let tab = self.tabs.first(where: { $0.webView === webView }) else { return }
-            tab.title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                ? (webView.title ?? "New Tab")
-                : (webView.url?.host ?? webView.url?.absoluteString ?? "New Tab")
-            tab.urlString = webView.url?.absoluteString ?? ""
-            if let url = webView.url {
+            let isInternalBlankPage = webView.url?.host == self.blankPageBaseURL.host
+            tab.title = isInternalBlankPage
+                ? "New Tab"
+                : (webView.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    ? (webView.title ?? "New Tab")
+                    : (webView.url?.host ?? webView.url?.absoluteString ?? "New Tab"))
+            tab.urlString = isInternalBlankPage ? "" : (webView.url?.absoluteString ?? "")
+            if let url = webView.url, !isInternalBlankPage {
                 self.syncTabHistory(for: tab, currentURL: url)
                 PadBrowsingHistoryStore.shared.recordVisit(url: url, title: tab.title)
             }

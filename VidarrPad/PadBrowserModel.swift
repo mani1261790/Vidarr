@@ -5,17 +5,7 @@ import WebKit
 
 @MainActor
 final class PadBrowserModel: NSObject, ObservableObject {
-    private enum PreferenceKey {
-        static let homePageURL = "prefs.homePageURL"
-        static let searchTemplate = "prefs.searchTemplate"
-    }
-
-    private enum LocalDefaults {
-        static let homePageURLString = "https://search.fenrir-inc.com/"
-        static let searchTemplate = "https://search.fenrir-inc.com/?q={query}"
-    }
-
-    final class Tab: NSObject, Identifiable {
+    final class Tab: NSObject, Identifiable, ObservableObject {
         let id = UUID()
         let webView: WKWebView
         @Published var title: String = "New Tab"
@@ -30,10 +20,11 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published private(set) var tabs: [Tab] = []
     @Published var selectedIndex: Int = 0
     @Published var addressInput: String = ""
+    @Published var navigationStateToken = UUID()
 
     override init() {
         super.init()
-        newTab(initialURL: resolvedHomePageURL())
+        newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
     }
 
     var selectedTab: Tab? {
@@ -51,6 +42,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
         selectedIndex = tabs.count - 1
         if let initialURL {
             webView.load(URLRequest(url: initialURL))
+        }
+        syncAddressBar()
+    }
+
+    func closeTab(id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs.remove(at: index)
+        if tabs.isEmpty {
+            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+            return
+        }
+        selectedIndex = min(selectedIndex, tabs.count - 1)
+        if index <= selectedIndex {
+            selectedIndex = max(0, selectedIndex - 1)
         }
         syncAddressBar()
     }
@@ -91,24 +96,21 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if raw.contains("."), let httpsURL = URL(string: "https://\(raw)") {
             return httpsURL
         }
-        return resolvedSearchURL(for: raw)
+        return PadBrowserPreferences.shared.searchURL(for: raw)
     }
 
-    private func resolvedHomePageURL() -> URL {
-        let storedValue = UserDefaults.standard.string(forKey: PreferenceKey.homePageURL) ?? LocalDefaults.homePageURLString
-        if let url = URL(string: storedValue), url.scheme != nil {
-            return url
+    func refreshPreferences() {
+        if tabs.isEmpty {
+            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
         }
-        return URL(string: LocalDefaults.homePageURLString)!
     }
 
-    private func resolvedSearchURL(for query: String) -> URL {
-        let template = UserDefaults.standard.string(forKey: PreferenceKey.searchTemplate) ?? LocalDefaults.searchTemplate
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        let rawURL = template.contains("{query}")
-            ? template.replacingOccurrences(of: "{query}", with: encodedQuery)
-            : "\(template)\(encodedQuery)"
-        return URL(string: rawURL) ?? URL(string: "\(LocalDefaults.searchTemplate.replacingOccurrences(of: "{query}", with: encodedQuery))")!
+    func canGoBack() -> Bool {
+        selectedTab?.webView.canGoBack ?? false
+    }
+
+    func canGoForward() -> Bool {
+        selectedTab?.webView.canGoForward ?? false
     }
 }
 
@@ -123,6 +125,13 @@ extension PadBrowserModel: WKNavigationDelegate {
             if self.selectedTab === tab {
                 self.syncAddressBar()
             }
+            self.navigationStateToken = UUID()
+        }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        Task { @MainActor [weak self] in
+            self?.navigationStateToken = UUID()
         }
     }
 }

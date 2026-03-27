@@ -338,26 +338,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = VidarrCore;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		BE1209A42F4F227E00CB4EE9 /* VidarrCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
-			productName = VidarrCore;
-		};
-		BE1209A52F4F227E00CB4EE9 /* VidarrCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
-			productName = VidarrCore;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCBuildConfiguration section */
 		3C233D9C2F4F228000CB4EE9 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -647,6 +627,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
@@ -673,6 +654,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
@@ -728,7 +710,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = VidarrCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		BE1209A42F4F227E00CB4EE9 /* VidarrCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
+			productName = VidarrCore;
+		};
+		BE1209A52F4F227E00CB4EE9 /* VidarrCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
+			productName = VidarrCore;
+		};
 		BE1209BB2F4F227E00CB4EE9 /* VidarrCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;

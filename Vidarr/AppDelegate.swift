@@ -581,7 +581,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 openDownloads: { [weak self] in self?.menuOpenDownloads() },
                 openHistory: { [weak self] in self?.menuOpenHistoryWindow() },
                 openBookmarks: { [weak self] in self?.menuOpenBookmarksWindow() },
-                openSiteControls: { [weak self] in self?.menuOpenSiteSettings() }
+                openSiteControls: { [weak self] in self?.menuOpenSiteSettings() },
+                switchProfile: { [weak self] profileID in self?.switchProfileLive(to: profileID) ?? false }
             )
         }
         preferencesWindowController?.showWindow(self)
@@ -589,6 +590,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func switchProfileLive(to profileID: String) -> Bool {
+        guard profileID != BrowserProfileManager.shared.currentProfile.id else { return true }
+
+        mainWindowController?.saveSessionSnapshot()
+        guard BrowserProfileManager.shared.switchToProfile(id: profileID) != nil else { return false }
+        BrowserProfileManager.shared.applyCurrentProfile()
+
+        let oldController = mainWindowController
+        let previousFrame = oldController?.window?.frame
+
+        let newController = MainWindowController()
+        mainWindowController = newController
+        newController.restoreSavedSessionIfAvailable()
+        newController.showWindow(self)
+        if let previousFrame {
+            newController.window?.setFrame(previousFrame, display: true)
+        }
+        newController.window?.makeKeyAndOrderFront(nil)
+        oldController?.close()
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
 
 }
 
@@ -610,6 +633,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
+    private let switchProfileAction: (String) -> Bool
     private weak var rootLayoutView: NSView?
     private weak var tabView: NSTabView?
 
@@ -648,12 +672,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openDownloads: @escaping () -> Void,
         openHistory: @escaping () -> Void,
         openBookmarks: @escaping () -> Void,
-        openSiteControls: @escaping () -> Void
+        openSiteControls: @escaping () -> Void,
+        switchProfile: @escaping (String) -> Bool
     ) {
         self.openDownloadsAction = openDownloads
         self.openHistoryAction = openHistory
         self.openBookmarksAction = openBookmarks
         self.openSiteControlsAction = openSiteControls
+        self.switchProfileAction = switchProfile
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.preferredContentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -1229,12 +1255,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         guard index >= 0, index < profileManager.profiles.count else { return }
         let profile = profileManager.profiles[index]
         guard profile.id != profileManager.currentProfile.id else { return }
-        _ = profileManager.switchToProfile(id: profile.id)
+        guard switchProfileAction(profile.id) else {
+            loadValues()
+            return
+        }
 
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "プロファイルを切り替えました"
-        alert.informativeText = "新しいプロファイルは次回起動時から反映されます。iPad / iPhone 共有の土台として、設定や履歴をプロファイルごとに分ける準備です。"
+        alert.informativeText = "切り替えはすぐ反映されました。設定、履歴、ブックマーク、セッションはプロファイルごとに分離されます。"
         alert.addButton(withTitle: "OK")
         if let window {
             alert.beginSheetModal(for: window)
@@ -1258,7 +1287,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
             let profile = self.profileManager.createProfile(named: field.stringValue)
-            _ = self.profileManager.switchToProfile(id: profile.id)
+            _ = self.switchProfileAction(profile.id)
             self.loadValues()
         }
 

@@ -2,6 +2,14 @@ import SwiftUI
 import WebKit
 
 struct PadBrowserRootView: View {
+    enum LibraryPanel: String, Identifiable {
+        case history
+        case bookmarks
+        case downloads
+
+        var id: String { rawValue }
+    }
+
     private struct TabSwitchTransition: Identifiable {
         let id = UUID()
         let fromTab: PadBrowserModel.Tab
@@ -17,6 +25,7 @@ struct PadBrowserRootView: View {
     @State private var editingTabID: UUID?
     @State private var editingURL = ""
     @State private var showingSettings = false
+    @State private var activeLibraryPanel: LibraryPanel?
     @State private var tabSwitchTransition: TabSwitchTransition?
     @State private var tabSwitchProgress: CGFloat = 0
     @State private var tabSwitchToken = UUID()
@@ -58,6 +67,9 @@ struct PadBrowserRootView: View {
         }
         .sheet(isPresented: $showingSettings) {
             PadSettingsSheet(
+                onOpenHistory: { activeLibraryPanel = .history },
+                onOpenBookmarks: { activeLibraryPanel = .bookmarks },
+                onOpenDownloads: { activeLibraryPanel = .downloads },
                 onDone: {
                     model.refreshPreferences()
                     showingSettings = false
@@ -65,6 +77,26 @@ struct PadBrowserRootView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $activeLibraryPanel) { panel in
+            PadLibraryPanelSheet(
+                panel: panel,
+                model: model
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .alert(item: $model.pendingHarmfulSitePrompt) { prompt in
+            Alert(
+                title: Text(prompt.title),
+                message: Text(prompt.message),
+                primaryButton: .default(Text("続行")) {
+                    model.continueToHarmfulSite(permanentlyAllow: false)
+                },
+                secondaryButton: .destructive(Text("常に許可")) {
+                    model.continueToHarmfulSite(permanentlyAllow: true)
+                }
+            )
         }
         .onAppear {
             scheduleBottomBarAutoHide()
@@ -431,6 +463,9 @@ private struct PadSettingsSheet: View {
     @State private var historyCount = PadBrowsingHistoryStore.shared.all().count
     @State private var bookmarkCount = PadBookmarkStore.shared.all().count
 
+    let onOpenHistory: () -> Void
+    let onOpenBookmarks: () -> Void
+    let onOpenDownloads: () -> Void
     let onDone: () -> Void
 
     var body: some View {
@@ -528,6 +563,20 @@ private struct PadSettingsSheet: View {
                                 Text("\(bookmarkCount)件")
                             }
                         }
+                        Section("一覧を開く") {
+                            Button("履歴を見る") {
+                                dismiss()
+                                onOpenHistory()
+                            }
+                            Button("ブックマークを見る") {
+                                dismiss()
+                                onOpenBookmarks()
+                            }
+                            Button("ダウンロードを見る") {
+                                dismiss()
+                                onOpenDownloads()
+                            }
+                        }
                         Section("消去") {
                             Button("履歴を削除") {
                                 PadBrowsingHistoryStore.shared.clear()
@@ -590,6 +639,117 @@ private enum PadWebsiteDataCleaner {
         ]
         let records = await store.dataRecords(ofTypes: types)
         await store.removeData(ofTypes: types, for: records)
+    }
+}
+
+private struct PadLibraryPanelSheet: View {
+    let panel: PadBrowserRootView.LibraryPanel
+    @ObservedObject var model: PadBrowserModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                switch panel {
+                case .history:
+                    ForEach(filteredHistory) { item in
+                        Button {
+                            model.openHistoryItem(item)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title).font(.headline).lineLimit(1)
+                                Text(item.urlString).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                    }
+                    .onDelete { offsets in
+                        let ids = Set(offsets.map { filteredHistory[$0].id })
+                        model.removeHistoryItems(ids)
+                    }
+
+                case .bookmarks:
+                    ForEach(filteredBookmarks) { item in
+                        Button {
+                            model.openBookmarkItem(item)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title).font(.headline).lineLimit(1)
+                                Text(item.urlString).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                    }
+                    .onDelete { offsets in
+                        let ids = Set(offsets.map { filteredBookmarks[$0].id })
+                        model.removeBookmarkItems(ids)
+                    }
+
+                case .downloads:
+                    ForEach(filteredDownloads) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.destinationURL.lastPathComponent)
+                                .font(.headline)
+                                .lineLimit(1)
+                            Text(item.sourceURL?.host ?? item.sourceURLString)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            ShareLink(item: item.destinationURL) {
+                                Label("開く / 共有", systemImage: "square.and.arrow.up")
+                                    .font(.footnote)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .searchable(text: $searchText, prompt: searchPrompt)
+            .navigationTitle(navigationTitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch panel {
+        case .history: return "履歴"
+        case .bookmarks: return "ブックマーク"
+        case .downloads: return "ダウンロード"
+        }
+    }
+
+    private var searchPrompt: String {
+        switch panel {
+        case .history: return "履歴を検索"
+        case .bookmarks: return "ブックマークを検索"
+        case .downloads: return "ダウンロードを検索"
+        }
+    }
+
+    private var filteredHistory: [PadBrowsingItem] {
+        let items = model.allHistory()
+        guard !searchText.isEmpty else { return items }
+        return items.filter { $0.title.localizedCaseInsensitiveContains(searchText) || $0.urlString.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var filteredBookmarks: [PadBrowsingItem] {
+        let items = model.allBookmarks()
+        guard !searchText.isEmpty else { return items }
+        return items.filter { $0.title.localizedCaseInsensitiveContains(searchText) || $0.urlString.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var filteredDownloads: [PadDownloadItem] {
+        let items = model.allDownloads()
+        guard !searchText.isEmpty else { return items }
+        return items.filter {
+            $0.destinationURL.lastPathComponent.localizedCaseInsensitiveContains(searchText) ||
+            $0.sourceURLString.localizedCaseInsensitiveContains(searchText)
+        }
     }
 }
 

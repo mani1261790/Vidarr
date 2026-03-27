@@ -6,6 +6,14 @@ import WebKit
 
 @MainActor
 final class PadBrowserModel: NSObject, ObservableObject {
+    struct HarmfulSitePrompt: Identifiable {
+        let id = UUID()
+        let url: URL
+        let host: String
+        let title: String
+        let message: String
+    }
+
     private struct SessionTabSnapshot: Codable {
         let urlString: String?
         let title: String
@@ -46,6 +54,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published var addressInput: String = ""
     @Published var navigationStateToken = UUID()
     @Published var selectedSidebarTabID: UUID?
+    @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
 
     private var closedTabs: [ClosedTabSnapshot] = []
 
@@ -290,6 +299,42 @@ final class PadBrowserModel: NSObject, ObservableObject {
         Array(PadBrowsingHistoryStore.shared.all().prefix(limit))
     }
 
+    func allHistory() -> [PadBrowsingItem] {
+        PadBrowsingHistoryStore.shared.all()
+    }
+
+    func allBookmarks() -> [PadBrowsingItem] {
+        PadBookmarkStore.shared.all()
+    }
+
+    func allDownloads() -> [PadDownloadItem] {
+        PadDownloadStore.shared.all()
+    }
+
+    func openHistoryItem(_ item: PadBrowsingItem) {
+        guard let url = URL(string: item.urlString) else { return }
+        selectedTab?.webView.load(URLRequest(url: PadBrowserPreferences.shared.normalizedNavigableURL(from: url)))
+    }
+
+    func openBookmarkItem(_ item: PadBrowsingItem) {
+        openHistoryItem(item)
+    }
+
+    func removeHistoryItems(_ ids: Set<String>) {
+        let remaining = PadBrowsingHistoryStore.shared.all().filter { !ids.contains($0.id) }
+        if let data = try? JSONEncoder().encode(remaining) {
+            PadBrowserPreferences.shared.userDefaultsForCurrentProfile().set(data, forKey: "history.items")
+        }
+    }
+
+    func removeBookmarkItems(_ ids: Set<String>) {
+        let remaining = PadBookmarkStore.shared.all().filter { !ids.contains($0.id) }
+        if let data = try? JSONEncoder().encode(remaining) {
+            PadBrowserPreferences.shared.userDefaultsForCurrentProfile().set(data, forKey: "bookmarks.items")
+        }
+        navigationStateToken = UUID()
+    }
+
     private func restoreSessionIfAvailable() {
         let defaults = PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
         guard let data = defaults.data(forKey: "browser.session.snapshot"),
@@ -407,9 +452,28 @@ extension PadBrowserModel: WKNavigationDelegate {
             decisionHandler(.allow)
             return
         }
+
+        if let warning = harmfulSiteWarning(for: url),
+           PadBrowserPreferences.shared.harmfulSiteAllowedHosts.contains(warning.host) == false {
+            pendingHarmfulSitePrompt = warning
+            decisionHandler(.cancel)
+            return
+        }
+
         let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
         if normalized != url {
             webView.load(URLRequest(url: normalized))
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if !navigationResponse.canShowMIMEType {
+            if let sourceURL = navigationResponse.response.url {
+                startDownload(for: sourceURL)
+            }
             decisionHandler(.cancel)
             return
         }
@@ -441,4 +505,83 @@ extension PadBrowserModel: WKNavigationDelegate {
             self?.navigationStateToken = UUID()
         }
     }
+}
+
+extension PadBrowserModel {
+    func harmfulSiteWarning(for url: URL) -> HarmfulSitePrompt? {
+        guard PadBrowserPreferences.shared.harmfulSiteWarningEnabled,
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased() else {
+            return nil
+        }
+
+        if Self.harmfulHosts.contains(host) || Self.harmfulTLDs.contains(where: { host.hasSuffix(".\($0)") }) {
+            return HarmfulSitePrompt(
+                url: url,
+                host: host,
+                title: "注意が必要なサイトの可能性があります",
+                message: "\(host) は危険な配布や追跡に使われやすい傾向があります。"
+            )
+        }
+        return nil
+    }
+
+    func continueToHarmfulSite(permanentlyAllow: Bool) {
+        guard let prompt = pendingHarmfulSitePrompt else { return }
+        if permanentlyAllow {
+            PadBrowserPreferences.shared.setHarmfulSiteAllowed(true, for: prompt.host)
+        }
+        pendingHarmfulSitePrompt = nil
+        selectedTab?.webView.load(URLRequest(url: prompt.url))
+    }
+
+    func dismissHarmfulSitePrompt() {
+        pendingHarmfulSitePrompt = nil
+    }
+
+    func startDownload(for url: URL) {
+        let fileManager = FileManager.default
+        let downloadsRoot = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Downloads", isDirectory: true)
+        guard let directory = downloadsRoot else { return }
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let suggestedName = url.lastPathComponent.isEmpty ? "download" : url.lastPathComponent
+        let destination = availableDestinationURL(in: directory, suggestedFilename: suggestedName)
+        let task = URLSession.shared.downloadTask(with: url) { tempURL, _, _ in
+            guard let tempURL else { return }
+            try? fileManager.removeItem(at: destination)
+            do {
+                try fileManager.moveItem(at: tempURL, to: destination)
+                Task { @MainActor in
+                    PadDownloadStore.shared.add(sourceURL: url, destinationURL: destination)
+                }
+            } catch {
+                return
+            }
+        }
+        task.resume()
+    }
+
+    func availableDestinationURL(in directory: URL, suggestedFilename: String) -> URL {
+        let fileManager = FileManager.default
+        let baseName = (suggestedFilename as NSString).deletingPathExtension
+        let ext = (suggestedFilename as NSString).pathExtension
+        var candidate = directory.appendingPathComponent(suggestedFilename)
+        var suffix = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            let filename = ext.isEmpty ? "\(baseName) \(suffix)" : "\(baseName) \(suffix).\(ext)"
+            candidate = directory.appendingPathComponent(filename)
+            suffix += 1
+        }
+        return candidate
+    }
+
+    static let harmfulHosts: Set<String> = [
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com", "adservice.google.com",
+        "adservice.google.co.jp", "amazon-adsystem.com", "connect.facebook.net", "bat.bing.com",
+        "taboola.com", "outbrain.com", "adf.ly", "bit.ly", "tinyurl.com"
+    ]
+
+    static let harmfulTLDs: Set<String> = ["zip", "mov", "click", "country", "gq", "work", "download", "stream"]
 }

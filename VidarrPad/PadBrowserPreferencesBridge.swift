@@ -96,6 +96,7 @@ final class PadBrowserPreferences {
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let preferHTTPS = "prefs.preferHTTPS"
         static let cookiePolicy = "prefs.cookiePolicy"
+        static let harmfulSiteAllowedHosts = "prefs.harmfulSiteAllowedHosts"
     }
 
     private var defaults: UserDefaults {
@@ -243,6 +244,11 @@ final class PadBrowserPreferences {
         }
     }
 
+    var harmfulSiteAllowedHosts: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.harmfulSiteAllowedHosts) ?? []) }
+        set { defaults.set(Array(newValue).sorted(), forKey: Key.harmfulSiteAllowedHosts) }
+    }
+
     var homePageURL: URL {
         if let url = URL(string: homePageURLString), url.scheme != nil {
             return url
@@ -298,6 +304,16 @@ final class PadBrowserPreferences {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.mani.VidarrPad"
         let suiteName = "\(bundleIdentifier).profile.\(profile.id)"
         return UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
+    func setHarmfulSiteAllowed(_ allowed: Bool, for host: String) {
+        var hosts = harmfulSiteAllowedHosts
+        if allowed {
+            hosts.insert(host.lowercased())
+        } else {
+            hosts.remove(host.lowercased())
+        }
+        harmfulSiteAllowedHosts = hosts
     }
 }
 
@@ -385,5 +401,65 @@ final class PadBookmarkStore {
 
     func clear() {
         defaults.removeObject(forKey: Key.bookmarkItems)
+    }
+}
+
+struct PadDownloadItem: Codable, Identifiable {
+    var id: String { destinationPath }
+    let sourceURLString: String
+    let destinationPath: String
+    let createdAt: Date
+
+    var sourceURL: URL? { URL(string: sourceURLString) }
+    var destinationURL: URL { URL(fileURLWithPath: destinationPath) }
+}
+
+final class PadDownloadStore {
+    static let shared = PadDownloadStore()
+
+    private enum Key {
+        static let items = "downloads.items"
+    }
+
+    private var defaults: UserDefaults {
+        PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
+    }
+
+    func all() -> [PadDownloadItem] {
+        guard let data = defaults.data(forKey: Key.items),
+              let decoded = try? JSONDecoder().decode([PadDownloadItem].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    func add(sourceURL: URL?, destinationURL: URL) {
+        var items = all()
+        let item = PadDownloadItem(
+            sourceURLString: sourceURL?.absoluteString ?? destinationURL.absoluteString,
+            destinationPath: destinationURL.path,
+            createdAt: Date()
+        )
+        items.removeAll { $0.destinationPath == item.destinationPath }
+        items.insert(item, at: 0)
+        if items.count > 100 {
+            items.removeLast(items.count - 100)
+        }
+        persist(items)
+    }
+
+    func clear() {
+        defaults.removeObject(forKey: Key.items)
+    }
+
+    func remove(destinationPaths: Set<String>) {
+        var items = all()
+        items.removeAll { destinationPaths.contains($0.destinationPath) }
+        persist(items)
+    }
+
+    private func persist(_ items: [PadDownloadItem]) {
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        defaults.set(data, forKey: Key.items)
     }
 }

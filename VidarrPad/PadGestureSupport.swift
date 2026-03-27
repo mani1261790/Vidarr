@@ -81,6 +81,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private var latestTimestamp: TimeInterval = 0
     private var currentViewWidth: CGFloat = 0
     private var activeHorizontalAction: PadGestureAction?
+    private var suppressHorizontalCancelOnReset = false
 
     private lazy var recognizer = PadGestureRecognizer(
         matchScoreThreshold: config.matchScoreThreshold,
@@ -320,6 +321,10 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if let result = strict ?? relaxed,
            let action = mapAction(name: result.name)
         {
+            if action == .previousTab || action == .nextTab {
+                suppressHorizontalCancelOnReset = true
+                activeHorizontalAction = nil
+            }
             onCommit(action)
             return
         }
@@ -488,7 +493,11 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         lastLiveCandidate = nil
         captureInvalidated = false
         captureHasStrongVerticalComponent = false
-        cancelHorizontalSwipePreviewIfNeeded()
+        if suppressHorizontalCancelOnReset {
+            suppressHorizontalCancelOnReset = false
+        } else {
+            cancelHorizontalSwipePreviewIfNeeded()
+        }
         onPreview(nil)
     }
 

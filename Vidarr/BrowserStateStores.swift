@@ -12,7 +12,7 @@ struct DownloadItem: Codable {
 }
 
 final class DownloadStore {
-    static let shared = DownloadStore()
+    static var shared = DownloadStore()
     static let didChangeNotification = Notification.Name("DownloadStoreDidChange")
 
     private enum Key {
@@ -31,6 +31,11 @@ final class DownloadStore {
         } else {
             items = []
         }
+    }
+
+    static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = DownloadStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
     }
 
     func add(sourceURL: URL?, destinationURL: URL) {
@@ -70,7 +75,7 @@ final class DownloadStore {
 }
 
 final class BrowserSessionStore {
-    static let shared = BrowserSessionStore()
+    static var shared = BrowserSessionStore()
 
     private enum Key {
         static let snapshot = "browser.session.snapshot"
@@ -80,6 +85,10 @@ final class BrowserSessionStore {
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = BrowserSessionStore(defaults: defaults)
     }
 
     func save(_ snapshot: BrowserSessionSnapshot) {
@@ -115,7 +124,7 @@ struct StoredMediaPermission {
 }
 
 final class MediaPermissionStore {
-    static let shared = MediaPermissionStore()
+    static var shared = MediaPermissionStore()
     static let didChangeNotification = Notification.Name("MediaPermissionStoreDidChange")
 
     private enum Key {
@@ -133,6 +142,11 @@ final class MediaPermissionStore {
         } else {
             decisions = [:]
         }
+    }
+
+    static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = MediaPermissionStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
     }
 
     func decision(for host: String, kind: MediaPermissionKind) -> MediaPermissionDecision? {

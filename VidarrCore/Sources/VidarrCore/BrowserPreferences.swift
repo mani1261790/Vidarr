@@ -140,9 +140,14 @@ public final class BrowserPreferences {
     public func preferredDownloadDirectoryURL() -> URL? {
         guard let data = defaults.data(forKey: Key.preferredDownloadDirectoryBookmark) else { return nil }
         var isStale = false
+#if os(macOS)
+        let resolutionOptions: URL.BookmarkResolutionOptions = [.withSecurityScope]
+#else
+        let resolutionOptions: URL.BookmarkResolutionOptions = []
+#endif
         guard let url = try? URL(
             resolvingBookmarkData: data,
-            options: [.withSecurityScope],
+            options: resolutionOptions,
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else {
@@ -157,7 +162,12 @@ public final class BrowserPreferences {
     @discardableResult
     public func setPreferredDownloadDirectory(_ url: URL?) throws -> URL? {
         if let url {
-            let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+#if os(macOS)
+            let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+#else
+            let bookmarkOptions: URL.BookmarkCreationOptions = []
+#endif
+            let bookmark = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
             defaults.set(bookmark, forKey: Key.preferredDownloadDirectoryBookmark)
             defaults.set(url.path, forKey: Key.preferredDownloadDirectoryPath)
             notifyChanged()

@@ -88,6 +88,7 @@ struct TabGroupSessionSnapshot: Codable {
 }
 
 struct BrowserSessionSnapshot: Codable {
+    let profileID: String?
     let currentGroup: BrowserTabGroup
     let groups: [TabGroupSessionSnapshot]
 }
@@ -584,7 +585,7 @@ final class TabManager {
         }
     }
 
-    func sessionSnapshot() -> BrowserSessionSnapshot {
+    func sessionSnapshot(profileID: String? = nil) -> BrowserSessionSnapshot {
         let groups = BrowserTabGroup.allCases.compactMap { group -> TabGroupSessionSnapshot? in
             guard group != .privateMode else { return nil }
             let state = state(for: group)
@@ -604,7 +605,7 @@ final class TabManager {
             )
         }
         let persistedCurrentGroup: BrowserTabGroup = currentGroup == .privateMode ? .regular : currentGroup
-        return BrowserSessionSnapshot(currentGroup: persistedCurrentGroup, groups: groups)
+        return BrowserSessionSnapshot(profileID: profileID, currentGroup: persistedCurrentGroup, groups: groups)
     }
 
     func restoreSession(from snapshot: BrowserSessionSnapshot) {

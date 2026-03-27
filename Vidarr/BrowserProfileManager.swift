@@ -45,6 +45,9 @@ final class BrowserProfileManager {
         BrowserPreferences.useSharedDefaults(suiteDefaults)
         BrowsingHistoryStore.useSharedDefaults(suiteDefaults)
         BookmarkStore.useSharedDefaults(suiteDefaults)
+        DownloadStore.useSharedDefaults(suiteDefaults)
+        BrowserSessionStore.useSharedDefaults(suiteDefaults)
+        MediaPermissionStore.useSharedDefaults(suiteDefaults)
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 

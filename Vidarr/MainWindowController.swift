@@ -992,11 +992,17 @@ final class MainWindowController: NSWindowController {
 
     func restoreSavedSessionIfAvailable() {
         guard let snapshot = BrowserSessionStore.shared.load() else { return }
+        let currentProfileID = BrowserProfileManager.shared.currentProfile.id
+        if let snapshotProfileID = snapshot.profileID, snapshotProfileID != currentProfileID {
+            return
+        }
         tabManager.restoreSession(from: snapshot)
     }
 
     func saveSessionSnapshot() {
-        BrowserSessionStore.shared.save(tabManager.sessionSnapshot())
+        BrowserSessionStore.shared.save(
+            tabManager.sessionSnapshot(profileID: BrowserProfileManager.shared.currentProfile.id)
+        )
     }
 
     @objc private func tabSearchDidChange(_ sender: NSSearchField) {

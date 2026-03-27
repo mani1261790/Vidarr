@@ -9,6 +9,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private struct SessionTabSnapshot: Codable {
         let urlString: String?
         let title: String
+        let historyURLStrings: [String]
+        let historyIndex: Int
     }
 
     private struct SessionSnapshot: Codable {
@@ -22,6 +24,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         @Published var title: String = "New Tab"
         @Published var urlString: String = ""
         @Published var thumbnail: UIImage?
+        var historyURLs: [URL] = []
+        var historyIndex: Int = -1
+        var pendingHistoryNavigationIndex: Int?
 
         init(webView: WKWebView) {
             self.webView = webView
@@ -32,6 +37,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
     struct ClosedTabSnapshot {
         let url: URL?
         let title: String
+        let historyURLs: [URL]
+        let historyIndex: Int
     }
 
     @Published private(set) var tabs: [Tab] = []
@@ -56,12 +63,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
         return tabs[selectedIndex]
     }
 
-    func newTab(initialURL: URL? = nil) {
+    func tabIndex(for id: UUID) -> Int? {
+        tabs.firstIndex(where: { $0.id == id })
+    }
+
+    func newTab(initialURL: URL? = nil, historyURLs: [URL] = [], historyIndex: Int = -1) {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         let webView = WKWebView(frame: .zero, configuration: configuration)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
+        let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
+        tab.historyURLs = resolvedHistory
+        tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
         tabs.append(tab)
         selectedIndex = tabs.count - 1
         selectedSidebarTabID = tab.id
@@ -77,7 +91,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func closeTab(id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs[index]
-        closedTabs.insert(ClosedTabSnapshot(url: URL(string: tab.urlString), title: tab.title), at: 0)
+        closedTabs.insert(
+            ClosedTabSnapshot(
+                url: URL(string: tab.urlString),
+                title: tab.title,
+                historyURLs: tab.historyURLs,
+                historyIndex: tab.historyIndex
+            ),
+            at: 0
+        )
         if closedTabs.count > 20 {
             closedTabs.removeLast(closedTabs.count - 20)
         }
@@ -104,15 +126,37 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func goBack() {
-        selectedTab?.webView.goBack()
+        guard let tab = selectedTab else { return }
+        if tab.webView.canGoBack {
+            tab.webView.goBack()
+            return
+        }
+        guard tab.historyIndex > 0 else { return }
+        let targetIndex = tab.historyIndex - 1
+        tab.pendingHistoryNavigationIndex = targetIndex
+        tab.webView.load(URLRequest(url: tab.historyURLs[targetIndex]))
     }
 
     func goForward() {
-        selectedTab?.webView.goForward()
+        guard let tab = selectedTab else { return }
+        if tab.webView.canGoForward {
+            tab.webView.goForward()
+            return
+        }
+        guard tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count - 1 else { return }
+        let targetIndex = tab.historyIndex + 1
+        tab.pendingHistoryNavigationIndex = targetIndex
+        tab.webView.load(URLRequest(url: tab.historyURLs[targetIndex]))
     }
 
     func reload() {
         selectedTab?.webView.reload()
+    }
+
+    func reloadAllTabs() {
+        for tab in tabs {
+            tab.webView.reload()
+        }
     }
 
     func commitAddressBar() {
@@ -145,7 +189,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func closeAllTabs() {
-        let snapshots = tabs.map { ClosedTabSnapshot(url: URL(string: $0.urlString), title: $0.title) }
+        let snapshots = tabs.map {
+            ClosedTabSnapshot(
+                url: URL(string: $0.urlString),
+                title: $0.title,
+                historyURLs: $0.historyURLs,
+                historyIndex: $0.historyIndex
+            )
+        }
         closedTabs.insert(contentsOf: snapshots.reversed(), at: 0)
         if closedTabs.count > 20 {
             closedTabs.removeLast(closedTabs.count - 20)
@@ -157,7 +208,12 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func restoreClosedTab() {
         guard let snapshot = closedTabs.first else { return }
         closedTabs.removeFirst()
-        newTab(initialURL: snapshot.url ?? PadBrowserPreferences.shared.homePageURL)
+        let shouldRestoreHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
+        newTab(
+            initialURL: snapshot.url ?? PadBrowserPreferences.shared.homePageURL,
+            historyURLs: shouldRestoreHistory ? snapshot.historyURLs : [],
+            historyIndex: shouldRestoreHistory ? snapshot.historyIndex : -1
+        )
         selectedTab?.title = snapshot.title
         selectedTab?.urlString = snapshot.url?.absoluteString ?? ""
         saveSessionSnapshot()
@@ -184,11 +240,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func canGoBack() -> Bool {
-        selectedTab?.webView.canGoBack ?? false
+        guard let tab = selectedTab else { return false }
+        return tab.webView.canGoBack || tab.historyIndex > 0
     }
 
     func canGoForward() -> Bool {
-        selectedTab?.webView.canGoForward ?? false
+        guard let tab = selectedTab else { return false }
+        return tab.webView.canGoForward || (tab.historyIndex >= 0 && tab.historyIndex < tab.historyURLs.count - 1)
     }
 
     func isBookmarked(_ tab: Tab) -> Bool {
@@ -227,10 +285,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
             let tab = Tab(webView: webView)
             tab.title = tabSnapshot.title
             tab.urlString = tabSnapshot.urlString ?? ""
+            tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
+            tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
             webView.navigationDelegate = self
             tabs.append(tab)
-            if let urlString = tabSnapshot.urlString, let url = URL(string: urlString) {
-                webView.load(URLRequest(url: url))
+            let initialURL: URL?
+            if tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count {
+                initialURL = tab.historyURLs[tab.historyIndex]
+            } else if let urlString = tabSnapshot.urlString, let url = URL(string: urlString) {
+                initialURL = url
+            } else {
+                initialURL = nil
+            }
+            if let initialURL {
+                webView.load(URLRequest(url: initialURL))
             }
         }
 
@@ -245,7 +313,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
             tabs: tabs.map { tab in
                 SessionTabSnapshot(
                     urlString: tab.webView.url?.absoluteString ?? (tab.urlString.isEmpty ? nil : tab.urlString),
-                    title: tab.title
+                    title: tab.title,
+                    historyURLStrings: tab.historyURLs.map(\.absoluteString),
+                    historyIndex: tab.historyIndex
                 )
             }
         )
@@ -264,6 +334,43 @@ final class PadBrowserModel: NSObject, ObservableObject {
             }
         }
     }
+
+    private func syncTabHistory(for tab: Tab, currentURL: URL) {
+        if let pendingIndex = tab.pendingHistoryNavigationIndex,
+           pendingIndex >= 0,
+           pendingIndex < tab.historyURLs.count,
+           tab.historyURLs[pendingIndex] == currentURL {
+            tab.historyIndex = pendingIndex
+            tab.pendingHistoryNavigationIndex = nil
+            return
+        }
+
+        tab.pendingHistoryNavigationIndex = nil
+
+        let history = tab.historyURLs
+        let currentIndex = tab.historyIndex
+        if currentIndex >= 0, currentIndex < history.count, history[currentIndex] == currentURL {
+            return
+        }
+        if currentIndex > 0, history[currentIndex - 1] == currentURL {
+            tab.historyIndex = currentIndex - 1
+            return
+        }
+        if currentIndex >= 0, currentIndex + 1 < history.count, history[currentIndex + 1] == currentURL {
+            tab.historyIndex = currentIndex + 1
+            return
+        }
+
+        var nextHistory = currentIndex >= 0 && currentIndex < history.count
+            ? Array(history.prefix(currentIndex + 1))
+            : history
+        nextHistory.append(currentURL)
+        if nextHistory.count > 50 {
+            nextHistory = Array(nextHistory.suffix(50))
+        }
+        tab.historyURLs = nextHistory
+        tab.historyIndex = nextHistory.count - 1
+    }
 }
 
 extension PadBrowserModel: WKNavigationDelegate {
@@ -275,6 +382,7 @@ extension PadBrowserModel: WKNavigationDelegate {
                 : (webView.url?.host ?? webView.url?.absoluteString ?? "New Tab")
             tab.urlString = webView.url?.absoluteString ?? ""
             if let url = webView.url {
+                self.syncTabHistory(for: tab, currentURL: url)
                 PadBrowsingHistoryStore.shared.recordVisit(url: url, title: tab.title)
             }
             self.captureThumbnail(for: tab)

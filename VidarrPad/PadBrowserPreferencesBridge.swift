@@ -44,6 +44,28 @@ enum PadPreferredContentLanguage: String, CaseIterable {
     }
 }
 
+enum PadBottomBarAutoHideDelay: String, CaseIterable {
+    case short
+    case normal
+    case long
+
+    var displayName: String {
+        switch self {
+        case .short: return "短め"
+        case .normal: return "標準"
+        case .long: return "長め"
+        }
+    }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .short: return 1.2
+        case .normal: return 2.0
+        case .long: return 3.2
+        }
+    }
+}
+
 final class PadBrowserPreferences {
     static let shared = PadBrowserPreferences()
 
@@ -54,6 +76,9 @@ final class PadBrowserPreferences {
         static let searchTemplate = "prefs.searchTemplate"
         static let preferredContentLanguage = "prefs.preferredContentLanguage"
         static let gestureSensitivity = "prefs.gestureSensitivity"
+        static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
+        static let autoHideBottomBar = "prefs.autoHideBottomBar"
+        static let bottomBarAutoHideDelay = "prefs.bottomBarAutoHideDelay"
     }
 
     private var defaults: UserDefaults {
@@ -106,6 +131,40 @@ final class PadBrowserPreferences {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.gestureSensitivity)
+        }
+    }
+
+    var restoreClosedTabPageHistory: Bool {
+        get {
+            if defaults.object(forKey: Key.restoreClosedTabPageHistory) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.restoreClosedTabPageHistory)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.restoreClosedTabPageHistory)
+        }
+    }
+
+    var autoHideBottomBar: Bool {
+        get {
+            if defaults.object(forKey: Key.autoHideBottomBar) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.autoHideBottomBar)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.autoHideBottomBar)
+        }
+    }
+
+    var bottomBarAutoHideDelay: PadBottomBarAutoHideDelay {
+        get {
+            let raw = defaults.string(forKey: Key.bottomBarAutoHideDelay) ?? PadBottomBarAutoHideDelay.normal.rawValue
+            return PadBottomBarAutoHideDelay(rawValue: raw) ?? .normal
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.bottomBarAutoHideDelay)
         }
     }
 

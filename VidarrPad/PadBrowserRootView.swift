@@ -1,19 +1,38 @@
 import SwiftUI
 
 struct PadBrowserRootView: View {
+    private struct TabSwitchTransition: Identifiable {
+        let id = UUID()
+        let fromTab: PadBrowserModel.Tab
+        let toTab: PadBrowserModel.Tab
+        let direction: CGFloat
+    }
+
     @StateObject private var model = PadBrowserModel()
     @State private var gestureHUD: PadGestureHUDState?
     @State private var gestureHUDTask: Task<Void, Never>?
+    @State private var bottomBarVisible = true
+    @State private var bottomBarHideTask: Task<Void, Never>?
     @State private var editingTabID: UUID?
     @State private var editingURL = ""
+    @State private var showingSettings = false
+    @State private var tabSwitchTransition: TabSwitchTransition?
+    @State private var tabSwitchProgress: CGFloat = 0
+    @State private var tabSwitchToken = UUID()
     @FocusState private var editingURLFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
             webLayer
             bottomBar
-                .padding(.horizontal, 22)
-                .padding(.bottom, 18)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 6)
+                .offset(y: bottomBarVisible ? 0 : 96)
+                .opacity(bottomBarVisible ? 1 : 0.001)
+                .allowsHitTesting(bottomBarVisible)
+            if !bottomBarVisible {
+                bottomRevealZone
+            }
         }
         .background(Color(uiColor: .systemBackground))
         .sheet(item: editingTabBinding) { tab in
@@ -36,44 +55,70 @@ struct PadBrowserRootView: View {
                 editingURL = tab.urlString
             }
         }
+        .sheet(isPresented: $showingSettings) {
+            PadSettingsSheet(
+                onDone: {
+                    model.refreshPreferences()
+                    showingSettings = false
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .onAppear {
+            scheduleBottomBarAutoHide()
+        }
+        .onChange(of: showingSettings) { _, isShowing in
+            if isShowing {
+                showBottomBar(persist: true)
+            } else {
+                scheduleBottomBarAutoHide()
+            }
+        }
+        .onChange(of: editingTabID) { _, editingID in
+            if editingID != nil {
+                showBottomBar(persist: true)
+            } else {
+                scheduleBottomBarAutoHide()
+            }
+        }
     }
 
     private var webLayer: some View {
-        ZStack {
-            if let tab = model.selectedTab {
-                PadWebView(webView: tab.webView)
-                    .id(tab.id)
-                    .ignoresSafeArea()
-                    .overlay {
-                        PadGestureOverlay(
-                            sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
-                            onPreview: { state in
-                                withAnimation(.easeOut(duration: 0.16)) {
-                                    gestureHUD = state
-                                }
-                            },
-                            onCommit: { action in
-                                performGesture(action)
-                            },
-                            onCancel: {
-                                hideGestureHUD()
-                            }
-                        )
-                    }
-            } else {
-                ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+        GeometryReader { proxy in
+            ZStack {
+                if let transition = tabSwitchTransition {
+                    let width = max(proxy.size.width, 1)
+                    PadWebView(webView: transition.fromTab.webView)
+                        .id("from-\(transition.id)")
+                        .ignoresSafeArea()
+                        .offset(x: -transition.direction * width * tabSwitchProgress)
+                    PadWebView(webView: transition.toTab.webView)
+                        .id("to-\(transition.id)")
+                        .ignoresSafeArea()
+                        .offset(x: transition.direction * width * (1 - tabSwitchProgress))
+                } else if let tab = model.selectedTab {
+                    PadWebView(
+                        webView: tab.webView,
+                        gestureConfiguration: gestureConfiguration
+                    )
+                        .id(tab.id)
+                        .ignoresSafeArea()
+                } else {
+                    ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
 
-            if let gestureHUD {
-                PadGestureHUD(state: gestureHUD)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                if let gestureHUD {
+                    PadGestureHUD(state: gestureHUD)
+                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                }
             }
         }
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 12) {
             HStack(spacing: 10) {
                 chromeButton(systemName: "chevron.left", disabled: !model.canGoBack(), action: model.goBack)
                 chromeButton(systemName: "chevron.right", disabled: !model.canGoForward(), action: model.goForward)
@@ -82,21 +127,36 @@ struct PadBrowserRootView: View {
 
             tabStrip
 
-            chromeButton(systemName: "plus", disabled: false) {
-                model.newTab()
+            HStack(spacing: 10) {
+                chromeButton(systemName: "gearshape", disabled: false) {
+                    showingSettings = true
+                }
+                chromeButton(systemName: "plus", disabled: false) {
+                    model.newTab()
+                }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
-            PadLiquidGlassBackground(cornerRadius: 28)
+            PadLiquidGlassBackground(cornerRadius: 20)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.16), radius: 20, y: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.11), radius: 14, y: 6)
+    }
+
+    private var bottomRevealZone: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(height: 20)
+            .ignoresSafeArea(edges: .bottom)
+            .onTapGesture {
+                showBottomBar()
+            }
     }
 
     private var tabStrip: some View {
@@ -107,10 +167,10 @@ struct PadBrowserRootView: View {
                         tab: tab,
                         isSelected: model.selectedTab?.id == tab.id,
                         onSelect: {
-                            model.selectTab(id: tab.id)
+                            animateTabSelection(to: tab.id)
                         },
                         onLongPress: {
-                            model.selectTab(id: tab.id)
+                            animateTabSelection(to: tab.id)
                             editingURL = tab.urlString
                             editingTabID = tab.id
                         }
@@ -125,20 +185,33 @@ struct PadBrowserRootView: View {
     private func chromeButton(systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 38, height: 38)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
         .foregroundStyle(disabled ? Color.secondary.opacity(0.45) : Color.primary)
         .disabled(disabled)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                showBottomBar()
+            }
+        )
     }
 
     private func performGesture(_ action: PadGestureAction) {
         switch action {
         case .previousTab:
-            model.selectPreviousTab()
+            if let currentID = model.selectedTab?.id,
+               let currentIndex = model.tabIndex(for: currentID),
+               currentIndex > 0 {
+                animateTabSelection(to: model.tabs[currentIndex - 1].id)
+            }
         case .nextTab:
-            model.selectNextTab()
+            if let currentID = model.selectedTab?.id,
+               let currentIndex = model.tabIndex(for: currentID),
+               currentIndex < model.tabs.count - 1 {
+                animateTabSelection(to: model.tabs[currentIndex + 1].id)
+            }
         case .closeTab:
             if let id = model.selectedTab?.id {
                 model.closeTab(id: id)
@@ -149,6 +222,8 @@ struct PadBrowserRootView: View {
             model.restoreClosedTab()
         case .reload:
             model.reload()
+        case .reloadAll:
+            model.reloadAllTabs()
         case .back:
             model.goBack()
         case .forward:
@@ -161,6 +236,7 @@ struct PadBrowserRootView: View {
         case .newTab:
             model.newTab()
         }
+        showBottomBar()
         showCommittedGestureHUD(for: action)
     }
 
@@ -197,6 +273,7 @@ struct PadBrowserRootView: View {
         case .closeAllTabs: return "Close All Tabs"
         case .restoreClosedTab: return "Restore Tab"
         case .reload: return "Reload"
+        case .reloadAll: return "Reload All"
         case .back: return "Back"
         case .forward: return "Forward"
         case .search: return "Search"
@@ -212,6 +289,7 @@ struct PadBrowserRootView: View {
         case .closeAllTabs: return "xmark.circle.fill"
         case .restoreClosedTab: return "arrow.uturn.backward.circle"
         case .reload: return "arrow.clockwise.circle"
+        case .reloadAll: return "square.stack.3d.up.fill"
         case .back: return "arrow.uturn.backward"
         case .forward: return "arrow.uturn.forward"
         case .search: return "magnifyingglass.circle"
@@ -236,6 +314,154 @@ struct PadBrowserRootView: View {
             get: { editingURL },
             set: { editingURL = $0 }
         )
+    }
+
+    private var gestureConfiguration: PadGestureConfiguration {
+        PadGestureConfiguration(
+            sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
+            onPreview: { state in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    gestureHUD = state
+                }
+            },
+            onCommit: { action in
+                performGesture(action)
+            },
+            onCancel: {
+                hideGestureHUD()
+            }
+        )
+    }
+
+    private func animateTabSelection(to id: UUID) {
+        showBottomBar()
+        guard let fromTab = model.selectedTab,
+              fromTab.id != id,
+              let fromIndex = model.tabIndex(for: fromTab.id),
+              let toIndex = model.tabIndex(for: id) else {
+            model.selectTab(id: id)
+            return
+        }
+
+        let direction: CGFloat = toIndex > fromIndex ? 1 : -1
+        model.selectTab(id: id)
+        guard let toTab = model.selectedTab else { return }
+
+        let token = UUID()
+        tabSwitchToken = token
+        tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction)
+        tabSwitchProgress = 0
+
+        withAnimation(.easeInOut(duration: 0.24)) {
+            tabSwitchProgress = 1
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard tabSwitchToken == token else { return }
+            tabSwitchTransition = nil
+            tabSwitchProgress = 0
+        }
+    }
+
+    private func showBottomBar(persist: Bool = false) {
+        bottomBarHideTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) {
+            bottomBarVisible = true
+        }
+        if !persist {
+            scheduleBottomBarAutoHide()
+        }
+    }
+
+    private func scheduleBottomBarAutoHide() {
+        bottomBarHideTask?.cancel()
+        guard PadBrowserPreferences.shared.autoHideBottomBar else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                bottomBarVisible = true
+            }
+            return
+        }
+        guard !showingSettings, editingTabID == nil else { return }
+        let delay = PadBrowserPreferences.shared.bottomBarAutoHideDelay.seconds
+        bottomBarHideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                bottomBarVisible = false
+            }
+        }
+    }
+}
+
+private struct PadSettingsSheet: View {
+    @State private var homePageURLString = PadBrowserPreferences.shared.homePageURLString
+    @State private var searchTemplate = PadBrowserPreferences.shared.searchTemplate
+    @State private var preferredContentLanguage = PadBrowserPreferences.shared.preferredContentLanguage
+    @State private var gestureSensitivity = PadBrowserPreferences.shared.gestureSensitivity
+    @State private var restoreClosedTabPageHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
+    @State private var autoHideBottomBar = PadBrowserPreferences.shared.autoHideBottomBar
+    @State private var bottomBarAutoHideDelay = PadBrowserPreferences.shared.bottomBarAutoHideDelay
+
+    let onDone: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基本") {
+                    TextField("スタートページ", text: $homePageURLString)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("検索するときのURL", text: $searchTemplate)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Picker("Webページの表示言語", selection: $preferredContentLanguage) {
+                        ForEach(PadPreferredContentLanguage.allCases, id: \.self) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                }
+
+                Section("ジェスチャー") {
+                    Picker("感度", selection: $gestureSensitivity) {
+                        ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
+                            Text(sensitivity.displayName).tag(sensitivity)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("下部バー") {
+                    Toggle("自動で隠す", isOn: $autoHideBottomBar)
+                    if autoHideBottomBar {
+                        Picker("再表示までの時間", selection: $bottomBarAutoHideDelay) {
+                            ForEach(PadBottomBarAutoHideDelay.allCases, id: \.self) { delay in
+                                Text(delay.displayName).tag(delay)
+                            }
+                        }
+                    }
+                }
+
+                Section("タブ") {
+                    Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
+                }
+            }
+            .navigationTitle("設定")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完了") {
+                        PadBrowserPreferences.shared.homePageURLString = homePageURLString
+                        PadBrowserPreferences.shared.searchTemplate = searchTemplate
+                        PadBrowserPreferences.shared.preferredContentLanguage = preferredContentLanguage
+                        PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
+                        PadBrowserPreferences.shared.autoHideBottomBar = autoHideBottomBar
+                        PadBrowserPreferences.shared.bottomBarAutoHideDelay = bottomBarAutoHideDelay
+                        PadBrowserPreferences.shared.restoreClosedTabPageHistory = restoreClosedTabPageHistory
+                        onDone()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -271,7 +497,7 @@ private struct PadTabThumbnail: View {
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .padding(3)
             }
-            .frame(width: 118, height: 70)
+            .frame(width: 80, height: 46)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)

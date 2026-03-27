@@ -1,3 +1,5 @@
+import CoreGraphics
+import Foundation
 import SwiftUI
 import UIKit
 
@@ -8,6 +10,7 @@ enum PadGestureAction: String {
     case closeAllTabs
     case restoreClosedTab
     case reload
+    case reloadAll
     case back
     case forward
     case search
@@ -22,260 +25,1113 @@ struct PadGestureHUDState: Equatable {
     let isCommitted: Bool
 }
 
-struct PadGestureOverlay: UIViewRepresentable {
+struct PadGestureConfiguration {
     let sensitivity: PadGestureSensitivity
     let onPreview: (PadGestureHUDState?) -> Void
     let onCommit: (PadGestureAction) -> Void
     let onCancel: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(sensitivity: sensitivity, onPreview: onPreview, onCommit: onCommit, onCancel: onCancel)
-    }
-
-    func makeUIView(context: Context) -> GestureCaptureView {
-        let view = GestureCaptureView()
-        let recognizer = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
-        recognizer.minimumNumberOfTouches = 2
-        recognizer.maximumNumberOfTouches = 2
-        recognizer.cancelsTouchesInView = true
-        recognizer.delaysTouchesBegan = false
-        recognizer.delaysTouchesEnded = false
-        recognizer.delegate = context.coordinator
-        view.addGestureRecognizer(recognizer)
-        return view
-    }
-
-    func updateUIView(_ uiView: GestureCaptureView, context: Context) {
-        context.coordinator.sensitivity = sensitivity
-    }
-
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var sensitivity: PadGestureSensitivity
-        private let onPreview: (PadGestureHUDState?) -> Void
-        private let onCommit: (PadGestureAction) -> Void
-        private let onCancel: () -> Void
-
-        private var points: [CGPoint] = []
-        private var lastPreviewAction: PadGestureAction?
-
-        init(
-            sensitivity: PadGestureSensitivity,
-            onPreview: @escaping (PadGestureHUDState?) -> Void,
-            onCommit: @escaping (PadGestureAction) -> Void,
-            onCancel: @escaping () -> Void
-        ) {
-            self.sensitivity = sensitivity
-            self.onPreview = onPreview
-            self.onCommit = onCommit
-            self.onCancel = onCancel
-        }
-
-        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
-            let location = recognizer.location(in: recognizer.view)
-            switch recognizer.state {
-            case .began:
-                points = [location]
-                lastPreviewAction = nil
-                onPreview(nil)
-            case .changed:
-                appendPoint(location)
-                let pointsSnapshot = points
-                guard let evaluation = evaluate(points: pointsSnapshot, sensitivity: sensitivity, final: false) else {
-                    if lastPreviewAction != nil {
-                        lastPreviewAction = nil
-                        onPreview(nil)
-                    }
-                    return
-                }
-                if lastPreviewAction != evaluation.action || evaluation.confidence > 0.98 {
-                    lastPreviewAction = evaluation.action
-                    onPreview(PadGestureHUDState(
-                        action: evaluation.action,
-                        title: evaluation.title,
-                        systemImageName: evaluation.systemImageName,
-                        confidence: evaluation.confidence,
-                        isCommitted: false
-                    ))
-                }
-            case .ended:
-                appendPoint(location)
-                guard let evaluation = evaluate(points: points, sensitivity: sensitivity, final: true) else {
-                    reset()
-                    onCancel()
-                    return
-                }
-                onPreview(PadGestureHUDState(
-                    action: evaluation.action,
-                    title: evaluation.title,
-                    systemImageName: evaluation.systemImageName,
-                    confidence: evaluation.confidence,
-                    isCommitted: true
-                ))
-                onCommit(evaluation.action)
-                reset()
-            default:
-                reset()
-                onCancel()
-            }
-        }
-
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-            false
-        }
-
-        private func appendPoint(_ point: CGPoint) {
-            if let last = points.last, hypot(point.x - last.x, point.y - last.y) < 4 {
-                return
-            }
-            points.append(point)
-        }
-
-        private func reset() {
-            points.removeAll()
-            lastPreviewAction = nil
-        }
-    }
 }
 
-final class GestureCaptureView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .clear
-        isOpaque = false
+final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate {
+    private struct CaptureConfig {
+        let triggerHorizontalDelta: CGFloat = 4.5
+        let triggerDominanceRatio: CGFloat = 1.65
+        let triggerWindowMs: TimeInterval = 90
+        let seedHistoryWindowMs: TimeInterval = 240
+        let minPathLength: CGFloat = 90
+        let matchScoreThreshold: CGFloat = 0.68
+        let livePreviewScoreThreshold: CGFloat = 0.48
+        let upStrokeDominanceRatio: CGFloat = 2.0
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+    private struct DeltaSample {
+        let dx: CGFloat
+        let dy: CGFloat
+        let timestamp: TimeInterval
     }
-}
 
-private struct GestureEvaluation {
-    let action: PadGestureAction
-    let title: String
-    let systemImageName: String
-    let confidence: CGFloat
-}
+    private enum State {
+        case idle
+        case capturing
+    }
 
-private enum GestureDirection: String {
-    case left
-    case right
-    case up
-    case down
-    case upLeft
-    case upRight
-    case downLeft
-    case downRight
-}
-
-private func evaluate(points: [CGPoint], sensitivity: PadGestureSensitivity, final: Bool) -> GestureEvaluation? {
-    let minDistance = 48 / sensitivity.multiplier
-    guard pathLength(points) >= minDistance else { return nil }
-    let sequence = directionSequence(from: points, sensitivity: sensitivity)
-    guard !sequence.isEmpty else { return nil }
-
-    let candidates: [([GestureDirection], PadGestureAction, String, String)] = [
-        ([.right], .nextTab, "Next Tab", "arrow.right.circle"),
-        ([.left], .previousTab, "Previous Tab", "arrow.left.circle"),
-        ([.downRight], .closeTab, "Close Tab", "xmark.circle"),
-        ([.downRight, .downRight], .closeAllTabs, "Close All Tabs", "xmark.circle.fill"),
-        ([.downRight, .up], .restoreClosedTab, "Restore Tab", "arrow.uturn.backward.circle"),
-        ([.upRight, .downLeft], .reload, "Reload", "arrow.clockwise.circle"),
-        ([.upRight], .back, "Back", "arrow.uturn.backward"),
-        ([.upLeft], .forward, "Forward", "arrow.uturn.forward"),
-        ([.left, .down, .right, .downLeft], .search, "Search", "magnifyingglass.circle"),
-        ([.downLeft], .newTab, "New Tab", "plus.circle")
+    private let config = CaptureConfig()
+    private let allowedGestureNames: Set<String> = [
+        "UpRight", "UpLeft", "DownRight", "DownLeft",
+        "O", "U", "S", "OO", "DownRightDownRight",
+        "Right", "Left"
     ]
 
-    var best: GestureEvaluation?
-    for candidate in candidates {
-        if let confidence = score(sequence: sequence, target: candidate.0, final: final) {
-            let evaluation = GestureEvaluation(action: candidate.1, title: candidate.2, systemImageName: candidate.3, confidence: confidence)
-            if best == nil || evaluation.confidence > best!.confidence {
-                best = evaluation
+    var sensitivity: PadGestureSensitivity
+    private var onPreview: (PadGestureHUDState?) -> Void
+    private var onCommit: (PadGestureAction) -> Void
+    private var onCancel: () -> Void
+
+    private var state: State = .idle
+    private var recentSamples: [DeltaSample] = []
+    private var capturePoints: [CGPoint] = []
+    private var lastLiveCandidate: PadGestureResult?
+    private var captureInvalidated = false
+    private var captureHasStrongVerticalComponent = false
+    private var lastLocation: CGPoint?
+    private var latestTimestamp: TimeInterval = 0
+
+    private lazy var recognizer = PadGestureRecognizer(
+        matchScoreThreshold: config.matchScoreThreshold,
+        minPathLength: config.minPathLength,
+        dominanceRatio: config.upStrokeDominanceRatio
+    )
+
+    init(
+        sensitivity: PadGestureSensitivity,
+        onPreview: @escaping (PadGestureHUDState?) -> Void,
+        onCommit: @escaping (PadGestureAction) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.sensitivity = sensitivity
+        self.onPreview = onPreview
+        self.onCommit = onCommit
+        self.onCancel = onCancel
+    }
+
+    func update(configuration: PadGestureConfiguration) {
+        sensitivity = configuration.sensitivity
+        onPreview = configuration.onPreview
+        onCommit = configuration.onCommit
+        onCancel = configuration.onCancel
+    }
+
+    @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+        let location = recognizer.location(in: recognizer.view)
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        latestTimestamp = timestamp
+
+        switch recognizer.state {
+        case .began:
+            lastLocation = location
+            recentSamples.removeAll()
+            if state != .capturing {
+                onPreview(nil)
+            }
+
+        case .changed:
+            guard let lastLocation else {
+                self.lastLocation = location
+                return
+            }
+            let dx = -(location.x - lastLocation.x)
+            let dy = -(location.y - lastLocation.y)
+            self.lastLocation = location
+            handleInput(dx: dx, dy: dy, timestamp: timestamp, anchor: location)
+
+        case .ended:
+            if let lastLocation {
+                let dx = -(location.x - lastLocation.x)
+                let dy = -(location.y - lastLocation.y)
+                self.lastLocation = nil
+                handleInput(dx: dx, dy: dy, timestamp: timestamp, anchor: location)
+            }
+            if state == .capturing {
+                commitCapture()
+            } else {
+                recentSamples.removeAll()
+                onCancel()
+            }
+
+        default:
+            lastLocation = nil
+            reset()
+            onCancel()
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    private var sensitivityMultiplier: CGFloat {
+        sensitivity.multiplier
+    }
+
+    private func handleInput(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval, anchor: CGPoint) {
+        guard abs(dx) > 0.001 || abs(dy) > 0.001 else { return }
+
+        switch state {
+        case .idle:
+            trackRecent(dx: dx, dy: dy, timestamp: timestamp)
+            if shouldStartCapture() {
+                startCapture(at: anchor, withSeed: recentSamples)
+                return
+            }
+
+        case .capturing:
+            appendCaptureDelta(dx: dx, dy: dy)
+            updateHUDIfNeeded()
+        }
+    }
+
+    private func trackRecent(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval) {
+        recentSamples.append(DeltaSample(dx: dx, dy: dy, timestamp: timestamp))
+        let maxAge = config.seedHistoryWindowMs / 1000
+        let threshold = timestamp - maxAge
+        recentSamples.removeAll { $0.timestamp < threshold }
+    }
+
+    private func shouldStartCapture() -> Bool {
+        guard !recentSamples.isEmpty else { return false }
+        guard let latestTimestamp = recentSamples.last?.timestamp else { return false }
+        let triggerHorizontalDelta = config.triggerHorizontalDelta / max(0.75, sensitivityMultiplier)
+        let triggerAge = config.triggerWindowMs / 1000
+        let triggerThreshold = latestTimestamp - triggerAge
+        let triggerSamples = recentSamples.filter { $0.timestamp >= triggerThreshold }
+        guard !triggerSamples.isEmpty else { return false }
+
+        if triggerSamples.contains(where: { sample in
+            abs(sample.dx) > abs(sample.dy) * config.triggerDominanceRatio
+                && abs(sample.dx) > triggerHorizontalDelta
+        }) {
+            return true
+        }
+
+        let lastSamples = triggerSamples.suffix(4)
+        guard !lastSamples.isEmpty else { return false }
+        let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }
+        let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
+
+        return abs(sumX) > abs(sumY) * config.triggerDominanceRatio
+            && abs(sumX) > triggerHorizontalDelta
+    }
+
+    private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
+        state = .capturing
+        capturePoints = [point]
+        lastLiveCandidate = nil
+        captureInvalidated = false
+        captureHasStrongVerticalComponent = false
+
+        for sample in seed {
+            appendCaptureDelta(dx: sample.dx, dy: sample.dy)
+        }
+
+        recentSamples.removeAll()
+        updateHUDIfNeeded()
+    }
+
+    private func appendCaptureDelta(dx: CGFloat, dy: CGFloat) {
+        guard !capturePoints.isEmpty else { return }
+        let last = capturePoints[capturePoints.count - 1]
+        let next = CGPoint(x: last.x + dx, y: last.y + dy)
+        capturePoints.append(next)
+        updateVerticalComponentFlagIfNeeded()
+    }
+
+    private func updateVerticalComponentFlagIfNeeded() {
+        guard capturePoints.count >= 3 else { return }
+        let start = capturePoints[0]
+        let end = capturePoints[capturePoints.count - 1]
+        let absDX = abs(end.x - start.x)
+        let absDY = abs(end.y - start.y)
+        if absDY >= 18, absDY >= max(10, absDX * 0.42) {
+            captureHasStrongVerticalComponent = true
+        }
+    }
+
+    private func updateHUDIfNeeded() {
+        if captureInvalidated {
+            onPreview(nil)
+            return
+        }
+
+        if let best = recognizer.bestPassingMatch(
+            points: capturePoints,
+            minimumScore: config.livePreviewScoreThreshold,
+            allowedNames: allowedGestureNames
+        ) {
+            if best.name == "Left" || best.name == "Right" {
+                lastLiveCandidate = nil
+                onPreview(nil)
+            } else if let state = hudState(for: best.name, confidence: best.score, committed: false) {
+                lastLiveCandidate = best
+                onPreview(state)
+            }
+            return
+        }
+
+        if lastLiveCandidate != nil {
+            captureInvalidated = true
+            lastLiveCandidate = nil
+        }
+        onPreview(nil)
+    }
+
+    private func commitCapture() {
+        defer { reset() }
+
+        guard !capturePoints.isEmpty else {
+            onPreview(nil)
+            return
+        }
+
+        guard !captureInvalidated else {
+            onPreview(nil)
+            return
+        }
+
+        let strict = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
+        let relaxed: PadGestureResult? = {
+            guard strict == nil else { return nil }
+            guard pathLength(capturePoints) >= (config.minPathLength * 0.38) / max(0.75, sensitivityMultiplier) else { return nil }
+            return recognizer.bestPassingMatch(
+                points: capturePoints,
+                minimumScore: max(0.54, config.matchScoreThreshold - 0.18),
+                allowedNames: allowedGestureNames
+            )
+        }()
+
+        if let result = strict ?? relaxed,
+           let action = mapAction(name: result.name)
+        {
+            onCommit(action)
+            return
+        }
+
+        if isLikelyDoubleLoop(capturePoints) {
+            onCommit(.reloadAll)
+            return
+        }
+
+        if !captureHasStrongVerticalComponent,
+           let horizontal = recognizeHorizontalSwipe(points: capturePoints),
+           let action = mapAction(name: horizontal.name)
+        {
+            onCommit(action)
+            return
+        }
+
+        onCancel()
+    }
+
+    private func recognizeHorizontalSwipe(points: [CGPoint]) -> PadGestureResult? {
+        guard points.count >= 3 else { return nil }
+        let start = points[0]
+        let end = points[points.count - 1]
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let absDX = abs(dx)
+        let absDY = abs(dy)
+
+        guard absDX >= 36 else { return nil }
+        guard absDX >= absDY * 1.6 else { return nil }
+
+        let path = pathLength(points)
+        guard path >= 32 else { return nil }
+        guard path <= absDX * 1.5 + 8 else { return nil }
+
+        var minY = points[0].y
+        var maxY = points[0].y
+        for point in points {
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+        let verticalExcursion = maxY - minY
+        guard verticalExcursion <= max(26, absDX * 0.36) else { return nil }
+
+        let name = dx < 0 ? "Left" : "Right"
+        return PadGestureResult(name: name, score: 1.0)
+    }
+
+    private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {
+        guard points.count >= 16 else { return false }
+
+        var minX = points[0].x
+        var maxX = points[0].x
+        var minY = points[0].y
+        var maxY = points[0].y
+        for p in points {
+            minX = min(minX, p.x)
+            maxX = max(maxX, p.x)
+            minY = min(minY, p.y)
+            maxY = max(maxY, p.y)
+        }
+
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width > 24, height > 24 else { return false }
+
+        let diagonal = sqrt(width * width + height * height)
+        guard diagonal > 1 else { return false }
+
+        let start = points[0]
+        let end = points[points.count - 1]
+        let closeDistance = hypot(end.x - start.x, end.y - start.y)
+        let closeRatio = closeDistance / diagonal
+        guard closeRatio <= 0.68 else { return false }
+
+        let a = max(width * 0.5, 1)
+        let b = max(height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return false }
+
+        let loops = pathLength(points) / ellipseCircumference
+        return loops >= 1.22
+    }
+
+    private func mapAction(name: String) -> PadGestureAction? {
+        switch name {
+        case "Left":
+            return .previousTab
+        case "Right":
+            return .nextTab
+        case "DownRight":
+            return .newTab
+        case "DownRightDownRight":
+            return .closeAllTabs
+        case "U":
+            return .restoreClosedTab
+        case "O":
+            return .reload
+        case "OO":
+            return .reloadAll
+        case "UpRight":
+            return .forward
+        case "UpLeft":
+            return .back
+        case "S":
+            return .search
+        case "DownLeft":
+            return .closeTab
+        default:
+            return nil
+        }
+    }
+
+    private func hudState(for name: String, confidence: CGFloat, committed: Bool) -> PadGestureHUDState? {
+        guard let action = mapAction(name: name) else { return nil }
+        return PadGestureHUDState(
+            action: action,
+            title: "",
+            systemImageName: symbol(for: name),
+            confidence: confidence,
+            isCommitted: committed
+        )
+    }
+
+    private func symbol(for name: String) -> String {
+        switch name {
+        case "Left":
+            return "arrow.right.circle.fill"
+        case "Right":
+            return "arrow.left.circle.fill"
+        case "DownRight":
+            return "plus.square.on.square"
+        case "DownRightDownRight":
+            return "trash.circle.fill"
+        case "O":
+            return "arrow.clockwise.circle.fill"
+        case "U":
+            return "arrow.uturn.backward.circle.fill"
+        case "OO":
+            return "square.stack.3d.up.fill"
+        case "UpRight":
+            return "chevron.forward.circle.fill"
+        case "UpLeft":
+            return "chevron.backward.circle.fill"
+        case "S":
+            return "magnifyingglass.circle.fill"
+        case "DownLeft":
+            return "xmark.square.fill"
+        default:
+            return "questionmark.circle"
+        }
+    }
+
+    private func pathLength(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+        return zip(points, points.dropFirst()).reduce(0) { partial, pair in
+            partial + hypot(pair.1.x - pair.0.x, pair.1.y - pair.0.y)
+        }
+    }
+
+    private func reset() {
+        state = .idle
+        recentSamples.removeAll()
+        capturePoints.removeAll()
+        lastLiveCandidate = nil
+        captureInvalidated = false
+        captureHasStrongVerticalComponent = false
+        onPreview(nil)
+    }
+}
+
+private struct PadGestureTemplate {
+    let name: String
+    let points: [CGPoint]
+}
+
+private struct PadGestureResult {
+    let name: String
+    let score: CGFloat
+}
+
+private final class PadGestureRecognizer {
+    private let squareSize: CGFloat = 250
+    private let resampleCount: Int = 96
+
+    private let matchScoreThreshold: CGFloat
+    private let minPathLength: CGFloat
+    private let dominanceRatio: CGFloat
+    private let compositePreferenceSlack: CGFloat = 0.12
+
+    private lazy var templates: [PadGestureTemplate] = {
+        Self.rawTemplates().map { template in
+            PadGestureTemplate(name: template.name, points: normalize(template.points))
+        }
+    }()
+
+    init(matchScoreThreshold: CGFloat = 0.75, minPathLength: CGFloat = 120, dominanceRatio: CGFloat = 2.0) {
+        self.matchScoreThreshold = matchScoreThreshold
+        self.minPathLength = minPathLength
+        self.dominanceRatio = dominanceRatio
+    }
+
+    func recognize(points raw: [CGPoint], allowedNames: Set<String>? = nil) -> PadGestureResult? {
+        guard raw.count >= 10 else { return nil }
+        guard pathLength(raw) >= minPathLength else { return nil }
+
+        let normalized = normalize(raw)
+        let ranked = rankedTemplateMatches(for: normalized)
+        guard let passing = bestPassingCandidate(
+            from: ranked,
+            raw: raw,
+            minimumScore: matchScoreThreshold,
+            allowedNames: allowedNames
+        ) else { return nil }
+        return PadGestureResult(name: passing.name, score: passing.score)
+    }
+
+    func bestPassingMatch(points raw: [CGPoint], minimumScore: CGFloat, allowedNames: Set<String>? = nil) -> PadGestureResult? {
+        guard raw.count >= 5 else { return nil }
+
+        let normalized = normalize(raw)
+        let ranked = rankedTemplateMatches(for: normalized)
+        guard let passing = bestPassingCandidate(
+            from: ranked,
+            raw: raw,
+            minimumScore: minimumScore,
+            allowedNames: allowedNames
+        ) else { return nil }
+        return PadGestureResult(name: passing.name, score: passing.score)
+    }
+
+    private func rankedTemplateMatches(for normalizedPoints: [CGPoint]) -> [(name: String, score: CGFloat)] {
+        var bestDistanceByName: [String: CGFloat] = [:]
+        for template in templates {
+            let d = pathDistance(normalizedPoints, template.points)
+            if let current = bestDistanceByName[template.name] {
+                bestDistanceByName[template.name] = min(current, d)
+            } else {
+                bestDistanceByName[template.name] = d
             }
         }
+
+        let halfDiagonal = 0.5 * sqrt(2) * squareSize
+        return bestDistanceByName
+            .map { (name: $0.key, score: max(0, min(1, 1 - $0.value / halfDiagonal))) }
+            .sorted { $0.score > $1.score }
     }
 
-    guard let best else { return nil }
-    let threshold: CGFloat = final ? 0.78 : 0.42
-    return best.confidence >= threshold ? best : nil
-}
-
-private func score(sequence: [GestureDirection], target: [GestureDirection], final: Bool) -> CGFloat? {
-    if final {
-        guard sequence == target else { return nil }
-        return 1.0
+    private func normalize(_ points: [CGPoint]) -> [CGPoint] {
+        var pts = resample(points, n: resampleCount)
+        pts = rotateToIndicativeAngle(pts)
+        pts = scaleToSquare(pts, size: squareSize)
+        pts = translateToOrigin(pts)
+        return pts
     }
 
-    guard sequence.count <= target.count else { return nil }
-    guard zip(sequence, target).allSatisfy({ $0 == $1 }) else { return nil }
-    return CGFloat(sequence.count) / CGFloat(target.count)
-}
+    private func passesHeuristic(for name: String, raw: [CGPoint]) -> Bool {
+        let start = raw.first ?? .zero
+        let end = raw.last ?? .zero
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let corners = cornerCount(raw)
 
-private func directionSequence(from points: [CGPoint], sensitivity: PadGestureSensitivity) -> [GestureDirection] {
-    let segmentThreshold = 18 / sensitivity.multiplier
-    var sequence: [GestureDirection] = []
-    var anchor = points.first ?? .zero
-    var accumulated = CGPoint.zero
-
-    for point in points.dropFirst() {
-        accumulated.x += point.x - anchor.x
-        accumulated.y += point.y - anchor.y
-        anchor = point
-
-        let length = hypot(accumulated.x, accumulated.y)
-        guard length >= segmentThreshold else { continue }
-        guard let direction = quantizeDirection(dx: accumulated.x, dy: accumulated.y) else { continue }
-        if sequence.last != direction {
-            sequence.append(direction)
+        switch name {
+        case "Left":
+            return isSimpleHorizontalStroke(raw, horizontalDirection: .left, dx: dx, dy: dy, corners: corners)
+        case "Right":
+            return isSimpleHorizontalStroke(raw, horizontalDirection: .right, dx: dx, dy: dy, corners: corners)
+        case "L":
+            return corners >= 1 && corners <= 2 && dx > 0 && dy < 0 && abs(dy) > minPathLength * 0.12
+        case "LL":
+            return corners >= 3 && pathLength(raw) >= minPathLength * 1.5 && dx > 0
+        case "U":
+            return isDownRightUpUShape(raw)
+        case "O":
+            return isClosedCircular(raw, expectedTurns: 2 * .pi, tolerance: 1.55 * .pi, closeRatioLimit: 0.45)
+                && estimatedLoopCount(raw) <= 1.45
+        case "OO":
+            return isClosedCircular(raw, expectedTurns: 4 * .pi, tolerance: 2.75 * .pi, closeRatioLimit: 0.68)
+                && pathLength(raw) >= minPathLength * 0.94
+                && estimatedLoopCount(raw) >= 1.22
+        case "UpRight":
+            return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right)
+        case "UpLeft":
+            return isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .left)
+        case "DownLeft":
+            return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .left)
+        case "DownRight":
+            return isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .right)
+        case "DownRightDownRight":
+            return isDoubleDownRight(raw) && pathLength(raw) >= minPathLength * 1.45
+        case "S":
+            return isSLike(raw)
+        default:
+            return false
         }
-        accumulated = .zero
     }
 
-    if sequence.count >= 3 {
-        sequence = mergeNoisySegments(sequence)
-    }
-    return sequence
-}
-
-private func quantizeDirection(dx: CGFloat, dy: CGFloat) -> GestureDirection? {
-    let absDX = abs(dx)
-    let absDY = abs(dy)
-    guard absDX > 0.1 || absDY > 0.1 else { return nil }
-
-    let ratio = absDX / max(absDY, 0.001)
-    if ratio >= 2.0 {
-        return dx >= 0 ? .right : .left
-    }
-    if ratio <= 0.5 {
-        return dy >= 0 ? .down : .up
-    }
-
-    switch (dx >= 0, dy >= 0) {
-    case (true, true): return .downRight
-    case (true, false): return .upRight
-    case (false, true): return .downLeft
-    case (false, false): return .upLeft
-    }
-}
-
-private func mergeNoisySegments(_ sequence: [GestureDirection]) -> [GestureDirection] {
-    var result: [GestureDirection] = []
-    for direction in sequence {
-        if result.last == direction { continue }
-        if result.count >= 2, result[result.count - 2] == direction {
-            result.removeLast()
-            continue
+    private func bestPassingCandidate(
+        from ranked: [(name: String, score: CGFloat)],
+        raw: [CGPoint],
+        minimumScore: CGFloat,
+        allowedNames: Set<String>?
+    ) -> (name: String, score: CGFloat)? {
+        let passing = ranked.filter { candidate in
+            if let allowedNames, !allowedNames.contains(candidate.name) {
+                return false
+            }
+            return candidate.score >= minimumScore && passesHeuristic(for: candidate.name, raw: raw)
         }
-        result.append(direction)
-    }
-    return result
-}
 
-private func pathLength(_ points: [CGPoint]) -> CGFloat {
-    guard points.count > 1 else { return 0 }
-    return zip(points, points.dropFirst()).reduce(0) { partial, pair in
-        partial + hypot(pair.1.x - pair.0.x, pair.1.y - pair.0.y)
+        guard let best = passing.first else { return nil }
+
+        if best.name == "Left" || best.name == "Right",
+           let composite = passing.first(where: {
+               $0.name == "UpRight"
+                   || $0.name == "UpLeft"
+                   || $0.name == "DownLeft"
+                   || $0.name == "DownRight"
+                   || $0.name == "DownRightDownRight"
+           }),
+           composite.score >= best.score - compositePreferenceSlack {
+            return composite
+        }
+
+        if best.name == "O",
+           let doubleCircle = passing.first(where: { $0.name == "OO" }),
+           (estimatedLoopCount(raw) >= 1.24 || doubleCircle.score >= best.score - 0.22) {
+            return doubleCircle
+        }
+
+        return best
+    }
+
+    private enum HorizontalDirection { case left, right }
+    private enum VerticalDirection { case up, down }
+
+    private func isSimpleHorizontalStroke(
+        _ raw: [CGPoint],
+        horizontalDirection: HorizontalDirection,
+        dx: CGFloat,
+        dy: CGFloat,
+        corners: Int
+    ) -> Bool {
+        switch horizontalDirection {
+        case .left: guard dx < 0 else { return false }
+        case .right: guard dx > 0 else { return false }
+        }
+
+        let absDx = abs(dx)
+        let absDy = abs(dy)
+        guard absDx > max(absDy * 1.6, minPathLength * 0.18) else { return false }
+        guard corners <= 1 else { return false }
+
+        let box = boundingBox(raw)
+        guard box.width > 0 else { return false }
+        guard box.height <= max(box.width * 0.34, 22) else { return false }
+        guard totalTurningAngle(raw) <= .pi * 0.66 else { return false }
+
+        switch horizontalDirection {
+        case .left:
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .left) else { return false }
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .left) else { return false }
+        case .right:
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .up, horizontalDirection: .right) else { return false }
+            guard !isVerticalThenHorizontal(raw, verticalDirection: .down, horizontalDirection: .right) else { return false }
+        }
+
+        return true
+    }
+
+    private func isVerticalThenHorizontal(
+        _ raw: [CGPoint],
+        verticalDirection: VerticalDirection,
+        horizontalDirection: HorizontalDirection
+    ) -> Bool {
+        guard raw.count >= 8 else { return false }
+
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(22, box.height * 0.34)
+        let minHorizontalTravel = max(20, box.width * 0.34)
+
+        for ratio in stride(from: 0.34, through: 0.72, by: 0.06) {
+            let split = max(2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(ratio))))
+            let first = vector(from: raw[0], to: raw[split])
+            let second = vector(from: raw[split], to: raw[raw.count - 1])
+
+            guard abs(first.dy) >= minVerticalTravel else { continue }
+            guard abs(second.dx) >= minHorizontalTravel else { continue }
+
+            switch verticalDirection {
+            case .up:
+                guard first.dy > 0, abs(first.dy) > abs(first.dx) * 0.92 else { continue }
+            case .down:
+                guard first.dy < 0, abs(first.dy) > abs(first.dx) * 0.92 else { continue }
+            }
+
+            switch horizontalDirection {
+            case .right:
+                if second.dx > 0 && abs(second.dx) > abs(second.dy) * 0.7 { return true }
+            case .left:
+                if second.dx < 0 && abs(second.dx) > abs(second.dy) * 0.7 { return true }
+            }
+        }
+
+        return false
+    }
+
+    private func isDoubleDownRight(_ raw: [CGPoint]) -> Bool {
+        guard raw.count >= 12 else { return false }
+
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(20, box.height * 0.18)
+        let minHorizontalTravel = max(20, box.width * 0.18)
+
+        for r1 in stride(from: 0.14, through: 0.32, by: 0.04) {
+            let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
+            for r2 in stride(from: 0.34, through: 0.52, by: 0.04) {
+                let i2 = max(i1 + 2, min(raw.count - 4, Int(CGFloat(raw.count - 1) * CGFloat(r2))))
+                for r3 in stride(from: 0.56, through: 0.78, by: 0.04) {
+                    let i3 = max(i2 + 2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(r3))))
+
+                    let v1 = vector(from: raw[0], to: raw[i1])
+                    let v2 = vector(from: raw[i1], to: raw[i2])
+                    let v3 = vector(from: raw[i2], to: raw[i3])
+                    let v4 = vector(from: raw[i3], to: raw[raw.count - 1])
+
+                    guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.78 else { continue }
+                    guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
+                    guard v3.dy < 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.78 else { continue }
+                    guard v4.dx > 0, abs(v4.dx) >= minHorizontalTravel, abs(v4.dx) > abs(v4.dy) * 0.72 else { continue }
+
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private func isDownRightUpUShape(_ raw: [CGPoint]) -> Bool {
+        guard raw.count >= 10 else { return false }
+
+        let box = boundingBox(raw)
+        let minVerticalTravel = max(20, box.height * 0.28)
+        let minHorizontalTravel = max(20, box.width * 0.28)
+
+        for r1 in stride(from: 0.20, through: 0.42, by: 0.04) {
+            let i1 = max(2, min(raw.count - 5, Int(CGFloat(raw.count - 1) * CGFloat(r1))))
+            for r2 in stride(from: 0.56, through: 0.82, by: 0.04) {
+                let i2 = max(i1 + 2, min(raw.count - 3, Int(CGFloat(raw.count - 1) * CGFloat(r2))))
+
+                let v1 = vector(from: raw[0], to: raw[i1])
+                let v2 = vector(from: raw[i1], to: raw[i2])
+                let v3 = vector(from: raw[i2], to: raw[raw.count - 1])
+
+                guard v1.dy < 0, abs(v1.dy) >= minVerticalTravel, abs(v1.dy) > abs(v1.dx) * 0.82 else { continue }
+                guard v2.dx > 0, abs(v2.dx) >= minHorizontalTravel, abs(v2.dx) > abs(v2.dy) * 0.72 else { continue }
+                guard v3.dy > 0, abs(v3.dy) >= minVerticalTravel, abs(v3.dy) > abs(v3.dx) * 0.82 else { continue }
+
+                let shoulderGap = abs((raw.first?.y ?? 0) - (raw.last?.y ?? 0))
+                if shoulderGap <= max(26, box.height * 0.38) { return true }
+            }
+        }
+
+        return false
+    }
+
+    private func isClosedCircular(
+        _ raw: [CGPoint],
+        expectedTurns: CGFloat,
+        tolerance: CGFloat,
+        closeRatioLimit: CGFloat
+    ) -> Bool {
+        guard raw.count >= 10 else { return false }
+
+        let totalTurn = totalTurningAngle(raw)
+        let turnMatches = abs(totalTurn - expectedTurns) <= tolerance
+
+        let box = boundingBox(raw)
+        let diagonal = sqrt(box.width * box.width + box.height * box.height)
+        let closeRatio = diagonal > 0 ? distance(raw[0], raw[raw.count - 1]) / diagonal : 1
+        let isClosed = closeRatio < closeRatioLimit
+
+        let aspect = box.height > 0 ? box.width / box.height : 999
+        let validAspect = aspect > 0.35 && aspect < 2.8
+
+        return turnMatches && isClosed && validAspect
+    }
+
+    private func isSLike(_ raw: [CGPoint]) -> Bool {
+        guard raw.count >= 10 else { return false }
+
+        let box = boundingBox(raw)
+        let diagonal = sqrt(box.width * box.width + box.height * box.height)
+        if diagonal > 0, distance(raw[0], raw[raw.count - 1]) / diagonal < 0.25 { return false }
+
+        let strideStep = max(1, raw.count / 16)
+        var previousSign: CGFloat = 0
+        var signChanges = 0
+        var i = strideStep
+        while i < raw.count {
+            let delta = raw[i].x - raw[i - strideStep].x
+            let sign: CGFloat = delta > 0 ? 1 : (delta < 0 ? -1 : 0)
+            if sign != 0 {
+                if previousSign != 0 && sign != previousSign { signChanges += 1 }
+                previousSign = sign
+            }
+            i += strideStep
+        }
+        return signChanges >= 2
+    }
+
+    private func estimatedLoopCount(_ raw: [CGPoint]) -> CGFloat {
+        guard raw.count >= 6 else { return 0 }
+        let box = boundingBox(raw)
+        let a = max(box.width * 0.5, 1)
+        let b = max(box.height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return 0 }
+        return pathLength(raw) / ellipseCircumference
+    }
+
+    private func resample(_ points: [CGPoint], n: Int) -> [CGPoint] {
+        guard points.count > 1 else { return points }
+        let interval = pathLength(points) / CGFloat(n - 1)
+        guard interval > 0 else { return points }
+
+        var distanceAccumulator: CGFloat = 0
+        var newPoints: [CGPoint] = [points[0]]
+        var working = points
+        var i = 1
+
+        while i < working.count {
+            let segmentLength = distance(working[i - 1], working[i])
+            if segmentLength == 0 {
+                i += 1
+                continue
+            }
+
+            if distanceAccumulator + segmentLength >= interval {
+                let t = (interval - distanceAccumulator) / segmentLength
+                let interpolated = CGPoint(
+                    x: working[i - 1].x + t * (working[i].x - working[i - 1].x),
+                    y: working[i - 1].y + t * (working[i].y - working[i - 1].y)
+                )
+                newPoints.append(interpolated)
+                working.insert(interpolated, at: i)
+                distanceAccumulator = 0
+                i += 1
+            } else {
+                distanceAccumulator += segmentLength
+                i += 1
+            }
+        }
+
+        while newPoints.count < n, let last = working.last {
+            newPoints.append(last)
+        }
+        if newPoints.count > n {
+            newPoints = Array(newPoints.prefix(n))
+        }
+        return newPoints
+    }
+
+    private func rotateToIndicativeAngle(_ points: [CGPoint]) -> [CGPoint] {
+        guard let first = points.first else { return points }
+        let c = centroid(points)
+        let theta = atan2(first.y - c.y, first.x - c.x)
+        return rotate(points, by: -theta, around: c)
+    }
+
+    private func rotate(_ points: [CGPoint], by radians: CGFloat, around center: CGPoint) -> [CGPoint] {
+        points.map { p in
+            let translatedX = p.x - center.x
+            let translatedY = p.y - center.y
+            let x = translatedX * cos(radians) - translatedY * sin(radians) + center.x
+            let y = translatedX * sin(radians) + translatedY * cos(radians) + center.y
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    private func scaleToSquare(_ points: [CGPoint], size: CGFloat) -> [CGPoint] {
+        let box = boundingBox(points)
+        let scale = max(box.width, box.height)
+        guard scale > 0 else { return points }
+        return points.map {
+            CGPoint(
+                x: ($0.x - box.minX) / scale * size,
+                y: ($0.y - box.minY) / scale * size
+            )
+        }
+    }
+
+    private func translateToOrigin(_ points: [CGPoint]) -> [CGPoint] {
+        let c = centroid(points)
+        return points.map { CGPoint(x: $0.x - c.x, y: $0.y - c.y) }
+    }
+
+    private func pathDistance(_ a: [CGPoint], _ b: [CGPoint]) -> CGFloat {
+        guard a.count == b.count, !a.isEmpty else { return .greatestFiniteMagnitude }
+        var total: CGFloat = 0
+        for index in 0..<a.count {
+            total += distance(a[index], b[index])
+        }
+        return total / CGFloat(a.count)
+    }
+
+    private func pathLength(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+        var total: CGFloat = 0
+        for i in 1..<points.count {
+            total += distance(points[i - 1], points[i])
+        }
+        return total
+    }
+
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    private func centroid(_ points: [CGPoint]) -> CGPoint {
+        guard !points.isEmpty else { return .zero }
+        var sumX: CGFloat = 0
+        var sumY: CGFloat = 0
+        for p in points {
+            sumX += p.x
+            sumY += p.y
+        }
+        return CGPoint(x: sumX / CGFloat(points.count), y: sumY / CGFloat(points.count))
+    }
+
+    private func vector(from a: CGPoint, to b: CGPoint) -> CGVector {
+        CGVector(dx: b.x - a.x, dy: b.y - a.y)
+    }
+
+    private func cornerCount(_ points: [CGPoint]) -> Int {
+        guard points.count >= 3 else { return 0 }
+        let sampled = sampledPoints(points, stride: max(1, points.count / 24))
+        guard sampled.count >= 3 else { return 0 }
+
+        var count = 0
+        for i in 1..<(sampled.count - 1) {
+            let v1 = vector(from: sampled[i - 1], to: sampled[i])
+            let v2 = vector(from: sampled[i], to: sampled[i + 1])
+
+            let l1 = sqrt(v1.dx * v1.dx + v1.dy * v1.dy)
+            let l2 = sqrt(v2.dx * v2.dx + v2.dy * v2.dy)
+            if l1 < 0.1 || l2 < 0.1 { continue }
+
+            let dot = v1.dx * v2.dx + v1.dy * v2.dy
+            let normalizedDot = max(-1, min(1, dot / (l1 * l2)))
+            let angle = acos(normalizedDot)
+            if angle > (.pi / 4) { count += 1 }
+        }
+
+        return count
+    }
+
+    private func sampledPoints(_ points: [CGPoint], stride: Int) -> [CGPoint] {
+        var output: [CGPoint] = []
+        var index = 0
+        while index < points.count {
+            output.append(points[index])
+            index += stride
+        }
+        if let last = points.last, output.last != last {
+            output.append(last)
+        }
+        return output
+    }
+
+    private func totalTurningAngle(_ points: [CGPoint]) -> CGFloat {
+        guard points.count >= 3 else { return 0 }
+        var sum: CGFloat = 0
+        for i in 2..<points.count {
+            let v1 = vector(from: points[i - 2], to: points[i - 1])
+            let v2 = vector(from: points[i - 1], to: points[i])
+            let a1 = atan2(v1.dy, v1.dx)
+            let a2 = atan2(v2.dy, v2.dx)
+            var delta = a2 - a1
+            while delta > .pi { delta -= 2 * .pi }
+            while delta < -.pi { delta += 2 * .pi }
+            sum += abs(delta)
+        }
+        return sum
+    }
+
+    private func boundingBox(_ points: [CGPoint]) -> (minX: CGFloat, minY: CGFloat, width: CGFloat, height: CGFloat) {
+        var minX = CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+
+        for p in points {
+            minX = min(minX, p.x)
+            minY = min(minY, p.y)
+            maxX = max(maxX, p.x)
+            maxY = max(maxY, p.y)
+        }
+
+        return (minX, minY, maxX - minX, maxY - minY)
+    }
+
+    private static func rawTemplates() -> [PadGestureTemplate] {
+        func interpolatedLine(from: CGPoint, to: CGPoint, steps: Int = 24) -> [CGPoint] {
+            guard steps > 0 else { return [from, to] }
+            return (0...steps).map { i in
+                let t = CGFloat(i) / CGFloat(steps)
+                return CGPoint(
+                    x: from.x + (to.x - from.x) * t,
+                    y: from.y + (to.y - from.y) * t
+                )
+            }
+        }
+
+        func polyline(_ controlPoints: [CGPoint], stepsPerSegment: Int = 18) -> [CGPoint] {
+            guard controlPoints.count >= 2 else { return controlPoints }
+            var output: [CGPoint] = []
+            for index in 1..<controlPoints.count {
+                let segment = interpolatedLine(from: controlPoints[index - 1], to: controlPoints[index], steps: stepsPerSegment)
+                if output.isEmpty {
+                    output.append(contentsOf: segment)
+                } else {
+                    output.append(contentsOf: segment.dropFirst())
+                }
+            }
+            return output
+        }
+
+        func circle(loopCount: Int, clockwise: Bool, segmentsPerLoop: Int = 64) -> [CGPoint] {
+            let center = CGPoint(x: 125, y: 125)
+            let radius: CGFloat = 72
+
+            return (0...(segmentsPerLoop * loopCount)).map { i in
+                let t = CGFloat(i) / CGFloat(segmentsPerLoop * loopCount)
+                let radians = t * 2 * .pi * CGFloat(loopCount) * (clockwise ? -1 : 1)
+                return CGPoint(
+                    x: center.x + radius * cos(radians),
+                    y: center.y + radius * sin(radians)
+                )
+            }
+        }
+
+        let left = interpolatedLine(from: CGPoint(x: 220, y: 120), to: CGPoint(x: 30, y: 120))
+        let right = interpolatedLine(from: CGPoint(x: 30, y: 120), to: CGPoint(x: 220, y: 120))
+        let lShape = polyline([
+            CGPoint(x: 50, y: 210),
+            CGPoint(x: 50, y: 50),
+            CGPoint(x: 210, y: 50)
+        ])
+        let llShapeA = polyline([
+            CGPoint(x: 35, y: 210),
+            CGPoint(x: 35, y: 50),
+            CGPoint(x: 105, y: 50),
+            CGPoint(x: 105, y: 210),
+            CGPoint(x: 105, y: 50),
+            CGPoint(x: 220, y: 50)
+        ])
+        let llShapeB = polyline([
+            CGPoint(x: 35, y: 210),
+            CGPoint(x: 35, y: 50),
+            CGPoint(x: 120, y: 50),
+            CGPoint(x: 165, y: 210),
+            CGPoint(x: 165, y: 50),
+            CGPoint(x: 225, y: 50)
+        ])
+        let uShape = polyline([
+            CGPoint(x: 45, y: 210),
+            CGPoint(x: 45, y: 55),
+            CGPoint(x: 205, y: 55),
+            CGPoint(x: 205, y: 210)
+        ])
+        let upRight = polyline([
+            CGPoint(x: 125, y: 30),
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 220, y: 220)
+        ])
+        let upLeft = polyline([
+            CGPoint(x: 125, y: 30),
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 30, y: 220)
+        ])
+        let downLeft = polyline([
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 125, y: 35),
+            CGPoint(x: 30, y: 35)
+        ])
+        let downRight = polyline([
+            CGPoint(x: 125, y: 220),
+            CGPoint(x: 125, y: 35),
+            CGPoint(x: 220, y: 35)
+        ])
+        let downRightDownRight = polyline([
+            CGPoint(x: 70, y: 220),
+            CGPoint(x: 70, y: 120),
+            CGPoint(x: 150, y: 120),
+            CGPoint(x: 150, y: 35),
+            CGPoint(x: 230, y: 35)
+        ])
+        let sShapeA = polyline([
+            CGPoint(x: 40, y: 210),
+            CGPoint(x: 95, y: 230),
+            CGPoint(x: 170, y: 190),
+            CGPoint(x: 210, y: 145),
+            CGPoint(x: 140, y: 115),
+            CGPoint(x: 75, y: 85),
+            CGPoint(x: 30, y: 35)
+        ])
+        let sShapeB = polyline([
+            CGPoint(x: 210, y: 210),
+            CGPoint(x: 150, y: 235),
+            CGPoint(x: 90, y: 190),
+            CGPoint(x: 45, y: 145),
+            CGPoint(x: 110, y: 110),
+            CGPoint(x: 165, y: 80),
+            CGPoint(x: 210, y: 35)
+        ])
+
+        return [
+            PadGestureTemplate(name: "Left", points: left),
+            PadGestureTemplate(name: "Right", points: right),
+            PadGestureTemplate(name: "L", points: lShape),
+            PadGestureTemplate(name: "LL", points: llShapeA),
+            PadGestureTemplate(name: "LL", points: llShapeB),
+            PadGestureTemplate(name: "U", points: uShape),
+            PadGestureTemplate(name: "O", points: circle(loopCount: 1, clockwise: true)),
+            PadGestureTemplate(name: "O", points: circle(loopCount: 1, clockwise: false)),
+            PadGestureTemplate(name: "OO", points: circle(loopCount: 2, clockwise: true)),
+            PadGestureTemplate(name: "OO", points: circle(loopCount: 2, clockwise: false)),
+            PadGestureTemplate(name: "UpRight", points: upRight),
+            PadGestureTemplate(name: "UpLeft", points: upLeft),
+            PadGestureTemplate(name: "DownLeft", points: downLeft),
+            PadGestureTemplate(name: "DownRight", points: downRight),
+            PadGestureTemplate(name: "DownRightDownRight", points: downRightDownRight),
+            PadGestureTemplate(name: "S", points: sShapeA),
+            PadGestureTemplate(name: "S", points: sShapeB)
+        ]
     }
 }
 
@@ -283,28 +1139,17 @@ struct PadGestureHUD: View {
     let state: PadGestureHUDState
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: state.systemImageName)
-                .font(.system(size: 34, weight: .semibold))
-            Text(state.title)
-                .font(.system(size: 14, weight: .semibold))
-            if !state.isCommitted {
-                Text("\(Int(state.confidence * 100))%")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .foregroundStyle(Color.primary)
-        .padding(.horizontal, 26)
-        .padding(.vertical, 22)
-        .frame(minWidth: 170)
-        .background(hudBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
+        Image(systemName: state.systemImageName)
+            .font(.system(size: 40, weight: .bold))
+            .foregroundStyle(Color.primary)
+            .frame(width: 138, height: 138)
+            .background(hudBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
     }
 
     @ViewBuilder

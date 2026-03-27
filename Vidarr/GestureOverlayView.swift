@@ -1,4 +1,5 @@
 import Cocoa
+import VidarrCore
 
 final class GestureOverlayView: NSView {
     struct CaptureConfig {

@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import VidarrCore
 import WebKit
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -23,6 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var developMenu: NSMenu?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        BrowserProfileManager.shared.applyCurrentProfile()
         NSApp.setActivationPolicy(.regular)
         configureMainMenu()
         if let iconImage = NSImage(named: "AppIcon") ?? NSImage(named: NSImage.applicationIconName) {
@@ -603,6 +605,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private static let minimumTabHostSize = NSSize(width: 720, height: 520)
 
     private let prefs = BrowserPreferences.shared
+    private let profileManager = BrowserProfileManager.shared
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
@@ -612,6 +615,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
+    private let profilePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let addProfileButton = NSButton(title: "新しいプロファイルを追加", target: nil, action: nil)
     private let contentLanguagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let generalSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
@@ -727,6 +732,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         searchTemplateField.placeholderString = "https://search.fenrir-inc.com/?q={query}"
         searchTemplateField.controlSize = .large
 
+        let profileLabel = makeFieldLabel("現在のプロファイル")
+        profilePopup.translatesAutoresizingMaskIntoConstraints = false
+        profilePopup.target = self
+        profilePopup.action = #selector(profileChanged(_:))
+        addProfileButton.translatesAutoresizingMaskIntoConstraints = false
+        addProfileButton.target = self
+        addProfileButton.action = #selector(addProfile)
+        addProfileButton.controlSize = .regular
+
         let contentLanguageLabel = makeFieldLabel("Webページの表示言語")
 
         contentLanguagePopup.translatesAutoresizingMaskIntoConstraints = false
@@ -808,7 +822,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             chooseDownloadFolderButton,
             clearDownloadFolderButton,
             clearDataButton,
-            resetButton
+            resetButton,
+            addProfileButton
         ].forEach {
             $0.bezelStyle = .rounded
         }
@@ -821,6 +836,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalStack.addArrangedSubview(homePageField)
         generalStack.addArrangedSubview(searchLabel)
         generalStack.addArrangedSubview(searchTemplateField)
+        let profileRow = NSStackView()
+        profileRow.translatesAutoresizingMaskIntoConstraints = false
+        profileRow.orientation = .horizontal
+        profileRow.alignment = .centerY
+        profileRow.spacing = 12
+        profileRow.addArrangedSubview(profileLabel)
+        profileRow.addArrangedSubview(profilePopup)
+        profileRow.addArrangedSubview(addProfileButton)
+        generalStack.addArrangedSubview(profileRow)
         let contentLanguageRow = NSStackView()
         contentLanguageRow.translatesAutoresizingMaskIntoConstraints = false
         contentLanguageRow.orientation = .horizontal
@@ -901,6 +925,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         NSLayoutConstraint.activate([
             homePageField.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             searchTemplateField.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            profileRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             contentLanguageRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             generalGrid.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
 
@@ -946,6 +971,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let center = NotificationCenter.default
         let names = [
             BrowserPreferences.didChangeNotification,
+            BrowserProfileManager.didChangeNotification,
             BrowsingHistoryStore.didChangeNotification,
             BookmarkStore.didChangeNotification,
             DownloadStore.didChangeNotification,
@@ -1066,6 +1092,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private func loadValues() {
         homePageField.stringValue = prefs.homePageURLString
         searchTemplateField.stringValue = prefs.searchTemplate
+        profilePopup.removeAllItems()
+        profilePopup.addItems(withTitles: profileManager.profiles.map(\.name))
+        if let index = profileManager.profiles.firstIndex(of: profileManager.currentProfile) {
+            profilePopup.selectItem(at: index)
+        } else {
+            profilePopup.selectItem(at: 0)
+        }
         updatesCheckbox.state = prefs.updatesEnabled ? .on : .off
         antiTrackingCheckbox.state = prefs.antiTrackingEnabled ? .on : .off
         contentBlockingCheckbox.state = prefs.contentBlockingEnabled ? .on : .off
@@ -1090,6 +1123,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             contentLanguagePopup.selectItem(at: 0)
         }
         generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
+        if let summary = generalSummaryLabel.stringValue.isEmpty ? nil : Optional(generalSummaryLabel.stringValue) {
+            generalSummaryLabel.stringValue = "現在のプロファイル: \(profileManager.currentProfile.name)\n" + summary
+        }
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureListLabel.stringValue = [
@@ -1186,6 +1222,51 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     @objc private func updatesChanged(_ sender: NSButton) {
         prefs.updatesEnabled = (sender.state == .on)
         loadValues()
+    }
+
+    @objc private func profileChanged(_ sender: NSPopUpButton) {
+        let index = sender.indexOfSelectedItem
+        guard index >= 0, index < profileManager.profiles.count else { return }
+        let profile = profileManager.profiles[index]
+        guard profile.id != profileManager.currentProfile.id else { return }
+        _ = profileManager.switchToProfile(id: profile.id)
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "プロファイルを切り替えました"
+        alert.informativeText = "新しいプロファイルは次回起動時から反映されます。iPad / iPhone 共有の土台として、設定や履歴をプロファイルごとに分ける準備です。"
+        alert.addButton(withTitle: "OK")
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+        loadValues()
+    }
+
+    @objc private func addProfile() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "新しいプロファイルを追加"
+        alert.informativeText = "名前を入力してください。次回起動時から切り替えて使えます。"
+        alert.addButton(withTitle: "追加")
+        alert.addButton(withTitle: "キャンセル")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.placeholderString = "Work"
+        alert.accessoryView = field
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            let profile = self.profileManager.createProfile(named: field.stringValue)
+            _ = self.profileManager.switchToProfile(id: profile.id)
+            self.loadValues()
+        }
+
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
     }
 
     @objc private func contentLanguageChanged(_ sender: NSPopUpButton) {

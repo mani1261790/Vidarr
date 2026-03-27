@@ -1,6 +1,7 @@
 import Cocoa
 import AVFoundation
 import UniformTypeIdentifiers
+import VidarrCore
 import WebKit
 
 private final class PDFExportContext {

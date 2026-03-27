@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import VidarrCore
 
 struct DownloadItem: Codable {
     let sourceURLString: String

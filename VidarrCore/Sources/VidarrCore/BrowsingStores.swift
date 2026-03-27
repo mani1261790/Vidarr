@@ -17,7 +17,7 @@ public struct BrowsingItem: Codable {
 }
 
 public final class BrowsingHistoryStore {
-    public static let shared = BrowsingHistoryStore()
+    public static var shared = BrowsingHistoryStore()
     public static let didChangeNotification = Notification.Name("BrowsingHistoryStoreDidChange")
 
     private enum Key {
@@ -36,6 +36,11 @@ public final class BrowsingHistoryStore {
         } else {
             items = []
         }
+    }
+
+    public static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = BrowsingHistoryStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
     }
 
     public func recordVisit(url: URL, title: String?) {
@@ -83,7 +88,7 @@ public final class BrowsingHistoryStore {
 }
 
 public final class BookmarkStore {
-    public static let shared = BookmarkStore()
+    public static var shared = BookmarkStore()
     public static let didChangeNotification = Notification.Name("BookmarkStoreDidChange")
 
     private enum Key {
@@ -101,6 +106,11 @@ public final class BookmarkStore {
         } else {
             items = []
         }
+    }
+
+    public static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = BookmarkStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
     }
 
     public func addOrUpdate(url: URL, title: String?) {

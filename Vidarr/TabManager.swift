@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import VidarrCore
 import WebKit
 
 enum BrowserTabGroup: String, CaseIterable, Codable {

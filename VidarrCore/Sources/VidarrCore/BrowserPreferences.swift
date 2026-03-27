@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 
 public final class BrowserPreferences {
-    public static let shared = BrowserPreferences()
+    public static var shared = BrowserPreferences()
     public static let didChangeNotification = Notification.Name("BrowserPreferencesDidChange")
 
     public enum PreferredContentLanguage: String, CaseIterable {
@@ -10,7 +10,7 @@ public final class BrowserPreferences {
         case japanese
         case english
 
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .system: return "System Default"
             case .japanese: return "Japanese"
@@ -18,7 +18,7 @@ public final class BrowserPreferences {
             }
         }
 
-        var navigatorLanguage: String? {
+        public var navigatorLanguage: String? {
             switch self {
             case .system: return nil
             case .japanese: return "ja-JP"
@@ -32,7 +32,7 @@ public final class BrowserPreferences {
         case normal
         case high
 
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .low: return "Low"
             case .normal: return "Normal"
@@ -41,7 +41,7 @@ public final class BrowserPreferences {
         }
 
         // >1.0 makes gesture capture easier, <1.0 makes stricter.
-        var multiplier: CGFloat {
+        public var multiplier: CGFloat {
             switch self {
             case .low: return 0.85
             case .normal: return 1.0
@@ -91,6 +91,11 @@ public final class BrowserPreferences {
             Key.sendDoNotTrack: true,
             Key.restoreClosedTabPageHistory: true
         ])
+    }
+
+    public static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = BrowserPreferences(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
     }
 
     public var homePageURLString: String {

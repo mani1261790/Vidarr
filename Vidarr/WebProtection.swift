@@ -1,4 +1,5 @@
 import Foundation
+import VidarrCore
 import WebKit
 
 final class WebContentBlocker {

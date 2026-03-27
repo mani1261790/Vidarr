@@ -1,4 +1,5 @@
 import Foundation
+import VidarrCore
 import WebKit
 
 /// 現在タブの WKWebView 操作と共通設定を提供するセッション層。

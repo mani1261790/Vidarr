@@ -1,4 +1,5 @@
 import Foundation
+import VidarrCore
 
 /// すべてのブラウザ操作の入口。
 /// UI / ジェスチャーの双方はこのクラス経由で操作する。

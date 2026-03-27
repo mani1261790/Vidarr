@@ -1,5 +1,6 @@
 import CoreGraphics
 import Testing
+import VidarrCore
 @testable import Vidarr
 
 struct GestureRecognizerTests {

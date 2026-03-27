@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BE1209A12F4F227E00CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = BE1209A42F4F227E00CB4EE9 /* VidarrCore */; };
+		BE1209A22F4F227E00CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = BE1209A52F4F227E00CB4EE9 /* VidarrCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		3C233D8B2F4F228000CB4EE9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BE1209A12F4F227E00CB4EE9 /* VidarrCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BE1209A22F4F227E00CB4EE9 /* VidarrCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,7 @@
 			);
 			name = Vidarr;
 			packageProductDependencies = (
+				BE1209A42F4F227E00CB4EE9 /* VidarrCore */,
 			);
 			productName = Vidarr;
 			productReference = 3C233D7A2F4F227E00CB4EE9 /* Vidarr.app */;
@@ -135,6 +143,7 @@
 			);
 			name = VidarrTests;
 			packageProductDependencies = (
+				BE1209A52F4F227E00CB4EE9 /* VidarrCore */,
 			);
 			productName = VidarrTests;
 			productReference = 3C233D8A2F4F228000CB4EE9 /* VidarrTests.xctest */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = 3C233D712F4F227E00CB4EE9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3C233D7B2F4F227E00CB4EE9 /* Products */;
 			projectDirPath = "";
@@ -267,6 +279,26 @@
 			targetProxy = 3C233D952F4F228000CB4EE9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = VidarrCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BE1209A42F4F227E00CB4EE9 /* VidarrCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
+			productName = VidarrCore;
+		};
+		BE1209A52F4F227E00CB4EE9 /* VidarrCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
+			productName = VidarrCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		3C233D9C2F4F228000CB4EE9 /* Debug */ = {

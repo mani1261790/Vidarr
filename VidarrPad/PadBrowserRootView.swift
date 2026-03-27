@@ -583,6 +583,7 @@ private struct PadSettingsSheet: View {
     @State private var searchTemplate = PadBrowserPreferences.shared.searchTemplate
     @State private var preferredContentLanguage = PadBrowserPreferences.shared.preferredContentLanguage
     @State private var gestureSensitivity = PadBrowserPreferences.shared.gestureSensitivity
+    @State private var reopenTabsOnLaunch = PadBrowserPreferences.shared.reopenTabsOnLaunch
     @State private var restoreClosedTabPageHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
     @State private var autoHideBottomBar = PadBrowserPreferences.shared.autoHideBottomBar
     @State private var bottomBarAutoHideDelay = PadBrowserPreferences.shared.bottomBarAutoHideDelay
@@ -615,14 +616,10 @@ private struct PadSettingsSheet: View {
                 Form {
                     switch selectedTab {
                     case .general:
-                        Section("新しく開くページ") {
+                        Section("スタートページ") {
                             TextField("スタートページのURL", text: $homePageURLString)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                            LabeledContent("新規タブ") {
-                                Text("このURLを開く")
-                                    .foregroundStyle(.secondary)
-                            }
                         }
 
                         Section("検索") {
@@ -666,6 +663,7 @@ private struct PadSettingsSheet: View {
                         }
 
                         Section("タブの復元") {
+                            Toggle("前回終了時のタブを次回も開く", isOn: $reopenTabsOnLaunch)
                             Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
                         }
 
@@ -678,11 +676,6 @@ private struct PadSettingsSheet: View {
                             }
                             Toggle("URL 内の追跡パラメータを取り除く", isOn: $stripTrackingParameters)
                             Toggle("危険なサイトを警告する", isOn: $harmfulSiteWarningEnabled)
-                        }
-                        Section("メモ") {
-                            Text("広告や追跡の強いブロック、サイトごとの権限管理、ダウンロード一覧は iPad 版で順次追加します。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                         }
 
                     case .data:
@@ -739,6 +732,7 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.searchTemplate = searchTemplate
                         PadBrowserPreferences.shared.preferredContentLanguage = preferredContentLanguage
                         PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
+                        PadBrowserPreferences.shared.reopenTabsOnLaunch = reopenTabsOnLaunch
                         PadBrowserPreferences.shared.autoHideBottomBar = autoHideBottomBar
                         PadBrowserPreferences.shared.bottomBarAutoHideDelay = bottomBarAutoHideDelay
                         PadBrowserPreferences.shared.restoreClosedTabPageHistory = restoreClosedTabPageHistory

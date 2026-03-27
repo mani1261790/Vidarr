@@ -337,6 +337,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     private func restoreSessionIfAvailable() {
         let defaults = PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
+        guard PadBrowserPreferences.shared.reopenTabsOnLaunch else {
+            defaults.removeObject(forKey: "browser.session.snapshot")
+            return
+        }
         guard let data = defaults.data(forKey: "browser.session.snapshot"),
               let snapshot = try? JSONDecoder().decode(SessionSnapshot.self, from: data),
               !snapshot.tabs.isEmpty else {
@@ -371,6 +375,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     private func saveSessionSnapshot() {
         let defaults = PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
+        guard PadBrowserPreferences.shared.reopenTabsOnLaunch else {
+            defaults.removeObject(forKey: "browser.session.snapshot")
+            return
+        }
         let snapshot = SessionSnapshot(
             selectedIndex: min(max(0, selectedIndex), max(tabs.count - 1, 0)),
             tabs: tabs.map { tab in

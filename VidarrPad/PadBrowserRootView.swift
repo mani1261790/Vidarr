@@ -36,6 +36,7 @@ struct PadBrowserRootView: View {
     @State private var tabSwitchProgress: CGFloat = 0
     @State private var tabSwitchToken = UUID()
     @State private var interactiveTargetID: UUID?
+    @State private var webViewportWidth: CGFloat = 1
     @FocusState private var editingURLFocused: Bool
 
     var body: some View {
@@ -125,28 +126,36 @@ struct PadBrowserRootView: View {
     }
 
     private var webLayer: some View {
-        ZStack {
-            PadWebStageView(
-                selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
-                transitionFromWebView: tabSwitchTransition?.fromTab.webView,
-                transitionToWebView: tabSwitchTransition?.toTab.webView,
-                transitionDirection: tabSwitchTransition?.direction,
-                emphasizeBirth: tabSwitchTransition?.mode == .newTab,
-                transitionProgress: tabSwitchProgress,
-                gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
-                    ? gestureConfiguration
-                    : nil
-            )
-            .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                PadWebStageView(
+                    selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
+                    transitionFromWebView: tabSwitchTransition?.fromTab.webView,
+                    transitionToWebView: tabSwitchTransition?.toTab.webView,
+                    transitionDirection: tabSwitchTransition?.direction,
+                    emphasizeBirth: tabSwitchTransition?.mode == .newTab,
+                    transitionProgress: tabSwitchProgress,
+                    gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
+                        ? gestureConfiguration
+                        : nil
+                )
+                .ignoresSafeArea()
 
-            if tabSwitchTransition == nil, model.selectedTab == nil {
-                ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if tabSwitchTransition == nil, model.selectedTab == nil {
+                    ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                if let gestureHUD {
+                    PadGestureHUD(state: gestureHUD)
+                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                }
             }
-
-            if let gestureHUD {
-                PadGestureHUD(state: gestureHUD)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            .onAppear {
+                webViewportWidth = max(proxy.size.width, 1)
+            }
+            .onChange(of: proxy.size.width) { _, width in
+                webViewportWidth = max(width, 1)
             }
         }
     }
@@ -238,17 +247,13 @@ struct PadBrowserRootView: View {
             if let currentID = model.selectedTab?.id,
                let currentIndex = model.tabIndex(for: currentID),
                currentIndex > 0 {
-                commitInteractiveTabSwitchIfNeeded(to: model.tabs[currentIndex - 1].id) {
-                    animateTabSelection(to: model.tabs[currentIndex - 1].id)
-                }
+                animateTabSelection(to: model.tabs[currentIndex - 1].id)
             }
         case .nextTab:
             if let currentID = model.selectedTab?.id,
                let currentIndex = model.tabIndex(for: currentID),
                currentIndex < model.tabs.count - 1 {
-                commitInteractiveTabSwitchIfNeeded(to: model.tabs[currentIndex + 1].id) {
-                    animateTabSelection(to: model.tabs[currentIndex + 1].id)
-                }
+                animateTabSelection(to: model.tabs[currentIndex + 1].id)
             }
         case .closeTab:
             if let id = model.selectedTab?.id {
@@ -367,6 +372,9 @@ struct PadBrowserRootView: View {
             onHorizontalSwipeDrag: { action, totalX in
                 updateInteractiveTabSwitch(for: action, totalX: totalX)
             },
+            onHorizontalSwipeFinish: { action, totalX in
+                finishInteractiveTabSwitch(for: action, totalX: totalX)
+            },
             onHorizontalSwipeCancel: {
                 cancelInteractiveTabSwitch()
             },
@@ -437,7 +445,7 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction, mode: .standard)
             interactiveTargetID = toTab.id
         }
-        let width = UIScreen.main.bounds.width
+        let width = max(webViewportWidth, 1)
         let progress = abs(totalX) / max(width + 16, 1)
         tabSwitchProgress = min(0.82, max(0, progress))
     }
@@ -473,6 +481,51 @@ struct PadBrowserRootView: View {
             try? await Task.sleep(for: .milliseconds(170))
             guard tabSwitchToken == token else { return }
             model.selectTab(id: id)
+            tabSwitchTransition = nil
+            tabSwitchProgress = 0
+            interactiveTargetID = nil
+        }
+    }
+
+    private func finishInteractiveTabSwitch(for action: PadGestureAction, totalX: CGFloat) {
+        guard let transition = tabSwitchTransition, let targetID = interactiveTargetID else {
+            performGesture(action)
+            return
+        }
+
+        let width = max(webViewportWidth, 1)
+        let gap: CGFloat = 16
+        let fullTravel = width + gap
+        let commitThreshold = max(84, width * 0.18)
+        let shouldCommit: Bool
+
+        switch action {
+        case .nextTab:
+            shouldCommit = totalX <= -commitThreshold
+        case .previousTab:
+            shouldCommit = totalX >= commitThreshold
+        default:
+            shouldCommit = true
+        }
+
+        let currentFromX = -transition.direction * fullTravel * tabSwitchProgress
+        let fromTargetX: CGFloat = shouldCommit ? (-transition.direction * fullTravel) : 0
+        let remaining = abs(fromTargetX - currentFromX)
+        let normalized = min(1.0, max(0.0, remaining / max(fullTravel, 1)))
+        let duration = 0.16 + (0.08 * normalized)
+        let token = UUID()
+        tabSwitchToken = token
+
+        withAnimation(.easeInOut(duration: duration)) {
+            tabSwitchProgress = shouldCommit ? 1 : 0
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Int((duration * 1000).rounded(.up)) + 10))
+            guard tabSwitchToken == token else { return }
+            if shouldCommit {
+                model.selectTab(id: targetID)
+            }
             tabSwitchTransition = nil
             tabSwitchProgress = 0
             interactiveTargetID = nil

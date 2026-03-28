@@ -187,6 +187,7 @@ struct PadWebStageView: UIViewRepresentable {
                     sensitivity: configuration.sensitivity,
                     onPreview: configuration.onPreview,
                     onHorizontalSwipeDrag: configuration.onHorizontalSwipeDrag,
+                    onHorizontalSwipeFinish: configuration.onHorizontalSwipeFinish,
                     onHorizontalSwipeCancel: configuration.onHorizontalSwipeCancel,
                     onCommit: configuration.onCommit,
                     onCancel: configuration.onCancel

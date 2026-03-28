@@ -29,6 +29,7 @@ struct PadGestureConfiguration {
     let sensitivity: PadGestureSensitivity
     let onPreview: (PadGestureHUDState?) -> Void
     let onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
+    let onHorizontalSwipeFinish: (PadGestureAction, CGFloat) -> Void
     let onHorizontalSwipeCancel: () -> Void
     let onCommit: (PadGestureAction) -> Void
     let onCancel: () -> Void
@@ -67,6 +68,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     var sensitivity: PadGestureSensitivity
     private var onPreview: (PadGestureHUDState?) -> Void
     private var onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
+    private var onHorizontalSwipeFinish: (PadGestureAction, CGFloat) -> Void
     private var onHorizontalSwipeCancel: () -> Void
     private var onCommit: (PadGestureAction) -> Void
     private var onCancel: () -> Void
@@ -95,6 +97,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         sensitivity: PadGestureSensitivity,
         onPreview: @escaping (PadGestureHUDState?) -> Void,
         onHorizontalSwipeDrag: @escaping (PadGestureAction, CGFloat) -> Void,
+        onHorizontalSwipeFinish: @escaping (PadGestureAction, CGFloat) -> Void,
         onHorizontalSwipeCancel: @escaping () -> Void,
         onCommit: @escaping (PadGestureAction) -> Void,
         onCancel: @escaping () -> Void
@@ -102,6 +105,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         self.sensitivity = sensitivity
         self.onPreview = onPreview
         self.onHorizontalSwipeDrag = onHorizontalSwipeDrag
+        self.onHorizontalSwipeFinish = onHorizontalSwipeFinish
         self.onHorizontalSwipeCancel = onHorizontalSwipeCancel
         self.onCommit = onCommit
         self.onCancel = onCancel
@@ -111,6 +115,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         sensitivity = configuration.sensitivity
         onPreview = configuration.onPreview
         onHorizontalSwipeDrag = configuration.onHorizontalSwipeDrag
+        onHorizontalSwipeFinish = configuration.onHorizontalSwipeFinish
         onHorizontalSwipeCancel = configuration.onHorizontalSwipeCancel
         onCommit = configuration.onCommit
         onCancel = configuration.onCancel
@@ -297,7 +302,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if interactiveTabSwipeActive, let action = activeHorizontalAction {
             suppressHorizontalCancelOnReset = true
             activeHorizontalAction = nil
-            onCommit(action)
+            onHorizontalSwipeFinish(action, interactiveTabSwipeTotalX)
             return
         }
 

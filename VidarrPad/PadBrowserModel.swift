@@ -17,6 +17,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private struct SessionTabSnapshot: Codable {
         let urlString: String?
         let title: String
+        let isProtected: Bool
         let historyURLStrings: [String]
         let historyIndex: Int
     }
@@ -32,6 +33,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         @Published var title: String = "New Tab"
         @Published var urlString: String = ""
         @Published var thumbnail: UIImage?
+        @Published var isProtected: Bool = false
         var historyURLs: [URL] = []
         var historyIndex: Int = -1
         var pendingHistoryNavigationIndex: Int?
@@ -45,6 +47,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     struct ClosedTabSnapshot {
         let url: URL?
         let title: String
+        let isProtected: Bool
         let historyURLs: [URL]
         let historyIndex: Int
     }
@@ -77,10 +80,11 @@ final class PadBrowserModel: NSObject, ObservableObject {
         tabs.firstIndex(where: { $0.id == id })
     }
 
-    func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1) {
+    func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) {
         let webView = makeWebView()
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
+        tab.isProtected = isProtected
         let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
@@ -98,10 +102,11 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     @discardableResult
-    func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1) -> Tab {
+    func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) -> Tab {
         let webView = makeWebView()
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
+        tab.isProtected = isProtected
         let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
@@ -138,6 +143,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             ClosedTabSnapshot(
                 url: URL(string: tab.urlString),
                 title: tab.title,
+                isProtected: tab.isProtected,
                 historyURLs: tab.historyURLs,
                 historyIndex: tab.historyIndex
             ),
@@ -265,20 +271,39 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func closeAllTabs() {
-        let snapshots = tabs.map {
-            ClosedTabSnapshot(
-                url: URL(string: $0.urlString),
-                title: $0.title,
-                historyURLs: $0.historyURLs,
-                historyIndex: $0.historyIndex
+        let selectedWebView = selectedTab?.webView
+        var retained: [Tab] = []
+        let snapshots = tabs.compactMap { tab -> ClosedTabSnapshot? in
+            if tab.isProtected {
+                retained.append(tab)
+                return nil
+            }
+            return ClosedTabSnapshot(
+                url: URL(string: tab.urlString),
+                title: tab.title,
+                isProtected: tab.isProtected,
+                historyURLs: tab.historyURLs,
+                historyIndex: tab.historyIndex
             )
         }
         closedTabs.insert(contentsOf: snapshots.reversed(), at: 0)
         if closedTabs.count > 20 {
             closedTabs.removeLast(closedTabs.count - 20)
         }
-        tabs.removeAll()
-        newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        tabs = retained
+        if tabs.isEmpty {
+            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+            return
+        }
+        if let selectedWebView,
+           let retainedIndex = tabs.firstIndex(where: { $0.webView === selectedWebView }) {
+            selectedIndex = retainedIndex
+        } else {
+            selectedIndex = 0
+        }
+        selectedSidebarTabID = selectedTab?.id
+        syncAddressBar()
+        saveSessionSnapshot()
     }
 
     func restoreClosedTab() {
@@ -288,10 +313,17 @@ final class PadBrowserModel: NSObject, ObservableObject {
         newTab(
             initialURL: snapshot.url ?? PadBrowserPreferences.shared.homePageURL,
             historyURLs: shouldRestoreHistory ? snapshot.historyURLs : [],
-            historyIndex: shouldRestoreHistory ? snapshot.historyIndex : -1
+            historyIndex: shouldRestoreHistory ? snapshot.historyIndex : -1,
+            isProtected: snapshot.isProtected
         )
         selectedTab?.title = snapshot.title
         selectedTab?.urlString = snapshot.url?.absoluteString ?? ""
+        saveSessionSnapshot()
+    }
+
+    func toggleProtectionForSelectedTab() {
+        guard let tab = selectedTab else { return }
+        tab.isProtected.toggle()
         saveSessionSnapshot()
     }
 
@@ -333,6 +365,17 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard let tab = selectedTab, let url = URL(string: tab.urlString) else { return }
         PadBookmarkStore.shared.toggle(url: url, title: tab.title)
         navigationStateToken = UUID()
+    }
+
+    func isDangerousSiteAllowed(for tab: Tab) -> Bool {
+        guard let host = URL(string: tab.urlString)?.host?.lowercased() else { return false }
+        return PadBrowserPreferences.shared.harmfulSiteAllowedHosts.contains(host)
+    }
+
+    func toggleDangerousSiteAllowedForSelectedTab() {
+        guard let host = selectedTab.flatMap({ URL(string: $0.urlString)?.host?.lowercased() }) else { return }
+        let allowed = PadBrowserPreferences.shared.harmfulSiteAllowedHosts.contains(host)
+        PadBrowserPreferences.shared.setHarmfulSiteAllowed(!allowed, for: host)
     }
 
     func loadSelectedTab(with input: String) {
@@ -401,6 +444,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             let tab = Tab(webView: webView)
             tab.title = tabSnapshot.title
             tab.urlString = tabSnapshot.urlString ?? ""
+            tab.isProtected = tabSnapshot.isProtected
             tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
             tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
             webView.navigationDelegate = self
@@ -436,6 +480,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 SessionTabSnapshot(
                     urlString: tab.webView.url?.absoluteString ?? (tab.urlString.isEmpty ? nil : tab.urlString),
                     title: tab.title,
+                    isProtected: tab.isProtected,
                     historyURLStrings: tab.historyURLs.map(\.absoluteString),
                     historyIndex: tab.historyIndex
                 )

@@ -23,6 +23,12 @@ struct PadBrowserRootView: View {
         let mode: Mode
     }
 
+    private struct ProtectedClosePrompt: Identifiable {
+        let id = UUID()
+        let tabID: UUID
+        let title: String
+    }
+
     @StateObject private var model = PadBrowserModel()
     @State private var gestureHUD: PadGestureHUDState?
     @State private var gestureHUDTask: Task<Void, Never>?
@@ -32,12 +38,20 @@ struct PadBrowserRootView: View {
     @State private var editingURL = ""
     @State private var showingSettings = false
     @State private var activeLibraryPanel: LibraryPanel?
+    @State private var protectedClosePrompt: ProtectedClosePrompt?
     @State private var tabSwitchTransition: TabSwitchTransition?
-    @State private var tabSwitchProgress: CGFloat = 0
+    @State private var tabSwitchVisualState: PadTabTransitionVisualState = .identity
     @State private var tabSwitchToken = UUID()
     @State private var interactiveTargetID: UUID?
     @State private var webViewportWidth: CGFloat = 1
     @State private var edgePreviewTabID: UUID?
+    @State private var stripBirthTabID: UUID?
+    @State private var tabStripFrames: [UUID: CGRect] = [:]
+    @State private var tabStripBounds: CGRect = .zero
+    @State private var stripBirthPosition: CGPoint = .zero
+    @State private var stripBirthOpacity: CGFloat = 0
+    @State private var stripBirthScale: CGFloat = 0.7
+    @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     @FocusState private var editingURLFocused: Bool
 
     var body: some View {
@@ -59,9 +73,22 @@ struct PadBrowserRootView: View {
                 tab: tab,
                 currentURL: bindingForEditingURL(),
                 isBookmarked: model.isBookmarked(tab),
+                isDangerousSiteAllowed: model.isDangerousSiteAllowed(for: tab),
                 onToggleBookmark: {
                     model.selectTab(id: tab.id)
                     model.toggleBookmarkForSelectedTab()
+                },
+                onToggleProtection: {
+                    model.selectTab(id: tab.id)
+                    model.toggleProtectionForSelectedTab()
+                },
+                onToggleDangerousSiteAllowed: {
+                    model.selectTab(id: tab.id)
+                    model.toggleDangerousSiteAllowedForSelectedTab()
+                },
+                onReload: {
+                    model.selectTab(id: tab.id)
+                    model.reload()
                 },
                 onOpenURL: {
                     model.selectTab(id: tab.id)
@@ -107,6 +134,16 @@ struct PadBrowserRootView: View {
                 }
             )
         }
+        .alert(item: $protectedClosePrompt) { prompt in
+            Alert(
+                title: Text("保護されたタブを閉じますか？"),
+                message: Text("「\(prompt.title)」は保護されています。閉じるには確認が必要です。"),
+                primaryButton: .destructive(Text("閉じる")) {
+                    model.closeTab(id: prompt.tabID)
+                },
+                secondaryButton: .cancel(Text("キャンセル"))
+            )
+        }
         .onAppear {
             scheduleBottomBarAutoHide()
         }
@@ -133,9 +170,7 @@ struct PadBrowserRootView: View {
                     selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
                     transitionFromWebView: tabSwitchTransition?.fromTab.webView,
                     transitionToWebView: tabSwitchTransition?.toTab.webView,
-                    transitionDirection: tabSwitchTransition?.direction,
-                    emphasizeBirth: tabSwitchTransition?.mode == .newTab,
-                    transitionProgress: tabSwitchProgress,
+                    transitionVisualState: tabSwitchTransition == nil ? nil : tabSwitchVisualState,
                     gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
                         ? gestureConfiguration
                         : nil
@@ -210,6 +245,8 @@ struct PadBrowserRootView: View {
                     PadTabThumbnail(
                         tab: tab,
                         isSelected: model.selectedTab?.id == tab.id,
+                        isBookmarked: model.isBookmarked(tab),
+                        showsBirthPulse: stripBirthTabID == tab.id,
                         onSelect: {
                             animateTabSelection(to: tab.id)
                         },
@@ -219,9 +256,49 @@ struct PadBrowserRootView: View {
                             editingTabID = tab.id
                         }
                     )
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(
+                                    key: PadTabFramePreferenceKey.self,
+                                    value: [tab.id: proxy.frame(in: .named("PadTabStripSpace"))]
+                                )
+                        }
+                    )
                 }
             }
             .padding(.horizontal, 4)
+        }
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
+                    }
+                    .onChange(of: proxy.size) { _, _ in
+                        tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
+                    }
+            }
+        )
+        .coordinateSpace(name: "PadTabStripSpace")
+        .onPreferenceChange(PadTabFramePreferenceKey.self) { frames in
+            tabStripFrames = frames
+        }
+        .overlay(alignment: .topLeading) {
+            if stripBirthOpacity > 0.001 {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.96))
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.black.opacity(0.78))
+                }
+                .frame(width: 20, height: 20)
+                .position(stripBirthPosition)
+                .scaleEffect(stripBirthScale)
+                .opacity(stripBirthOpacity)
+                .allowsHitTesting(false)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -258,7 +335,11 @@ struct PadBrowserRootView: View {
             }
         case .closeTab:
             if let id = model.selectedTab?.id {
-                model.closeTab(id: id)
+                if let tab = model.selectedTab, tab.isProtected {
+                    protectedClosePrompt = ProtectedClosePrompt(tabID: id, title: tab.title)
+                } else {
+                    model.closeTab(id: id)
+                }
             }
         case .closeAllTabs:
             model.closeAllTabs()
@@ -405,21 +486,16 @@ struct PadBrowserRootView: View {
         let token = UUID()
         tabSwitchToken = token
         tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction, mode: .standard)
-        tabSwitchProgress = 0
+        tabSwitchVisualState = initialVisualState(for: direction, emphasizeBirth: false)
         interactiveTargetID = nil
         edgePreviewTabID = nil
-
-        withAnimation(.easeInOut(duration: 0.24)) {
-            tabSwitchProgress = 1
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard tabSwitchToken == token else { return }
-            model.selectTab(id: id)
-            tabSwitchTransition = nil
-            tabSwitchProgress = 0
-        }
+        runCommitAnimation(
+            token: token,
+            transition: tabSwitchTransition!,
+            shouldSelectTarget: true,
+            startFromCurrentFrames: false,
+            emphasizeBirth: false
+        )
     }
 
     private func updateInteractiveTabSwitch(for action: PadGestureAction, totalX: CGFloat) {
@@ -451,54 +527,37 @@ struct PadBrowserRootView: View {
             interactiveTargetID = toTab.id
             edgePreviewTabID = nil
         }
-        let width = max(webViewportWidth, 1)
-        let progress = abs(totalX) / max(width + 16, 1)
-        tabSwitchProgress = min(0.82, max(0, progress))
+        tabSwitchVisualState = interactiveVisualState(for: direction, totalX: totalX)
     }
 
     private func cancelInteractiveTabSwitch() {
         guard tabSwitchTransition != nil, interactiveTargetID != nil else { return }
         let token = UUID()
         tabSwitchToken = token
-        withAnimation(.easeInOut(duration: 0.18)) {
-            tabSwitchProgress = 0
+        let width = max(webViewportWidth, 1)
+        let travel = width + 16
+        let remaining = abs(tabSwitchVisualState.fromX)
+        let normalized = min(1.0, max(0.0, remaining / max(travel, 1)))
+        let duration = 0.16 + (0.08 * normalized)
+
+        withAnimation(.easeInOut(duration: duration)) {
+            tabSwitchVisualState = .identity
         }
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(190))
+            try? await Task.sleep(for: .milliseconds(Int((duration * 1000).rounded(.up)) + 10))
             guard tabSwitchToken == token else { return }
             if let edgePreviewTabID {
                 model.discardTab(id: edgePreviewTabID)
                 self.edgePreviewTabID = nil
             }
             tabSwitchTransition = nil
-            tabSwitchProgress = 0
-            interactiveTargetID = nil
-        }
-    }
-
-    private func commitInteractiveTabSwitchIfNeeded(to id: UUID, fallback: () -> Void) {
-        guard interactiveTargetID == id, tabSwitchTransition != nil else {
-            fallback()
-            return
-        }
-
-        let token = UUID()
-        tabSwitchToken = token
-        withAnimation(.easeInOut(duration: 0.16)) {
-            tabSwitchProgress = 1
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(170))
-            guard tabSwitchToken == token else { return }
-            model.selectTab(id: id)
-            tabSwitchTransition = nil
-            tabSwitchProgress = 0
+            tabSwitchVisualState = .identity
             interactiveTargetID = nil
         }
     }
 
     private func finishInteractiveTabSwitch(for action: PadGestureAction, totalX: CGFloat) {
-        guard let transition = tabSwitchTransition, let targetID = interactiveTargetID else {
+        guard let transition = tabSwitchTransition, interactiveTargetID != nil else {
             performGesture(action)
             return
         }
@@ -518,7 +577,7 @@ struct PadBrowserRootView: View {
             shouldCommit = true
         }
 
-        let currentFromX = -transition.direction * fullTravel * tabSwitchProgress
+        let currentFromX = tabSwitchVisualState.fromX
         let fromTargetX: CGFloat = shouldCommit ? (-transition.direction * fullTravel) : 0
         let remaining = abs(fromTargetX - currentFromX)
         let normalized = min(1.0, max(0.0, remaining / max(fullTravel, 1)))
@@ -526,20 +585,29 @@ struct PadBrowserRootView: View {
         let token = UUID()
         tabSwitchToken = token
 
-        withAnimation(.easeInOut(duration: duration)) {
-            tabSwitchProgress = shouldCommit ? 1 : 0
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(Int((duration * 1000).rounded(.up)) + 10))
-            guard tabSwitchToken == token else { return }
-            if shouldCommit {
-                model.selectTab(id: targetID)
+        if shouldCommit {
+            runCommitAnimation(
+                token: token,
+                transition: transition,
+                shouldSelectTarget: true,
+                startFromCurrentFrames: true,
+                emphasizeBirth: false
+            )
+        } else {
+            withAnimation(.easeInOut(duration: duration)) {
+                tabSwitchVisualState = .identity
             }
-            edgePreviewTabID = nil
-            tabSwitchTransition = nil
-            tabSwitchProgress = 0
-            interactiveTargetID = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(Int((duration * 1000).rounded(.up)) + 10))
+                guard tabSwitchToken == token else { return }
+                if let edgePreviewTabID {
+                    model.discardTab(id: edgePreviewTabID)
+                    self.edgePreviewTabID = nil
+                }
+                tabSwitchTransition = nil
+                tabSwitchVisualState = .identity
+                interactiveTargetID = nil
+            }
         }
     }
 
@@ -548,24 +616,21 @@ struct PadBrowserRootView: View {
         let fromTab = model.selectedTab
         model.newTab()
         guard let fromTab, let toTab = model.selectedTab else { return }
+        triggerStripBirth(for: toTab.id, fromRightEdge: false)
 
         let token = UUID()
         tabSwitchToken = token
         tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: 1, mode: .newTab)
-        tabSwitchProgress = 0
+        tabSwitchVisualState = initialVisualState(for: 1, emphasizeBirth: true)
         interactiveTargetID = nil
         edgePreviewTabID = nil
-
-        withAnimation(.easeInOut(duration: 0.20)) {
-            tabSwitchProgress = 1
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(210))
-            guard tabSwitchToken == token else { return }
-            tabSwitchTransition = nil
-            tabSwitchProgress = 0
-        }
+        runCommitAnimation(
+            token: token,
+            transition: tabSwitchTransition!,
+            shouldSelectTarget: false,
+            startFromCurrentFrames: false,
+            emphasizeBirth: true
+        )
     }
 
     private func prepareRightEdgeNewTabPreview(totalX: CGFloat) {
@@ -577,6 +642,7 @@ struct PadBrowserRootView: View {
         } else {
             let created = model.addBackgroundTab(initialURL: PadBrowserPreferences.shared.homePageURL)
             edgePreviewTabID = created.id
+            triggerStripBirth(for: created.id, fromRightEdge: true)
             previewTab = created
         }
 
@@ -584,10 +650,7 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: previewTab, direction: 1, mode: .newTab)
             interactiveTargetID = previewTab.id
         }
-
-        let width = max(webViewportWidth, 1)
-        let progress = abs(totalX) / max(width + 16, 1)
-        tabSwitchProgress = min(0.82, max(0, progress))
+        tabSwitchVisualState = interactiveVisualState(for: 1, totalX: totalX)
     }
 
     private func showBottomBar(persist: Bool = false) {
@@ -617,6 +680,169 @@ struct PadBrowserRootView: View {
                 bottomBarVisible = false
             }
         }
+    }
+
+    private func triggerStripBirth(for tabID: UUID, fromRightEdge: Bool) {
+        stripBirthTabID = tabID
+        Task { @MainActor in
+            if fromRightEdge {
+                try? await Task.sleep(for: .milliseconds(16))
+                if let targetFrame = tabStripFrames[tabID] {
+                    let start = CGPoint(x: max(18, tabStripBounds.maxX - 14), y: targetFrame.midY)
+                    stripBirthPosition = start
+                    stripBirthScale = 0.85
+                    stripBirthOpacity = 0
+                    withAnimation(.easeOut(duration: 0.10)) {
+                        stripBirthOpacity = 1
+                        stripBirthScale = 1.05
+                    }
+                    withAnimation(.easeInOut(duration: 0.24)) {
+                        stripBirthPosition = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
+                        stripBirthScale = 0.92
+                    }
+                    try? await Task.sleep(for: .milliseconds(250))
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        stripBirthOpacity = 0
+                        stripBirthScale = 0.74
+                    }
+                } else {
+                    stripBirthOpacity = 0
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(520))
+            if stripBirthTabID == tabID {
+                stripBirthTabID = nil
+            }
+        }
+    }
+
+    private func interactiveVisualState(for direction: CGFloat, totalX: CGFloat) -> PadTabTransitionVisualState {
+        let width = max(webViewportWidth, 1)
+        let gap: CGFloat = 16
+        let travel = width + gap
+        let clampedFromX = min(travel * 0.82, max(-travel * 0.82, totalX))
+        let toX = (direction * travel) + clampedFromX
+        let progress = min(1, abs(clampedFromX) / max(travel, 1))
+        return PadTabTransitionVisualState(
+            fromX: clampedFromX,
+            toX: toX,
+            fromAlpha: 1.0 - (progress * 0.18),
+            toAlpha: 0.9 + (progress * 0.1),
+            dimAlpha: progress * 0.10,
+            gapAlpha: 0.9,
+            toShadowOpacity: Float(0.12 + (progress * 0.10))
+        )
+    }
+
+    private func initialVisualState(for direction: CGFloat, emphasizeBirth: Bool) -> PadTabTransitionVisualState {
+        let width = max(webViewportWidth, 1)
+        let gap: CGFloat = 16
+        let travel = width + gap
+        let entryTravel = travel + (emphasizeBirth ? 24 : 0)
+        return PadTabTransitionVisualState(
+            fromX: 0,
+            toX: direction * entryTravel,
+            fromAlpha: 1,
+            toAlpha: 0.9,
+            dimAlpha: 0,
+            gapAlpha: 0.9,
+            toShadowOpacity: 0.22
+        )
+    }
+
+    private func runCommitAnimation(
+        token: UUID,
+        transition: TabSwitchTransition,
+        shouldSelectTarget: Bool,
+        startFromCurrentFrames: Bool,
+        emphasizeBirth: Bool
+    ) {
+        let width = max(webViewportWidth, 1)
+        let gap: CGFloat = 16
+        let offscreenTravel = width + gap
+        let directionSign = -transition.direction
+        let now = CACurrentMediaTime()
+        let isChained = (now - lastCommittedTabTransitionAt) < 0.42
+
+        let fromMidX = directionSign * width * (emphasizeBirth ? (isChained ? 0.34 : 0.40) : (isChained ? 0.24 : 0.30))
+        let fromFinalX = directionSign * offscreenTravel
+        let fromOvershootMagnitude = max(isChained ? 4 : 8, min(isChained ? 12 : 18, width * (isChained ? 0.010 : 0.016)))
+        let fromOvershootX = fromFinalX + (directionSign * fromOvershootMagnitude)
+        let toMidX = -directionSign * width * (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.08 : 0.11))
+        let toOvershootMagnitude = max(isChained ? 4 : 8, min(isChained ? 10 : 16, width * (isChained ? 0.009 : 0.014)))
+        let toOvershootX = directionSign * toOvershootMagnitude
+
+        if !startFromCurrentFrames {
+            tabSwitchVisualState = initialVisualState(for: transition.direction, emphasizeBirth: emphasizeBirth)
+        }
+
+        let phase1Duration = emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.09 : 0.12)
+        let phase2Duration = emphasizeBirth ? (isChained ? 0.12 : 0.18) : (isChained ? 0.11 : 0.16)
+        let phase3Duration = emphasizeBirth ? (isChained ? 0.10 : 0.13) : (isChained ? 0.09 : 0.12)
+        let phase1State = PadTabTransitionVisualState(
+            fromX: fromMidX,
+            toX: toMidX,
+            fromAlpha: isChained ? 0.82 : 0.76,
+            toAlpha: 1.0,
+            dimAlpha: emphasizeBirth ? (isChained ? 0.14 : 0.20) : (isChained ? 0.10 : 0.16),
+            gapAlpha: 0.90,
+            toShadowOpacity: 0.22
+        )
+        let phase2State = PadTabTransitionVisualState(
+            fromX: fromOvershootX,
+            toX: toOvershootX,
+            fromAlpha: isChained ? 0.72 : 0.62,
+            toAlpha: 1.0,
+            dimAlpha: emphasizeBirth ? (isChained ? 0.14 : 0.20) : (isChained ? 0.10 : 0.16),
+            gapAlpha: 0.90,
+            toShadowOpacity: isChained ? 0.24 : 0.32
+        )
+        let phase3State = PadTabTransitionVisualState(
+            fromX: fromFinalX,
+            toX: 0,
+            fromAlpha: 1.0,
+            toAlpha: 1.0,
+            dimAlpha: 0,
+            gapAlpha: 0.16,
+            toShadowOpacity: 0.12
+        )
+
+        withAnimation(.easeOut(duration: phase1Duration)) {
+            tabSwitchVisualState = phase1State
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Int((phase1Duration * 1000).rounded(.up)) + 4))
+            guard tabSwitchToken == token else { return }
+            withAnimation(.easeInOut(duration: phase2Duration)) {
+                tabSwitchVisualState = phase2State
+            }
+
+            try? await Task.sleep(for: .milliseconds(Int((phase2Duration * 1000).rounded(.up)) + 4))
+            guard tabSwitchToken == token else { return }
+            withAnimation(.easeOut(duration: phase3Duration)) {
+                tabSwitchVisualState = phase3State
+            }
+
+            try? await Task.sleep(for: .milliseconds(Int((phase3Duration * 1000).rounded(.up)) + 10))
+            guard tabSwitchToken == token else { return }
+            lastCommittedTabTransitionAt = CACurrentMediaTime()
+            if shouldSelectTarget {
+                model.selectTab(id: transition.toTab.id)
+            }
+            edgePreviewTabID = nil
+            tabSwitchTransition = nil
+            tabSwitchVisualState = .identity
+            interactiveTargetID = nil
+        }
+    }
+}
+
+private struct PadTabFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
 
@@ -943,6 +1169,8 @@ private struct PadLibraryPanelSheet: View {
 private struct PadTabThumbnail: View {
     @ObservedObject var tab: PadBrowserModel.Tab
     let isSelected: Bool
+    let isBookmarked: Bool
+    let showsBirthPulse: Bool
     let onSelect: () -> Void
     let onLongPress: () -> Void
 
@@ -975,9 +1203,36 @@ private struct PadTabThumbnail: View {
             .frame(width: 80, height: 46)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08), lineWidth: isSelected ? 2 : 1)
+                    .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
             )
-            .shadow(color: isSelected ? Color.accentColor.opacity(0.24) : .clear, radius: 16, y: 6)
+            .overlay(alignment: .topLeading) {
+                if tab.isProtected || isBookmarked {
+                    ZStack {
+                        Circle()
+                            .fill(tab.isProtected ? Color.orange : Color.yellow)
+                        Image(systemName: tab.isProtected ? "pin.fill" : "star.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(tab.isProtected ? Color.white : Color.black.opacity(0.75))
+                    }
+                    .frame(width: 16, height: 16)
+                    .offset(x: 4, y: -4)
+                }
+            }
+            .overlay(alignment: .center) {
+                if showsBirthPulse {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.92))
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.black.opacity(0.78))
+                    }
+                    .frame(width: 22, height: 22)
+                    .scaleEffect(showsBirthPulse ? 1 : 0.7)
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
+            }
+            .shadow(color: shadowColor, radius: 16, y: 6)
         }
         .buttonStyle(.plain)
         .simultaneousGesture(
@@ -987,48 +1242,133 @@ private struct PadTabThumbnail: View {
                 }
         )
     }
+
+    private var borderColor: Color {
+        if tab.isProtected {
+            return Color.orange.opacity(isSelected ? 0.95 : 0.82)
+        }
+        if isBookmarked {
+            return Color.yellow.opacity(isSelected ? 0.90 : 0.78)
+        }
+        return isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08)
+    }
+
+    private var shadowColor: Color {
+        if tab.isProtected {
+            return Color.orange.opacity(isSelected ? 0.42 : 0.28)
+        }
+        if isBookmarked {
+            return Color.yellow.opacity(isSelected ? 0.28 : 0.18)
+        }
+        return isSelected ? Color.accentColor.opacity(0.24) : .clear
+    }
 }
 
 private struct PadTabEditSheet: View {
     @ObservedObject var tab: PadBrowserModel.Tab
     @Binding var currentURL: String
     let isBookmarked: Bool
+    let isDangerousSiteAllowed: Bool
     let onToggleBookmark: () -> Void
+    let onToggleProtection: () -> Void
+    let onToggleDangerousSiteAllowed: () -> Void
+    let onReload: () -> Void
     let onOpenURL: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Edit Tab")
-                    .font(.title3.weight(.semibold))
-                Text(tab.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(tab.title)
+                            .font(.title2.weight(.semibold))
+                            .lineLimit(2)
+                        if let host = currentHost {
+                            Text(host)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("URL")
+                            .font(.headline)
+                        TextField("URL または検索語", text: $currentURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+                            .submitLabel(.go)
+                            .onSubmit { onOpenURL() }
+                    }
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("タブの操作")
+                            .font(.headline)
+                        HStack(spacing: 12) {
+                            actionButton("開く", systemImage: "arrow.up.right.circle.fill", role: .primary, action: onOpenURL)
+                            actionButton("再読み込み", systemImage: "arrow.clockwise.circle.fill", action: onReload)
+                        }
+                        HStack(spacing: 12) {
+                            actionButton(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash.fill" : "star.fill", action: onToggleBookmark)
+                            actionButton(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open.fill" : "lock.fill", action: onToggleProtection)
+                        }
+                    }
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    if currentHost != nil {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("このサイト")
+                                .font(.headline)
+                            Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
+                                get: { isDangerousSiteAllowed },
+                                set: { _ in onToggleDangerousSiteAllowed() }
+                            ))
+                        }
+                        .padding(20)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    }
+                }
+                .padding(20)
             }
-
-            TextField("Enter URL or search", text: $currentURL)
-                .textFieldStyle(.roundedBorder)
-                .submitLabel(.go)
-                .onSubmit {
-                    onOpenURL()
-                }
-
-            HStack(spacing: 12) {
-                Button(action: onOpenURL) {
-                    Label("Open", systemImage: "arrow.forward.circle")
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(action: onToggleBookmark) {
-                    Label(isBookmarked ? "Remove Bookmark" : "Add Bookmark", systemImage: isBookmarked ? "star.slash" : "star")
-                }
-                .buttonStyle(.bordered)
-            }
-
-            Spacer(minLength: 0)
+            .navigationTitle("タブ設定")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .padding(24)
-        .presentationBackground(.regularMaterial)
+        .presentationBackground(.thinMaterial)
+    }
+
+    private var currentHost: String? {
+        URL(string: currentURL.isEmpty ? tab.urlString : currentURL)?.host
+    }
+
+    @ViewBuilder
+    private func actionButton(_ title: String, systemImage: String, role: ActionRole = .secondary, action: @escaping () -> Void) -> some View {
+        if role == .primary {
+            Button(action: action) {
+                Label(title, systemImage: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Button(action: action) {
+                Label(title, systemImage: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private enum ActionRole {
+        case primary
+        case secondary
     }
 }

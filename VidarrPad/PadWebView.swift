@@ -1,13 +1,31 @@
 import SwiftUI
 import WebKit
 
+struct PadTabTransitionVisualState: Equatable {
+    var fromX: CGFloat
+    var toX: CGFloat
+    var fromAlpha: CGFloat
+    var toAlpha: CGFloat
+    var dimAlpha: CGFloat
+    var gapAlpha: CGFloat
+    var toShadowOpacity: Float
+
+    static let identity = PadTabTransitionVisualState(
+        fromX: 0,
+        toX: 0,
+        fromAlpha: 1,
+        toAlpha: 1,
+        dimAlpha: 0,
+        gapAlpha: 0,
+        toShadowOpacity: 0
+    )
+}
+
 struct PadWebStageView: UIViewRepresentable {
     let selectedWebView: WKWebView?
     let transitionFromWebView: WKWebView?
     let transitionToWebView: WKWebView?
-    let transitionDirection: CGFloat?
-    let emphasizeBirth: Bool
-    let transitionProgress: CGFloat
+    let transitionVisualState: PadTabTransitionVisualState?
     var gestureConfiguration: PadGestureConfiguration? = nil
 
     func makeCoordinator() -> Coordinator {
@@ -30,9 +48,7 @@ struct PadWebStageView: UIViewRepresentable {
             selectedWebView: selectedWebView,
             transitionFromWebView: transitionFromWebView,
             transitionToWebView: transitionToWebView,
-            transitionDirection: transitionDirection,
-            emphasizeBirth: emphasizeBirth,
-            transitionProgress: transitionProgress,
+            transitionVisualState: transitionVisualState,
             gestureConfiguration: gestureConfiguration
         )
     }
@@ -75,9 +91,7 @@ struct PadWebStageView: UIViewRepresentable {
             selectedWebView: WKWebView?,
             transitionFromWebView: WKWebView?,
             transitionToWebView: WKWebView?,
-            transitionDirection: CGFloat?,
-            emphasizeBirth: Bool,
-            transitionProgress: CGFloat,
+            transitionVisualState: PadTabTransitionVisualState?,
             gestureConfiguration: PadGestureConfiguration?
         ) {
             guard let containerView else { return }
@@ -86,7 +100,7 @@ struct PadWebStageView: UIViewRepresentable {
 
             if let fromWebView = transitionFromWebView,
                let toWebView = transitionToWebView,
-               let direction = transitionDirection
+               let visualState = transitionVisualState
             {
                 activeSelectedWebView = nil
                 ensureSubview(fromWebView, in: containerView)
@@ -96,27 +110,36 @@ struct PadWebStageView: UIViewRepresentable {
                 containerView.bringSubviewToFront(dimView)
                 containerView.bringSubviewToFront(gapView)
 
-                let gap: CGFloat = 16
-                let travel = bounds.width + gap
-                let fromX = -direction * travel * transitionProgress
-                let toX = direction * travel * (1 - transitionProgress)
-                fromWebView.frame = bounds.offsetBy(dx: fromX, dy: 0)
-                toWebView.frame = bounds.offsetBy(dx: toX, dy: 0)
+                let gap = gapView.bounds.width > 0 ? gapView.bounds.width : CGFloat(16)
+                fromWebView.frame = bounds.offsetBy(dx: visualState.fromX, dy: 0)
+                toWebView.frame = bounds.offsetBy(dx: visualState.toX, dy: 0)
 
-                dimView.isHidden = false
-                dimView.frame = fromWebView.frame
-                dimView.alpha = (emphasizeBirth ? 0.14 : 0.10) * transitionProgress
+                dimView.isHidden = visualState.dimAlpha <= 0.001
+                dimView.frame = bounds
+                dimView.alpha = visualState.dimAlpha
 
-                let fromEdge = fromX + (direction > 0 ? bounds.width : 0)
-                let toEdge = toX + (direction > 0 ? 0 : bounds.width)
+                let direction = visualState.toX >= 0 ? CGFloat(1) : CGFloat(-1)
+                let fromEdge = visualState.fromX + (direction > 0 ? bounds.width : 0)
+                let toEdge = visualState.toX + (direction > 0 ? 0 : bounds.width)
                 let gapX = ((fromEdge + toEdge) * 0.5) - (gap * 0.5)
-                gapView.isHidden = false
+                gapView.isHidden = visualState.gapAlpha <= 0.001
+                gapView.alpha = visualState.gapAlpha
                 gapView.frame = CGRect(x: gapX, y: 0, width: gap, height: bounds.height)
 
+                fromWebView.alpha = visualState.fromAlpha
+                toWebView.alpha = visualState.toAlpha
                 toWebView.layer.shadowColor = UIColor.black.withAlphaComponent(0.14).cgColor
-                toWebView.layer.shadowRadius = emphasizeBirth ? 16 : 10
-                toWebView.layer.shadowOpacity = 1
+                toWebView.layer.shadowRadius = 16
+                toWebView.layer.shadowOpacity = visualState.toShadowOpacity
                 toWebView.layer.shadowOffset = CGSize(width: 0, height: 4)
+                toWebView.layer.masksToBounds = false
+                toWebView.layer.cornerRadius = 18
+                toWebView.layer.cornerCurve = .continuous
+                toWebView.layer.borderWidth = 1.2
+                toWebView.layer.borderColor = UIColor.white.withAlphaComponent(0.26).cgColor
+                fromWebView.layer.cornerRadius = 18
+                fromWebView.layer.cornerCurve = .continuous
+                fromWebView.layer.masksToBounds = true
                 toWebView.layer.masksToBounds = false
 
                 activeFromWebView = fromWebView
@@ -130,9 +153,13 @@ struct PadWebStageView: UIViewRepresentable {
                 ensureSubview(selectedWebView, in: containerView)
                 selectedWebView.frame = bounds
                 selectedWebView.layer.shadowOpacity = 0
+                selectedWebView.alpha = 1
+                selectedWebView.layer.cornerRadius = 0
+                selectedWebView.layer.borderWidth = 0
                 dimView.isHidden = true
                 gapView.isHidden = true
                 dimView.alpha = 0
+                gapView.alpha = 0
                 configureGestureRecognizer(for: selectedWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [selectedWebView])
             } else {
@@ -144,6 +171,7 @@ struct PadWebStageView: UIViewRepresentable {
                 dimView.isHidden = true
                 gapView.isHidden = true
                 dimView.alpha = 0
+                gapView.alpha = 0
             }
         }
 

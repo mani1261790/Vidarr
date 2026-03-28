@@ -4,6 +4,46 @@ import SwiftUI
 import UIKit
 import WebKit
 
+enum PadBrowserTabGroup: String, CaseIterable, Codable, Identifiable {
+    case regular
+    case privateMode
+    case work
+    case research
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .regular: return "通常"
+        case .privateMode: return "プライベート"
+        case .work: return "ワーク"
+        case .research: return "リサーチ"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .regular: return "square.grid.3x3"
+        case .privateMode: return "hand.raised.fill"
+        case .work: return "briefcase.fill"
+        case .research: return "book.closed.fill"
+        }
+    }
+
+    var accentColor: UIColor {
+        switch self {
+        case .regular:
+            return .systemBlue
+        case .privateMode:
+            return UIColor(red: 0.55, green: 0.36, blue: 0.96, alpha: 1)
+        case .work:
+            return UIColor(red: 0.07, green: 0.67, blue: 0.53, alpha: 1)
+        case .research:
+            return UIColor(red: 0.15, green: 0.55, blue: 0.98, alpha: 1)
+        }
+    }
+}
+
 @MainActor
 final class PadBrowserModel: NSObject, ObservableObject {
     struct HarmfulSitePrompt: Identifiable {
@@ -22,9 +62,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let historyIndex: Int
     }
 
-    private struct SessionSnapshot: Codable {
+    private struct GroupSessionSnapshot: Codable {
+        let group: PadBrowserTabGroup
         let selectedIndex: Int
         let tabs: [SessionTabSnapshot]
+    }
+
+    private struct SessionSnapshot: Codable {
+        let currentGroup: PadBrowserTabGroup
+        let groups: [GroupSessionSnapshot]
     }
 
     final class Tab: NSObject, Identifiable, ObservableObject {
@@ -45,6 +91,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     struct ClosedTabSnapshot {
+        let group: PadBrowserTabGroup
         let url: URL?
         let title: String
         let isProtected: Bool
@@ -52,21 +99,30 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let historyIndex: Int
     }
 
+    private struct GroupState {
+        var tabs: [Tab] = []
+        var selectedIndex: Int = 0
+    }
+
+    @Published private(set) var currentGroup: PadBrowserTabGroup = .regular
     @Published private(set) var tabs: [Tab] = []
-    @Published var selectedIndex: Int = 0
+    @Published private(set) var selectedIndex: Int = 0
     @Published var addressInput: String = ""
     @Published var navigationStateToken = UUID()
     @Published var selectedSidebarTabID: UUID?
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
     @Published var lastFindResultSummary: String?
+    private var states: [PadBrowserTabGroup: GroupState] = [:]
     private var closedTabs: [ClosedTabSnapshot] = []
+    private let privateWebsiteDataStore = WKWebsiteDataStore.nonPersistent()
     private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
 
     override init() {
         super.init()
+        PadBrowserTabGroup.allCases.forEach { states[$0] = GroupState() }
         restoreSessionIfAvailable()
         if tabs.isEmpty {
-            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+            ensureAtLeastOneTab(in: currentGroup)
         }
         selectedSidebarTabID = selectedTab?.id
     }
@@ -80,16 +136,28 @@ final class PadBrowserModel: NSObject, ObservableObject {
         tabs.firstIndex(where: { $0.id == id })
     }
 
+    var availableGroups: [PadBrowserTabGroup] { PadBrowserTabGroup.allCases }
+
+    func switchGroup(_ group: PadBrowserTabGroup) {
+        currentGroup = group
+        ensureAtLeastOneTab(in: group)
+        syncPublishedState()
+        navigationStateToken = UUID()
+    }
+
     func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) {
-        let webView = makeWebView()
+        let group = currentGroup
+        let webView = makeWebView(for: group)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
         let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
-        tabs.append(tab)
-        selectedIndex = tabs.count - 1
+        var state = state(for: group)
+        state.tabs.append(tab)
+        state.selectedIndex = max(0, state.tabs.count - 1)
+        setState(state, for: group)
         selectedSidebarTabID = tab.id
         if let initialURL {
             load(initialURL, in: webView)
@@ -97,50 +165,60 @@ final class PadBrowserModel: NSObject, ObservableObject {
             loadStartPage(in: webView)
             captureThumbnail(for: tab)
         }
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
     @discardableResult
-    func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) -> Tab {
-        let webView = makeWebView()
+    func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false, in group: PadBrowserTabGroup? = nil) -> Tab {
+        let targetGroup = group ?? currentGroup
+        let webView = makeWebView(for: targetGroup)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
         let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
-        tabs.append(tab)
+        var state = state(for: targetGroup)
+        state.tabs.append(tab)
+        setState(state, for: targetGroup)
         if let initialURL {
             load(initialURL, in: webView)
         } else {
             loadStartPage(in: webView)
             captureThumbnail(for: tab)
         }
+        if targetGroup == currentGroup {
+            syncPublishedState()
+        }
         saveSessionSnapshot()
         return tab
     }
 
     func discardTab(id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        tabs.remove(at: index)
-        if tabs.isEmpty {
-            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        var state = state(for: currentGroup)
+        guard let index = state.tabs.firstIndex(where: { $0.id == id }) else { return }
+        state.tabs.remove(at: index)
+        setState(state, for: currentGroup)
+        if state.tabs.isEmpty {
+            ensureAtLeastOneTab(in: currentGroup)
             return
         }
-        if selectedIndex >= tabs.count {
-            selectedIndex = max(0, tabs.count - 1)
-        }
+        let clamped = min(max(0, state.selectedIndex), state.tabs.count - 1)
+        state.selectedIndex = clamped
+        setState(state, for: currentGroup)
         selectedSidebarTabID = selectedTab?.id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
     func closeTab(id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let tab = tabs[index]
+        var state = state(for: currentGroup)
+        guard let index = state.tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = state.tabs[index]
         closedTabs.insert(
             ClosedTabSnapshot(
+                group: currentGroup,
                 url: URL(string: tab.urlString),
                 title: tab.title,
                 isProtected: tab.isProtected,
@@ -152,25 +230,29 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if closedTabs.count > 20 {
             closedTabs.removeLast(closedTabs.count - 20)
         }
-        tabs.remove(at: index)
-        if tabs.isEmpty {
-            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        state.tabs.remove(at: index)
+        if state.tabs.isEmpty {
+            setState(state, for: currentGroup)
+            ensureAtLeastOneTab(in: currentGroup)
             return
         }
-        selectedIndex = min(selectedIndex, tabs.count - 1)
-        if index <= selectedIndex {
-            selectedIndex = max(0, selectedIndex - 1)
+        state.selectedIndex = min(state.selectedIndex, state.tabs.count - 1)
+        if index <= state.selectedIndex {
+            state.selectedIndex = max(0, state.selectedIndex - 1)
         }
+        setState(state, for: currentGroup)
         selectedSidebarTabID = selectedTab?.id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
     func selectTab(id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        selectedIndex = index
+        var state = state(for: currentGroup)
+        guard let index = state.tabs.firstIndex(where: { $0.id == id }) else { return }
+        state.selectedIndex = index
+        setState(state, for: currentGroup)
         selectedSidebarTabID = id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
@@ -243,42 +325,51 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func refreshPreferences() {
         let currentURL = selectedTab?.webView.url
         let currentTabID = selectedTab?.id
-        let currentIndex = selectedIndex
-        let currentThumbnails = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0.thumbnail) })
-
-        tabs = tabs.map { oldTab in
-            let webView = makeWebView()
-            let newTab = Tab(webView: webView)
-            newTab.title = oldTab.title
-            newTab.urlString = oldTab.urlString
-            newTab.thumbnail = currentThumbnails[oldTab.id] ?? nil
-            newTab.historyURLs = oldTab.historyURLs
-            newTab.historyIndex = oldTab.historyIndex
-            webView.navigationDelegate = self
-            if let url = currentTabID == oldTab.id ? currentURL : URL(string: oldTab.urlString) {
-                load(url, in: webView)
+        for group in PadBrowserTabGroup.allCases {
+            var state = state(for: group)
+            let currentThumbnails = Dictionary(uniqueKeysWithValues: state.tabs.map { ($0.id, $0.thumbnail) })
+            state.tabs = state.tabs.map { oldTab in
+                let webView = makeWebView(for: group)
+                let newTab = Tab(webView: webView)
+                newTab.title = oldTab.title
+                newTab.urlString = oldTab.urlString
+                newTab.thumbnail = currentThumbnails[oldTab.id] ?? nil
+                newTab.isProtected = oldTab.isProtected
+                newTab.historyURLs = oldTab.historyURLs
+                newTab.historyIndex = oldTab.historyIndex
+                webView.navigationDelegate = self
+                if let url = currentTabID == oldTab.id ? currentURL : URL(string: oldTab.urlString) {
+                    load(url, in: webView)
+                } else {
+                    loadStartPage(in: webView)
+                }
+                return newTab
             }
-            return newTab
+            if state.tabs.isEmpty {
+                setState(state, for: group)
+                if group == currentGroup {
+                    ensureAtLeastOneTab(in: group)
+                }
+            } else {
+                state.selectedIndex = min(state.selectedIndex, max(state.tabs.count - 1, 0))
+                setState(state, for: group)
+            }
         }
-
-        if tabs.isEmpty {
-            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
-        } else {
-            selectedIndex = min(currentIndex, max(tabs.count - 1, 0))
-            syncAddressBar()
-            saveSessionSnapshot()
-        }
+        syncPublishedState()
+        saveSessionSnapshot()
     }
 
     func closeAllTabs() {
         let selectedWebView = selectedTab?.webView
+        var state = state(for: currentGroup)
         var retained: [Tab] = []
-        let snapshots = tabs.compactMap { tab -> ClosedTabSnapshot? in
+        let snapshots = state.tabs.compactMap { tab -> ClosedTabSnapshot? in
             if tab.isProtected {
                 retained.append(tab)
                 return nil
             }
             return ClosedTabSnapshot(
+                group: currentGroup,
                 url: URL(string: tab.urlString),
                 title: tab.title,
                 isProtected: tab.isProtected,
@@ -290,19 +381,21 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if closedTabs.count > 20 {
             closedTabs.removeLast(closedTabs.count - 20)
         }
-        tabs = retained
-        if tabs.isEmpty {
-            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        state.tabs = retained
+        if state.tabs.isEmpty {
+            setState(state, for: currentGroup)
+            ensureAtLeastOneTab(in: currentGroup)
             return
         }
         if let selectedWebView,
-           let retainedIndex = tabs.firstIndex(where: { $0.webView === selectedWebView }) {
-            selectedIndex = retainedIndex
+           let retainedIndex = state.tabs.firstIndex(where: { $0.webView === selectedWebView }) {
+            state.selectedIndex = retainedIndex
         } else {
-            selectedIndex = 0
+            state.selectedIndex = 0
         }
+        setState(state, for: currentGroup)
         selectedSidebarTabID = selectedTab?.id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
@@ -310,6 +403,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard let snapshot = closedTabs.first else { return }
         closedTabs.removeFirst()
         let shouldRestoreHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
+        currentGroup = snapshot.group
         newTab(
             initialURL: snapshot.url ?? PadBrowserPreferences.shared.homePageURL,
             historyURLs: shouldRestoreHistory ? snapshot.historyURLs : [],
@@ -324,22 +418,27 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func toggleProtectionForSelectedTab() {
         guard let tab = selectedTab else { return }
         tab.isProtected.toggle()
+        navigationStateToken = UUID()
         saveSessionSnapshot()
     }
 
     func selectNextTab() {
-        guard tabs.count > 1 else { return }
-        selectedIndex = min(selectedIndex + 1, tabs.count - 1)
+        var state = state(for: currentGroup)
+        guard state.tabs.count > 1 else { return }
+        state.selectedIndex = min(state.selectedIndex + 1, state.tabs.count - 1)
+        setState(state, for: currentGroup)
         selectedSidebarTabID = selectedTab?.id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
     func selectPreviousTab() {
-        guard tabs.count > 1 else { return }
-        selectedIndex = max(selectedIndex - 1, 0)
+        var state = state(for: currentGroup)
+        guard state.tabs.count > 1 else { return }
+        state.selectedIndex = max(state.selectedIndex - 1, 0)
+        setState(state, for: currentGroup)
         selectedSidebarTabID = selectedTab?.id
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
@@ -437,37 +536,42 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         guard let data = defaults.data(forKey: "browser.session.snapshot"),
               let snapshot = try? JSONDecoder().decode(SessionSnapshot.self, from: data),
-              !snapshot.tabs.isEmpty else {
+              !snapshot.groups.isEmpty else {
             return
         }
 
-        for tabSnapshot in snapshot.tabs {
-            let webView = makeWebView()
-            let tab = Tab(webView: webView)
-            tab.title = tabSnapshot.title
-            tab.urlString = tabSnapshot.urlString ?? ""
-            tab.isProtected = tabSnapshot.isProtected
-            tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
-            tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
-            webView.navigationDelegate = self
-            tabs.append(tab)
-            let initialURL: URL?
-            if tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count {
-                initialURL = tab.historyURLs[tab.historyIndex]
-            } else if let urlString = tabSnapshot.urlString, let url = URL(string: urlString) {
-                initialURL = url
-            } else {
-                initialURL = nil
+        for groupSnapshot in snapshot.groups where groupSnapshot.group != .privateMode {
+            var state = GroupState()
+            for tabSnapshot in groupSnapshot.tabs {
+                let webView = makeWebView(for: groupSnapshot.group)
+                let tab = Tab(webView: webView)
+                tab.title = tabSnapshot.title
+                tab.urlString = tabSnapshot.urlString ?? ""
+                tab.isProtected = tabSnapshot.isProtected
+                tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
+                tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
+                webView.navigationDelegate = self
+                state.tabs.append(tab)
+                let initialURL: URL?
+                if tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count {
+                    initialURL = tab.historyURLs[tab.historyIndex]
+                } else if let urlString = tabSnapshot.urlString, let url = URL(string: urlString) {
+                    initialURL = url
+                } else {
+                    initialURL = nil
+                }
+                if let initialURL {
+                    load(initialURL, in: webView)
+                } else {
+                    loadStartPage(in: webView)
+                }
             }
-            if let initialURL {
-                load(initialURL, in: webView)
-            } else {
-                loadStartPage(in: webView)
-            }
+            state.selectedIndex = min(max(0, groupSnapshot.selectedIndex), max(state.tabs.count - 1, 0))
+            setState(state, for: groupSnapshot.group)
         }
-
-        selectedIndex = min(max(0, snapshot.selectedIndex), tabs.count - 1)
-        syncAddressBar()
+        currentGroup = snapshot.currentGroup == .privateMode ? .regular : snapshot.currentGroup
+        ensureAtLeastOneTab(in: currentGroup)
+        syncPublishedState()
     }
 
     private func saveSessionSnapshot() {
@@ -477,14 +581,23 @@ final class PadBrowserModel: NSObject, ObservableObject {
             return
         }
         let snapshot = SessionSnapshot(
-            selectedIndex: min(max(0, selectedIndex), max(tabs.count - 1, 0)),
-            tabs: tabs.map { tab in
-                SessionTabSnapshot(
-                    urlString: tab.webView.url?.absoluteString ?? (tab.urlString.isEmpty ? nil : tab.urlString),
-                    title: tab.title,
-                    isProtected: tab.isProtected,
-                    historyURLStrings: tab.historyURLs.map(\.absoluteString),
-                    historyIndex: tab.historyIndex
+            currentGroup: currentGroup == .privateMode ? .regular : currentGroup,
+            groups: PadBrowserTabGroup.allCases.compactMap { group in
+                guard group != .privateMode else { return nil }
+                let state = state(for: group)
+                guard !state.tabs.isEmpty else { return nil }
+                return GroupSessionSnapshot(
+                    group: group,
+                    selectedIndex: min(max(0, state.selectedIndex), max(state.tabs.count - 1, 0)),
+                    tabs: state.tabs.map { tab in
+                        SessionTabSnapshot(
+                            urlString: tab.webView.url?.absoluteString ?? (tab.urlString.isEmpty ? nil : tab.urlString),
+                            title: tab.title,
+                            isProtected: tab.isProtected,
+                            historyURLStrings: tab.historyURLs.map(\.absoluteString),
+                            historyIndex: tab.historyIndex
+                        )
+                    }
                 )
             }
         )
@@ -504,11 +617,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
     }
 
-    private func makeWebView() -> WKWebView {
+    private func makeWebView(for group: PadBrowserTabGroup) -> WKWebView {
         let prefs = PadBrowserPreferences.shared
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = prefs.allowsJavaScript
-        if prefs.cookiePolicy == .privateOnly {
+        if group == .privateMode {
+            configuration.websiteDataStore = privateWebsiteDataStore
+        } else if prefs.cookiePolicy == .privateOnly {
             configuration.websiteDataStore = .nonPersistent()
         }
         let webView = PadInteractiveWebView(frame: .zero, configuration: configuration)
@@ -724,15 +839,18 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 
     func openSearchPageInNewTab(initialQuery: String? = nil) {
-        let webView = makeWebView()
+        let group = currentGroup
+        let webView = makeWebView(for: group)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
-        tabs.append(tab)
-        selectedIndex = tabs.count - 1
+        var state = state(for: group)
+        state.tabs.append(tab)
+        state.selectedIndex = max(0, state.tabs.count - 1)
+        setState(state, for: group)
         selectedSidebarTabID = tab.id
         loadStartPage(in: webView, initialQuery: initialQuery)
         captureThumbnail(for: tab)
-        syncAddressBar()
+        syncPublishedState()
         saveSessionSnapshot()
     }
 
@@ -855,7 +973,11 @@ extension PadBrowserModel: WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
-            guard let self, let tab = self.tabs.first(where: { $0.webView === webView }) else { return }
+            guard let self,
+                  let group = self.group(for: webView) else { return }
+            var state = self.state(for: group)
+            guard let index = state.tabs.firstIndex(where: { $0.webView === webView }) else { return }
+            let tab = state.tabs[index]
             let isInternalBlankPage = webView.url?.host == self.startPageBaseURL.host
             tab.title = isInternalBlankPage
                 ? "Vidarr Start"
@@ -865,11 +987,15 @@ extension PadBrowserModel: WKNavigationDelegate {
             tab.urlString = isInternalBlankPage ? "" : (webView.url?.absoluteString ?? "")
             if let url = webView.url, !isInternalBlankPage {
                 self.syncTabHistory(for: tab, currentURL: url)
-                PadBrowsingHistoryStore.shared.recordVisit(url: url, title: tab.title)
+                if !self.isPrivateGroup(group) {
+                    PadBrowsingHistoryStore.shared.recordVisit(url: url, title: tab.title)
+                }
             }
+            state.tabs[index] = tab
+            self.setState(state, for: group)
             self.captureThumbnail(for: tab)
-            if self.selectedTab === tab {
-                self.syncAddressBar()
+            if group == self.currentGroup {
+                self.syncPublishedState()
             }
             self.navigationStateToken = UUID()
             self.saveSessionSnapshot()
@@ -952,6 +1078,49 @@ extension PadBrowserModel {
             suffix += 1
         }
         return candidate
+    }
+
+    private func state(for group: PadBrowserTabGroup) -> GroupState {
+        states[group] ?? GroupState()
+    }
+
+    private func setState(_ state: GroupState, for group: PadBrowserTabGroup) {
+        states[group] = state
+    }
+
+    private func ensureAtLeastOneTab(in group: PadBrowserTabGroup) {
+        let state = state(for: group)
+        guard state.tabs.isEmpty else {
+            if group == currentGroup {
+                syncPublishedState()
+            }
+            return
+        }
+        currentGroup = group
+        newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        currentGroup = group
+        syncPublishedState()
+    }
+
+    private func syncPublishedState() {
+        let state = state(for: currentGroup)
+        tabs = state.tabs
+        selectedIndex = min(max(0, state.selectedIndex), max(state.tabs.count - 1, 0))
+        selectedSidebarTabID = selectedTab?.id
+        syncAddressBar()
+    }
+
+    private func group(for webView: WKWebView) -> PadBrowserTabGroup? {
+        for group in PadBrowserTabGroup.allCases {
+            if state(for: group).tabs.contains(where: { $0.webView === webView }) {
+                return group
+            }
+        }
+        return nil
+    }
+
+    private func isPrivateGroup(_ group: PadBrowserTabGroup) -> Bool {
+        group == .privateMode
     }
 
     static let harmfulHosts: Set<String> = [

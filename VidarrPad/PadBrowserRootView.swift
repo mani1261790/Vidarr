@@ -231,6 +231,8 @@ struct PadBrowserRootView: View {
                 chromeButton(systemName: "arrow.clockwise", disabled: false, action: model.reload)
             }
 
+            groupSwitcher
+
             tabStrip
 
             HStack(spacing: 10) {
@@ -253,6 +255,34 @@ struct PadBrowserRootView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.11), radius: 14, y: 6)
+    }
+
+    private var groupSwitcher: some View {
+        Menu {
+            ForEach(model.availableGroups) { group in
+                Button {
+                    model.switchGroup(group)
+                    showBottomBar()
+                } label: {
+                    Label(group.displayName, systemImage: group.systemImage)
+                }
+            }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color(uiColor: model.currentGroup.accentColor).opacity(0.14))
+                Image(systemName: model.currentGroup.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(chromeForegroundColor)
+            }
+            .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                showBottomBar()
+            }
+        )
     }
 
     private var bottomRevealZone: some View {
@@ -291,6 +321,7 @@ struct PadBrowserRootView: View {
                             tab: tab,
                         isSelected: model.selectedTab?.id == tab.id,
                         isBookmarked: model.isBookmarked(tab),
+                        groupAccentColor: Color(uiColor: model.currentGroup.accentColor),
                         showsBirthPulse: stripBirthTabID == tab.id,
                         showsDestructiveDismiss: destructiveDismissTabID == tab.id,
                         onSelect: {
@@ -1329,6 +1360,7 @@ private struct PadTabThumbnail: View {
     @GestureState private var swipeTranslation: CGSize = .zero
     let isSelected: Bool
     let isBookmarked: Bool
+    let groupAccentColor: Color
     let showsBirthPulse: Bool
     let showsDestructiveDismiss: Bool
     let onSelect: () -> Void
@@ -1464,7 +1496,7 @@ private struct PadTabThumbnail: View {
         if isBookmarked {
             return Color(red: 1.0, green: 0.80, blue: 0.16).opacity(isSelected ? 0.90 : 0.78)
         }
-        return isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08)
+        return isSelected ? groupAccentColor.opacity(0.88) : Color.white.opacity(0.08)
     }
 
     private var shadowColor: Color {
@@ -1474,7 +1506,7 @@ private struct PadTabThumbnail: View {
         if isBookmarked {
             return Color(red: 1.0, green: 0.80, blue: 0.16).opacity(isSelected ? 0.28 : 0.18)
         }
-        return isSelected ? Color.accentColor.opacity(0.24) : .clear
+        return isSelected ? groupAccentColor.opacity(0.26) : .clear
     }
 
     private var backgroundFill: Color {

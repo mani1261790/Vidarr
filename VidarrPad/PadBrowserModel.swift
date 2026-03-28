@@ -138,11 +138,35 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     var availableGroups: [PadBrowserTabGroup] { PadBrowserTabGroup.allCases }
 
+    func tabs(in group: PadBrowserTabGroup) -> [Tab] {
+        state(for: group).tabs
+    }
+
+    func selectedTabID(in group: PadBrowserTabGroup) -> UUID? {
+        let state = state(for: group)
+        guard state.selectedIndex >= 0, state.selectedIndex < state.tabs.count else { return nil }
+        return state.tabs[state.selectedIndex].id
+    }
+
     func switchGroup(_ group: PadBrowserTabGroup) {
         currentGroup = group
         ensureAtLeastOneTab(in: group)
         syncPublishedState()
         navigationStateToken = UUID()
+    }
+
+    func selectTab(in group: PadBrowserTabGroup, id: UUID) {
+        currentGroup = group
+        var state = state(for: group)
+        guard let index = state.tabs.firstIndex(where: { $0.id == id }) else {
+            ensureAtLeastOneTab(in: group)
+            return
+        }
+        state.selectedIndex = index
+        setState(state, for: group)
+        syncPublishedState()
+        navigationStateToken = UUID()
+        saveSessionSnapshot()
     }
 
     func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) {

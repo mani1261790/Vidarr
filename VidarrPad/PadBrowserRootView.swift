@@ -39,6 +39,7 @@ struct PadBrowserRootView: View {
     @State private var bottomBarHideTask: Task<Void, Never>?
     @State private var bottomRevealHintOpacity: CGFloat = 0.92
     @State private var bottomRevealHintTask: Task<Void, Never>?
+    @State private var showsGroupStripStack = false
     @State private var editingTabID: UUID?
     @State private var editingURL = ""
     @State private var showingQuickSearch = false
@@ -65,13 +66,27 @@ struct PadBrowserRootView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             webLayer
+            if showsGroupStripStack {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissGroupStripStack()
+                    }
+            }
+            if showsGroupStripStack {
+                groupStripStackOverlay
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 6)
+                    .transition(.identity)
+            }
             bottomBar
                 .padding(.horizontal, 18)
                 .padding(.bottom, 6)
                 .offset(y: bottomBarVisible ? 0 : 96)
                 .opacity(bottomBarVisible ? 1 : 0.001)
                 .allowsHitTesting(bottomBarVisible)
-            if !bottomBarVisible {
+            if !bottomBarVisible && !showsGroupStripStack {
                 bottomRevealZone
             }
         }
@@ -258,14 +273,11 @@ struct PadBrowserRootView: View {
     }
 
     private var groupSwitcher: some View {
-        Menu {
-            ForEach(model.availableGroups) { group in
-                Button {
-                    model.switchGroup(group)
-                    showBottomBar()
-                } label: {
-                    Label(group.displayName, systemImage: group.systemImage)
-                }
+        Button {
+            if showsGroupStripStack {
+                dismissGroupStripStack()
+            } else {
+                showGroupStripStack()
             }
         } label: {
             ZStack {
@@ -278,11 +290,23 @@ struct PadBrowserRootView: View {
             .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                showBottomBar()
+    }
+
+    private var groupStripStackOverlay: some View {
+        let groups = stackedGroups
+        return ZStack(alignment: .bottom) {
+            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                compactGroupStrip(for: group)
+                    .offset(y: showsGroupStripStack ? CGFloat(-((index + 1) * 60)) : 0)
+                    .opacity(showsGroupStripStack ? 1 : 0)
+                    .scaleEffect(showsGroupStripStack ? 1 : 0.96, anchor: .bottom)
+                    .animation(
+                        .spring(response: 0.34, dampingFraction: 0.86).delay(Double(index) * 0.03),
+                        value: showsGroupStripStack
+                    )
             }
-        )
+        }
+        .allowsHitTesting(showsGroupStripStack)
     }
 
     private var bottomRevealZone: some View {
@@ -313,20 +337,54 @@ struct PadBrowserRootView: View {
     }
 
     private var tabStrip: some View {
+        interactiveTabStrip(
+            tabs: model.tabs,
+            group: model.currentGroup,
+            selectedTabID: model.selectedTab?.id
+        )
+        .coordinateSpace(name: "PadTabStripSpace")
+        .onPreferenceChange(PadTabFramePreferenceKey.self) { frames in
+            tabStripFrames = frames
+        }
+        .overlay(alignment: .topLeading) {
+            if stripBirthOpacity > 0.001 {
+                ZStack {
+                    Circle()
+                        .fill(chromeForegroundColor.opacity(0.96))
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(chromeBackgroundAccent.opacity(0.82))
+                }
+                .frame(width: 20, height: 20)
+                .position(stripBirthPosition)
+                .scaleEffect(stripBirthScale)
+                .opacity(stripBirthOpacity)
+                .allowsHitTesting(false)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 52)
+    }
+
+    private func interactiveTabStrip(
+        tabs: [PadBrowserModel.Tab],
+        group: PadBrowserTabGroup,
+        selectedTabID: UUID?
+    ) -> some View {
         GeometryReader { stripProxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(model.tabs) { tab in
+                    ForEach(tabs) { tab in
                         PadTabThumbnail(
                             tab: tab,
-                        isSelected: model.selectedTab?.id == tab.id,
-                        isBookmarked: model.isBookmarked(tab),
-                        groupAccentColor: Color(uiColor: model.currentGroup.accentColor),
-                        showsBirthPulse: stripBirthTabID == tab.id,
-                        showsDestructiveDismiss: destructiveDismissTabID == tab.id,
-                        onSelect: {
-                            animateTabSelection(to: tab.id)
-                        },
+                            isSelected: selectedTabID == tab.id,
+                            isBookmarked: model.isBookmarked(tab),
+                            groupAccentColor: Color(uiColor: group.accentColor),
+                            showsBirthPulse: stripBirthTabID == tab.id,
+                            showsDestructiveDismiss: destructiveDismissTabID == tab.id,
+                            onSelect: {
+                                animateTabSelection(to: tab.id)
+                            },
                             onLongPress: {
                                 animateTabSelection(to: tab.id)
                                 editingURL = tab.urlString
@@ -337,15 +395,15 @@ struct PadBrowserRootView: View {
                                 model.toggleProtectionForSelectedTab()
                                 showBottomBar()
                             },
-                        onSwipeDown: {
-                            animateTabSelection(to: tab.id)
-                            if tab.isProtected {
-                                protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
-                            } else {
-                                animateDestructiveClose(for: tab.id)
+                            onSwipeDown: {
+                                animateTabSelection(to: tab.id)
+                                if tab.isProtected {
+                                    protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
+                                } else {
+                                    animateDestructiveClose(for: tab.id)
+                                }
+                                showBottomBar()
                             }
-                            showBottomBar()
-                        }
                         )
                         .background(
                             GeometryReader { proxy in
@@ -373,28 +431,66 @@ struct PadBrowserRootView: View {
                 }
             )
         }
-        .coordinateSpace(name: "PadTabStripSpace")
-        .onPreferenceChange(PadTabFramePreferenceKey.self) { frames in
-            tabStripFrames = frames
-        }
-        .overlay(alignment: .topLeading) {
-            if stripBirthOpacity > 0.001 {
-                ZStack {
-                    Circle()
-                        .fill(chromeForegroundColor.opacity(0.96))
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(chromeBackgroundAccent.opacity(0.82))
+    }
+
+    private func compactGroupStrip(for group: PadBrowserTabGroup) -> some View {
+        let groupTabs = model.tabs(in: group)
+        let selectedTabID = model.selectedTabID(in: group)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                if groupTabs.isEmpty {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color(uiColor: group.accentColor).opacity(0.10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(Color(uiColor: group.accentColor).opacity(0.26), lineWidth: 1)
+                        )
+                        .frame(width: 80, height: 46)
+                } else {
+                    ForEach(groupTabs) { tab in
+                        PadTabThumbnail(
+                            tab: tab,
+                            isSelected: selectedTabID == tab.id,
+                            isBookmarked: model.isBookmarked(tab),
+                            groupAccentColor: Color(uiColor: group.accentColor),
+                            showsBirthPulse: false,
+                            showsDestructiveDismiss: false,
+                            onSelect: {
+                                model.selectTab(in: group, id: tab.id)
+                                dismissGroupStripStack()
+                                showBottomBar()
+                            },
+                            onLongPress: {},
+                            onDoubleTap: {},
+                            onSwipeDown: {}
+                        )
+                    }
                 }
-                .frame(width: 20, height: 20)
-                .position(stripBirthPosition)
-                .scaleEffect(stripBirthScale)
-                .opacity(stripBirthOpacity)
-                .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+        }
+        .frame(height: 52)
+        .background(PadLiquidGlassBackground(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(uiColor: group.accentColor).opacity(0.20), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture {
+            if groupTabs.isEmpty {
+                model.switchGroup(group)
+                dismissGroupStripStack()
+                showBottomBar()
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 52)
+    }
+
+    private var stackedGroups: [PadBrowserTabGroup] {
+        model.availableGroups.filter { $0 != model.currentGroup }
     }
 
     private func chromeButton(systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {
@@ -781,6 +877,20 @@ struct PadBrowserRootView: View {
         }
     }
 
+    private func showGroupStripStack() {
+        showBottomBar(persist: true)
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            showsGroupStripStack = true
+        }
+    }
+
+    private func dismissGroupStripStack() {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            showsGroupStripStack = false
+        }
+        scheduleBottomBarAutoHide()
+    }
+
     private func scheduleBottomBarAutoHide() {
         bottomBarHideTask?.cancel()
         guard PadBrowserPreferences.shared.autoHideBottomBar else {
@@ -789,7 +899,7 @@ struct PadBrowserRootView: View {
             }
             return
         }
-        guard !showingSettings, editingTabID == nil else { return }
+        guard !showingSettings, editingTabID == nil, !showsGroupStripStack else { return }
         let delay = PadBrowserPreferences.shared.bottomBarAutoHideDelay.seconds
         bottomBarHideTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))

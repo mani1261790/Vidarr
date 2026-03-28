@@ -1,5 +1,46 @@
 import SwiftUI
+import UIKit
 import WebKit
+
+final class PadInteractiveWebView: WKWebView {
+    var onSearchSelection: ((String) -> Void)?
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        installSearchMenuItem()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(vidarrSearchSelection(_:)) {
+            return true
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    @objc private func vidarrSearchSelection(_ sender: Any?) {
+        evaluateJavaScript("window.getSelection ? window.getSelection().toString() : ''") { [weak self] result, _ in
+            guard let text = (result as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+                return
+            }
+            Task { @MainActor in
+                self?.onSearchSelection?(text)
+            }
+        }
+    }
+
+    private func installSearchMenuItem() {
+        UIMenuController.shared.menuItems = [
+            UIMenuItem(title: "検索", action: #selector(vidarrSearchSelection(_:)))
+        ]
+    }
+}
 
 struct PadTabTransitionVisualState: Equatable {
     var fromX: CGFloat

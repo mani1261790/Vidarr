@@ -8,6 +8,24 @@ import WebKit
 final class PadBrowserModel: NSObject, ObservableObject {
     private static let selectionSearchMessageName = "vidarrPadSelectionSearch"
 
+    enum SelectionActionRequest: Identifiable, Equatable {
+        case lookup(String)
+
+        var id: String {
+            switch self {
+            case .lookup(let query):
+                return "lookup:\(query)"
+            }
+        }
+
+        var query: String {
+            switch self {
+            case .lookup(let query):
+                return query
+            }
+        }
+    }
+
     struct HarmfulSitePrompt: Identifiable {
         let id = UUID()
         let url: URL
@@ -61,7 +79,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published var selectedSidebarTabID: UUID?
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
     @Published var lastFindResultSummary: String?
-    @Published var pendingSelectionSearchQuery: String?
+    @Published var pendingSelectionActionRequest: SelectionActionRequest?
 
     private var closedTabs: [ClosedTabSnapshot] = []
     private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
@@ -531,8 +549,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: normalized))
     }
 
-    private func loadStartPage(in webView: WKWebView) {
+    private func loadStartPage(in webView: WKWebView, initialQuery: String? = nil) {
         let searchTemplate = PadBrowserPreferences.shared.searchTemplate
+        let escapedQuery = String(reflecting: initialQuery ?? "")
         let html = """
         <!doctype html>
         <html lang="ja">
@@ -540,120 +559,199 @@ final class PadBrowserModel: NSObject, ObservableObject {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Vidarr Start</title>
         <style>
-        :root { color-scheme: light dark; }
+        :root {
+          color-scheme: light dark;
+          --bg0: #f4f7fb;
+          --bg1: #e8eef7;
+          --glass: rgba(255,255,255,0.68);
+          --stroke: rgba(255,255,255,0.58);
+          --text: #0f172a;
+          --subtle: #526277;
+          --field: rgba(255,255,255,0.82);
+          --fieldStroke: rgba(148,163,184,0.30);
+          --soft: rgba(255,255,255,0.56);
+          --strong: #0f172a;
+          --strongText: #ffffff;
+          --shadow: rgba(15,23,42,0.14);
+        }
+        @media (prefers-color-scheme: dark) {
+          :root {
+            --bg0: #07111d;
+            --bg1: #0b1726;
+            --glass: rgba(10,14,22,0.60);
+            --stroke: rgba(255,255,255,0.10);
+            --text: #f8fafc;
+            --subtle: #b6c2d1;
+            --field: rgba(255,255,255,0.08);
+            --fieldStroke: rgba(255,255,255,0.10);
+            --soft: rgba(255,255,255,0.06);
+            --strong: #f8fafc;
+            --strongText: #111827;
+            --shadow: rgba(0,0,0,0.32);
+          }
+        }
+        * { box-sizing: border-box; }
         body {
           margin: 0;
           min-height: 100vh;
           font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          color: var(--text);
           background:
-            radial-gradient(circle at top, rgba(125, 161, 255, 0.16), transparent 36%),
-            linear-gradient(180deg, #eef3f9 0%, #f8fafc 52%, #f4f7fb 100%);
-          color: #111827;
+            radial-gradient(circle at 18% 12%, rgba(72, 139, 255, 0.24), transparent 34%),
+            radial-gradient(circle at 82% 16%, rgba(108, 92, 231, 0.10), transparent 24%),
+            linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
         }
         .shell {
           min-height: 100vh;
           display: grid;
           place-items: center;
-          padding: 32px;
+          padding: 26px;
         }
         .panel {
-          width: min(640px, calc(100vw - 48px));
-          padding: 34px 30px 28px;
-          border-radius: 30px;
-          background: rgba(255,255,255,0.70);
-          border: 1px solid rgba(255,255,255,0.62);
-          box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
-          backdrop-filter: blur(18px);
+          width: min(760px, calc(100vw - 32px));
+          padding: 34px 28px 28px;
+          border-radius: 34px;
+          background: var(--glass);
+          border: 1px solid var(--stroke);
+          backdrop-filter: blur(28px) saturate(1.25);
+          box-shadow: 0 28px 80px var(--shadow);
         }
         .eyebrow {
           margin: 0 0 10px;
           font-size: 13px;
-          font-weight: 600;
+          font-weight: 700;
           letter-spacing: 0.04em;
           text-transform: uppercase;
-          color: #64748b;
+          color: var(--subtle);
         }
         h1 {
-          margin: 0 0 10px;
-          font-size: clamp(34px, 5vw, 48px);
-          line-height: 1.04;
-          letter-spacing: -0.04em;
+          margin: 0 0 12px;
+          font-size: clamp(36px, 5vw, 56px);
+          line-height: 0.98;
+          letter-spacing: -0.045em;
         }
         p {
           margin: 0 0 22px;
-          line-height: 1.55;
-          color: #475569;
+          max-width: 38rem;
           font-size: 17px;
+          line-height: 1.58;
+          color: var(--subtle);
         }
         form {
           display: grid;
-          gap: 12px;
+          gap: 14px;
         }
         .search {
-          height: 58px;
-          padding: 0 18px;
-          border-radius: 18px;
-          border: 1px solid rgba(148, 163, 184, 0.34);
-          background: rgba(255,255,255,0.82);
+          width: 100%;
+          height: 62px;
+          padding: 0 20px;
+          border-radius: 20px;
+          border: 1px solid var(--fieldStroke);
+          background: var(--field);
+          color: var(--text);
           font-size: 18px;
           outline: none;
-          box-sizing: border-box;
         }
+        .search::placeholder { color: color-mix(in srgb, var(--subtle) 78%, transparent); }
         .search:focus {
-          border-color: rgba(59, 130, 246, 0.42);
-          box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.12);
+          border-color: rgba(96,165,250,0.42);
+          box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
         .actions {
           display: flex;
-          gap: 12px;
+          gap: 10px;
           flex-wrap: wrap;
         }
-        button, .secondary {
+        button, .secondary, .ghost {
           height: 46px;
           padding: 0 18px;
-          border-radius: 14px;
+          border-radius: 15px;
           border: 0;
-          font-weight: 600;
-          font-size: 16px;
-          cursor: pointer;
+          font: 600 16px -apple-system, BlinkMacSystemFont, sans-serif;
         }
         button {
-          background: rgba(17,24,39,0.94);
-          color: white;
+          background: var(--strong);
+          color: var(--strongText);
         }
         .secondary {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: rgba(255,255,255,0.62);
-          color: #111827;
+          background: var(--soft);
+          color: var(--text);
           text-decoration: none;
         }
-        .meta {
-          margin-top: 18px;
+        .ghost {
+          background: transparent;
+          color: var(--subtle);
+          padding-left: 6px;
+          padding-right: 6px;
+        }
+        .footer {
+          margin-top: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .chips {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .chip {
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: var(--soft);
+          color: var(--subtle);
           font-size: 13px;
-          color: #64748b;
+          font-weight: 600;
+        }
+        .meta {
+          font-size: 13px;
+          color: var(--subtle);
+        }
+        @media (max-width: 640px) {
+          .panel {
+            width: min(100%, calc(100vw - 22px));
+            padding: 28px 20px 20px;
+            border-radius: 28px;
+          }
+          h1 { font-size: 34px; }
+          p { font-size: 16px; }
+          .actions > * { flex: 1 1 auto; }
         }
         </style>
         <body>
           <div class="shell">
             <div class="panel">
               <div class="eyebrow">Vidarr Start</div>
-              <h1>検索から始める</h1>
-              <p>開くページが指定されていないときは、ここから検索や URL 入力ができます。</p>
+              <h1>検索と閲覧を、すぐに。</h1>
+              <p>検索語でも URL でも、そのまま入力できます。新規タブや検索ジェスチャーから開かれる、Vidarr のスタートページです。</p>
               <form id="searchForm">
                 <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
                 <div class="actions">
-                  <button type="submit">検索する</button>
+                  <button type="submit">開く</button>
                   <a class="secondary" href="javascript:window.location.reload()">再読み込み</a>
+                  <button class="ghost" type="button" id="focusSearch">入力欄に戻る</button>
                 </div>
               </form>
-              <div class="meta">検索先は設定で変更できます。</div>
+              <div class="footer">
+                <div class="chips">
+                  <div class="chip">検索先は設定から変更</div>
+                  <div class="chip">URL も直接入力可能</div>
+                </div>
+                <div class="meta">空欄ならここが新規ページになります。</div>
+              </div>
             </div>
           </div>
           <script>
             const template = \(String(reflecting: searchTemplate));
+            const initialQuery = \(escapedQuery);
             const input = document.getElementById('query');
+            const focusButton = document.getElementById('focusSearch');
+            input.value = initialQuery;
             document.getElementById('searchForm').addEventListener('submit', function(event) {
               event.preventDefault();
               const raw = input.value.trim();
@@ -673,7 +771,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
             });
+            focusButton.addEventListener('click', function() {
+              input.focus();
+              input.select();
+            });
             input.focus();
+            if (initialQuery) {
+              requestAnimationFrame(() => input.setSelectionRange(0, input.value.length));
+            }
           </script>
         </body>
         </html>
@@ -701,43 +806,72 @@ final class PadBrowserModel: NSObject, ObservableObject {
             function ensureButton() {
                 const existing = window.__vidarrSelectionSearchButton;
                 if (existing) { return existing; }
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.setAttribute('aria-label', 'Search selection');
-                button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="6.75" cy="6.75" r="4.75" stroke="rgba(255,255,255,0.96)" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="rgba(255,255,255,0.96)" stroke-width="1.5" stroke-linecap="round"/></svg>';
-                button.style.position = 'fixed';
-                button.style.display = 'none';
-                button.style.alignItems = 'center';
-                button.style.justifyContent = 'center';
-                button.style.width = '38px';
-                button.style.height = '38px';
-                button.style.border = '1px solid rgba(255,255,255,0.26)';
-                button.style.borderRadius = '12px';
-                button.style.background = 'rgba(24,27,31,0.84)';
-                button.style.backdropFilter = 'blur(14px)';
-                button.style.boxShadow = '0 10px 26px rgba(0,0,0,0.22)';
-                button.style.padding = '0';
-                button.style.margin = '0';
-                button.style.zIndex = '2147483647';
-                button.style.opacity = '0';
-                button.style.transition = 'opacity 120ms ease';
+                const wrap = document.createElement('div');
+                wrap.style.position = 'fixed';
+                wrap.style.display = 'none';
+                wrap.style.alignItems = 'center';
+                wrap.style.gap = '6px';
+                wrap.style.padding = '6px';
+                wrap.style.borderRadius = '18px';
+                wrap.style.border = '1px solid rgba(255,255,255,0.22)';
+                wrap.style.background = 'rgba(16,18,24,0.84)';
+                wrap.style.backdropFilter = 'blur(16px) saturate(1.2)';
+                wrap.style.boxShadow = '0 16px 36px rgba(0,0,0,0.22)';
+                wrap.style.zIndex = '2147483647';
+                wrap.style.opacity = '0';
+                wrap.style.transition = 'opacity 120ms ease';
 
-                const triggerSearch = (event) => {
+                const iconSVG = (icon) => {
+                    if (icon === 'copy') {
+                        return '<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="5" y="3" width="8" height="10" rx="2" stroke="rgba(255,255,255,0.96)" stroke-width="1.4"/><path d="M3 11V5C3 3.9 3.9 3 5 3" stroke="rgba(255,255,255,0.64)" stroke-width="1.4" stroke-linecap="round"/></svg>';
+                    }
+                    if (icon === 'lookup') {
+                        return '<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M4 3.5A1.5 1.5 0 0 1 5.5 2H12v11H5.5A1.5 1.5 0 0 0 4 14.5v-11Z" stroke="rgba(255,255,255,0.96)" stroke-width="1.3"/><path d="M6.4 5.2h3.8" stroke="rgba(255,255,255,0.68)" stroke-width="1.2" stroke-linecap="round"/></svg>';
+                    }
+                    return '<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="6.75" cy="6.75" r="4.75" stroke="rgba(255,255,255,0.96)" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="rgba(255,255,255,0.96)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+                };
+
+                const triggerAction = (action, event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     const text = (window.getSelection ? window.getSelection().toString() : '').trim();
                     hideButton();
                     if (!text) { return; }
-                    window.webkit.messageHandlers.\(Self.selectionSearchMessageName).postMessage({ query: text });
+                    window.webkit.messageHandlers.\(Self.selectionSearchMessageName).postMessage({ action, query: text });
                 };
 
-                button.addEventListener('click', triggerSearch, true);
-                button.addEventListener('touchend', triggerSearch, true);
-                button.addEventListener('pointerup', triggerSearch, true);
+                const actions = [
+                    { title: 'コピー', action: 'copy', icon: 'copy' },
+                    { title: '検索', action: 'search', icon: 'search' },
+                    { title: '調べる', action: 'lookup', icon: 'lookup' }
+                ];
 
-                document.documentElement.appendChild(button);
-                window.__vidarrSelectionSearchButton = button;
-                return button;
+                actions.forEach(({ title, action, icon }) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.setAttribute('aria-label', title);
+                    button.style.display = 'inline-flex';
+                    button.style.alignItems = 'center';
+                    button.style.justifyContent = 'center';
+                    button.style.gap = '6px';
+                    button.style.height = '40px';
+                    button.style.padding = '0 14px';
+                    button.style.border = '0';
+                    button.style.borderRadius = '14px';
+                    button.style.background = 'rgba(255,255,255,0.10)';
+                    button.style.color = 'rgba(255,255,255,0.96)';
+                    button.style.font = '600 15px -apple-system, BlinkMacSystemFont, sans-serif';
+                    button.style.whiteSpace = 'nowrap';
+                    button.innerHTML = `${iconSVG(icon)}<span>${title}</span>`;
+                    button.addEventListener('click', (event) => triggerAction(action, event), true);
+                    button.addEventListener('touchend', (event) => triggerAction(action, event), true);
+                    button.addEventListener('pointerup', (event) => triggerAction(action, event), true);
+                    wrap.appendChild(button);
+                });
+
+                document.documentElement.appendChild(wrap);
+                window.__vidarrSelectionSearchButton = wrap;
+                return wrap;
             }
 
             function hideButton() {
@@ -775,16 +909,22 @@ final class PadBrowserModel: NSObject, ObservableObject {
                     return;
                 }
 
-                const buttonSize = 38;
+                const toolbarWidth = 224;
+                const toolbarHeight = 52;
                 const margin = 10;
-                const maxX = Math.max(margin, window.innerWidth - buttonSize - margin);
-                const x = Math.min(maxX, Math.max(margin, rect.right - buttonSize));
-                const preferredY = rect.top - buttonSize - margin;
+                const centerX = rect.left + (rect.width / 2);
+                const x = Math.min(
+                    window.innerWidth - toolbarWidth - margin,
+                    Math.max(margin, centerX - (toolbarWidth / 2))
+                );
+                const preferredY = rect.top - toolbarHeight - margin;
                 const fallbackY = rect.bottom + margin;
                 const y = preferredY > margin
                     ? preferredY
-                    : Math.min(window.innerHeight - buttonSize - margin, Math.max(margin, fallbackY));
+                    : Math.min(window.innerHeight - toolbarHeight - margin, Math.max(margin, fallbackY));
 
+                ensureButton().style.width = `${toolbarWidth}px`;
+                ensureButton().style.minHeight = `${toolbarHeight}px`;
                 showButtonAt(x, y);
             }
 
@@ -829,6 +969,46 @@ final class PadBrowserModel: NSObject, ObservableObject {
             return
         }
         loadSelectedTab(with: trimmed)
+    }
+
+    func openSearchPageInNewTab(initialQuery: String? = nil) {
+        let webView = makeWebView()
+        let tab = Tab(webView: webView)
+        webView.navigationDelegate = self
+        tabs.append(tab)
+        selectedIndex = tabs.count - 1
+        selectedSidebarTabID = tab.id
+        loadStartPage(in: webView, initialQuery: initialQuery)
+        captureThumbnail(for: tab)
+        syncAddressBar()
+        saveSessionSnapshot()
+    }
+
+    func openSelectionSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        openSearchPageInNewTab(initialQuery: trimmed)
+    }
+
+    func copySelectionText(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        UIPasteboard.general.string = trimmed
+    }
+
+    func handleSelectionAction(_ action: String, query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        switch action {
+        case "copy":
+            copySelectionText(trimmed)
+        case "search":
+            openSelectionSearch(trimmed)
+        case "lookup":
+            pendingSelectionActionRequest = .lookup(trimmed)
+        default:
+            break
+        }
     }
 
     func findInSelectedPage(_ query: String, completion: @escaping (String?) -> Void) {
@@ -954,15 +1134,12 @@ extension PadBrowserModel: WKNavigationDelegate {
 }
 
 extension PadBrowserModel: WKScriptMessageHandler {
-    nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == Self.selectionSearchMessageName,
               let body = message.body as? [String: Any],
+              let action = body["action"] as? String,
               let query = body["query"] as? String else { return }
-        Task { @MainActor [weak self] in
-            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            self?.pendingSelectionSearchQuery = trimmed
-        }
+        handleSelectionAction(action, query: query)
     }
 }
 
@@ -1009,6 +1186,7 @@ extension PadBrowserModel {
         let destination = availableDestinationURL(in: directory, suggestedFilename: suggestedName)
         let task = URLSession.shared.downloadTask(with: url) { tempURL, _, _ in
             guard let tempURL else { return }
+            let fileManager = FileManager.default
             try? fileManager.removeItem(at: destination)
             do {
                 try fileManager.moveItem(at: tempURL, to: destination)

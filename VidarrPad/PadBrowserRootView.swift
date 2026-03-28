@@ -128,6 +128,11 @@ struct PadBrowserRootView: View {
             .presentationDetents([.fraction(0.26)])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: selectionLookupBinding) { request in
+            PadLookupSheet(term: request.query)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingSettings) {
             PadSettingsSheet(
                 onOpenHistory: { activeLibraryPanel = .history },
@@ -187,13 +192,6 @@ struct PadBrowserRootView: View {
             } else {
                 scheduleBottomBarAutoHide()
             }
-        }
-        .onChange(of: model.pendingSelectionSearchQuery) { _, query in
-            guard let query, !query.isEmpty else { return }
-            quickSearchQuery = query
-            showingQuickSearch = true
-            showBottomBar(persist: true)
-            model.pendingSelectionSearchQuery = nil
         }
     }
 
@@ -450,8 +448,7 @@ struct PadBrowserRootView: View {
         case .forward:
             model.goForward()
         case .search:
-            quickSearchQuery = ""
-            showingQuickSearch = true
+            model.openSearchPageInNewTab()
         case .newTab:
             animateNewTabCreation()
         }
@@ -527,6 +524,13 @@ struct PadBrowserRootView: View {
             set: { newValue in
                 editingTabID = newValue?.id
             }
+        )
+    }
+
+    private var selectionLookupBinding: Binding<PadBrowserModel.SelectionActionRequest?> {
+        Binding(
+            get: { model.pendingSelectionActionRequest },
+            set: { model.pendingSelectionActionRequest = $0 }
         )
     }
 
@@ -1203,6 +1207,7 @@ private struct PadSettingsSheet: View {
     }
 }
 
+@MainActor
 private enum PadWebsiteDataCleaner {
     static func clearCookiesAndCache() async {
         let store = WKWebsiteDataStore.default()
@@ -1694,6 +1699,23 @@ private struct PadQuickSearchSheet: View {
             }
         }
         .presentationBackground(.regularMaterial)
+    }
+}
+
+private struct PadLookupSheet: UIViewControllerRepresentable {
+    let term: String
+
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let controller = UIReferenceLibraryViewController(term: term)
+        return UINavigationController(rootViewController: controller)
+    }
+
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
+        if let controller = uiViewController.viewControllers.first as? UIReferenceLibraryViewController,
+           controller.title != term,
+           UIReferenceLibraryViewController.dictionaryHasDefinition(forTerm: term) {
+            uiViewController.setViewControllers([UIReferenceLibraryViewController(term: term)], animated: false)
+        }
     }
 }
 

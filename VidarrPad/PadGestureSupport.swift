@@ -135,14 +135,14 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
                 self.lastLocation = location
                 return
             }
-            let dx = -(location.x - lastLocation.x)
+            let dx = location.x - lastLocation.x
             let dy = -(location.y - lastLocation.y)
             self.lastLocation = location
             handleInput(dx: dx, dy: dy, timestamp: timestamp, anchor: location)
 
         case .ended:
             if let lastLocation {
-                let dx = -(location.x - lastLocation.x)
+                let dx = location.x - lastLocation.x
                 let dy = -(location.y - lastLocation.y)
                 self.lastLocation = nil
                 handleInput(dx: dx, dy: dy, timestamp: timestamp, anchor: location)
@@ -258,19 +258,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private func updateHUDIfNeeded() {
         if captureInvalidated {
             cancelHorizontalSwipePreviewIfNeeded()
-            onPreview(nil)
-            return
-        }
-
-        if !captureHasStrongVerticalComponent,
-           let horizontal = recognizeHorizontalSwipe(points: capturePoints),
-           let action = mapAction(name: horizontal.name)
-        {
-            let total = abs((capturePoints.last?.x ?? 0) - (capturePoints.first?.x ?? 0))
-            let width = max(currentViewWidth, 1)
-            let progress = min(0.82, max(0, total / max(width + 16, 1)))
-            activeHorizontalAction = action
-            onHorizontalSwipeDrag(action, progress)
             onPreview(nil)
             return
         }
@@ -470,7 +457,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "Right":
             return .nextTab
         case "DownRight":
-            return .newTab
+            return .closeTab
         case "DownRightDownRight":
             return .closeAllTabs
         case "U":
@@ -480,13 +467,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "OO":
             return .reloadAll
         case "UpRight":
-            return .forward
-        case "UpLeft":
             return .back
+        case "UpLeft":
+            return .forward
         case "S":
             return .search
         case "DownLeft":
-            return .closeTab
+            return .newTab
         default:
             return nil
         }
@@ -506,11 +493,11 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private func symbol(for name: String) -> String {
         switch name {
         case "Left":
-            return "arrow.right.circle.fill"
-        case "Right":
             return "arrow.left.circle.fill"
+        case "Right":
+            return "arrow.right.circle.fill"
         case "DownRight":
-            return "plus.square.on.square"
+            return "xmark.square.fill"
         case "DownRightDownRight":
             return "trash.circle.fill"
         case "O":
@@ -520,13 +507,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "OO":
             return "square.stack.3d.up.fill"
         case "UpRight":
-            return "chevron.forward.circle.fill"
-        case "UpLeft":
             return "chevron.backward.circle.fill"
+        case "UpLeft":
+            return "chevron.forward.circle.fill"
         case "S":
             return "magnifyingglass.circle.fill"
         case "DownLeft":
-            return "xmark.square.fill"
+            return "plus.square.on.square"
         default:
             return "questionmark.circle"
         }

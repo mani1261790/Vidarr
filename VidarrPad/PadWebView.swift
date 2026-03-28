@@ -9,11 +9,19 @@ final class PadInteractiveWebView: WKWebView {
 
     override init(frame: CGRect, configuration: WKWebViewConfiguration) {
         super.init(frame: frame, configuration: configuration)
+        installSearchMenuItemFallback()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(vidarrSearchSelection(_:)) {
+            return true
+        }
+        return super.canPerformAction(action, withSender: sender)
     }
 
     @MainActor
@@ -43,6 +51,10 @@ final class PadInteractiveWebView: WKWebView {
         }
     }
 
+    @objc private func vidarrSearchSelection(_ sender: Any?) {
+        performSearchSelection()
+    }
+
     private func performSearchSelection() {
         evaluateJavaScript("window.getSelection ? window.getSelection().toString() : ''") { [weak self] result, _ in
             guard let text = (result as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
@@ -52,6 +64,12 @@ final class PadInteractiveWebView: WKWebView {
                 self?.onSearchSelection?(text)
             }
         }
+    }
+
+    private func installSearchMenuItemFallback() {
+        UIMenuController.shared.menuItems = [
+            UIMenuItem(title: "検索", action: #selector(vidarrSearchSelection(_:)))
+        ]
     }
 }
 

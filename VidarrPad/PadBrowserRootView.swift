@@ -2,6 +2,8 @@ import SwiftUI
 import WebKit
 
 struct PadBrowserRootView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     enum LibraryPanel: String, Identifiable {
         case history
         case bookmarks
@@ -225,7 +227,7 @@ struct PadBrowserRootView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(chromeForegroundColor.opacity(0.16), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.11), radius: 14, y: 6)
@@ -234,18 +236,18 @@ struct PadBrowserRootView: View {
     private var bottomRevealZone: some View {
         VStack(spacing: 6) {
             Capsule()
-                .fill(Color.white.opacity(0.92))
+                .fill(chromeForegroundColor.opacity(0.92))
                 .frame(width: 42, height: 5)
             Image(systemName: "chevron.up")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.92))
+                .foregroundStyle(chromeForegroundColor.opacity(0.92))
         }
         .padding(.top, 8)
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
         .background(
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.12)],
+                colors: [.clear, revealGradientColor.opacity(0.12)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -326,10 +328,10 @@ struct PadBrowserRootView: View {
             if stripBirthOpacity > 0.001 {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.96))
+                        .fill(chromeForegroundColor.opacity(0.96))
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.black.opacity(0.78))
+                        .foregroundStyle(chromeBackgroundAccent.opacity(0.82))
                 }
                 .frame(width: 20, height: 20)
                 .position(stripBirthPosition)
@@ -349,13 +351,39 @@ struct PadBrowserRootView: View {
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(disabled ? Color.secondary.opacity(0.45) : Color.primary)
+        .foregroundStyle(disabled ? chromeDisabledColor : chromeForegroundColor)
         .disabled(disabled)
         .simultaneousGesture(
             TapGesture().onEnded {
                 showBottomBar()
             }
         )
+    }
+
+    private var chromeForegroundColor: Color {
+        prefersLightChrome
+            ? Color.white.opacity(0.96)
+            : Color.black.opacity(0.80)
+    }
+
+    private var chromeDisabledColor: Color {
+        chromeForegroundColor.opacity(0.42)
+    }
+
+    private var revealGradientColor: Color {
+        prefersLightChrome ? .black : .white
+    }
+
+    private var chromeBackgroundAccent: Color {
+        prefersLightChrome ? .black : .white
+    }
+
+    private var prefersLightChrome: Bool {
+        if let thumbnail = model.selectedTab?.thumbnail,
+           let brightness = thumbnail.averagePerceivedBrightness {
+            return brightness < 0.57
+        }
+        return colorScheme == .dark
     }
 
     private func performGesture(_ action: PadGestureAction) {
@@ -1478,5 +1506,40 @@ private struct PadTabEditSheet: View {
     private enum ActionRole {
         case primary
         case secondary
+    }
+}
+
+private extension UIImage {
+    var averagePerceivedBrightness: CGFloat? {
+        guard let cgImage else { return nil }
+        let sampleSize = CGSize(width: 8, height: 8)
+        let bytesPerRow = Int(sampleSize.width) * 4
+        var data = [UInt8](repeating: 0, count: Int(sampleSize.height) * bytesPerRow)
+        guard let context = CGContext(
+            data: &data,
+            width: Int(sampleSize.width),
+            height: Int(sampleSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .low
+        context.draw(cgImage, in: CGRect(origin: .zero, size: sampleSize))
+
+        var totalBrightness: CGFloat = 0
+        let pixelCount = Int(sampleSize.width * sampleSize.height)
+        for pixel in 0..<pixelCount {
+            let offset = pixel * 4
+            let red = CGFloat(data[offset]) / 255
+            let green = CGFloat(data[offset + 1]) / 255
+            let blue = CGFloat(data[offset + 2]) / 255
+            totalBrightness += (0.299 * red) + (0.587 * green) + (0.114 * blue)
+        }
+
+        return totalBrightness / CGFloat(pixelCount)
     }
 }

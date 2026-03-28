@@ -34,6 +34,8 @@ struct PadBrowserRootView: View {
     @State private var gestureHUDTask: Task<Void, Never>?
     @State private var bottomBarVisible = true
     @State private var bottomBarHideTask: Task<Void, Never>?
+    @State private var bottomRevealHintOpacity: CGFloat = 0.92
+    @State private var bottomRevealHintTask: Task<Void, Never>?
     @State private var editingTabID: UUID?
     @State private var editingURL = ""
     @State private var showingSettings = false
@@ -46,6 +48,7 @@ struct PadBrowserRootView: View {
     @State private var webViewportWidth: CGFloat = 1
     @State private var edgePreviewTabID: UUID?
     @State private var stripBirthTabID: UUID?
+    @State private var destructiveDismissTabID: UUID?
     @State private var tabStripFrames: [UUID: CGRect] = [:]
     @State private var tabStripBounds: CGRect = .zero
     @State private var stripBirthPosition: CGPoint = .zero
@@ -249,6 +252,7 @@ struct PadBrowserRootView: View {
         )
         .contentShape(Rectangle())
         .ignoresSafeArea(edges: .bottom)
+        .opacity(bottomRevealHintOpacity)
         .onTapGesture {
             showBottomBar()
         }
@@ -261,12 +265,13 @@ struct PadBrowserRootView: View {
                     ForEach(model.tabs) { tab in
                         PadTabThumbnail(
                             tab: tab,
-                            isSelected: model.selectedTab?.id == tab.id,
-                            isBookmarked: model.isBookmarked(tab),
-                            showsBirthPulse: stripBirthTabID == tab.id,
-                            onSelect: {
-                                animateTabSelection(to: tab.id)
-                            },
+                        isSelected: model.selectedTab?.id == tab.id,
+                        isBookmarked: model.isBookmarked(tab),
+                        showsBirthPulse: stripBirthTabID == tab.id,
+                        showsDestructiveDismiss: destructiveDismissTabID == tab.id,
+                        onSelect: {
+                            animateTabSelection(to: tab.id)
+                        },
                             onLongPress: {
                                 animateTabSelection(to: tab.id)
                                 editingURL = tab.urlString
@@ -277,15 +282,15 @@ struct PadBrowserRootView: View {
                                 model.toggleProtectionForSelectedTab()
                                 showBottomBar()
                             },
-                            onSwipeDown: {
-                                animateTabSelection(to: tab.id)
-                                if tab.isProtected {
-                                    protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
-                                } else {
-                                    model.closeTab(id: tab.id)
-                                }
-                                showBottomBar()
+                        onSwipeDown: {
+                            animateTabSelection(to: tab.id)
+                            if tab.isProtected {
+                                protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
+                            } else {
+                                animateDestructiveClose(for: tab.id)
                             }
+                            showBottomBar()
+                        }
                         )
                         .background(
                             GeometryReader { proxy in
@@ -689,6 +694,7 @@ struct PadBrowserRootView: View {
 
     private func showBottomBar(persist: Bool = false) {
         bottomBarHideTask?.cancel()
+        bottomRevealHintTask?.cancel()
         withAnimation(.easeOut(duration: 0.18)) {
             bottomBarVisible = true
         }
@@ -713,6 +719,7 @@ struct PadBrowserRootView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 bottomBarVisible = false
             }
+            scheduleBottomRevealHintFade()
         }
     }
 
@@ -868,6 +875,28 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = nil
             tabSwitchVisualState = .identity
             interactiveTargetID = nil
+        }
+    }
+
+    private func animateDestructiveClose(for tabID: UUID) {
+        destructiveDismissTabID = tabID
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard destructiveDismissTabID == tabID else { return }
+            model.closeTab(id: tabID)
+            destructiveDismissTabID = nil
+        }
+    }
+
+    private func scheduleBottomRevealHintFade() {
+        bottomRevealHintTask?.cancel()
+        bottomRevealHintOpacity = 0.92
+        bottomRevealHintTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.35)) {
+                bottomRevealHintOpacity = 0.18
+            }
         }
     }
 }
@@ -1205,6 +1234,7 @@ private struct PadTabThumbnail: View {
     let isSelected: Bool
     let isBookmarked: Bool
     let showsBirthPulse: Bool
+    let showsDestructiveDismiss: Bool
     let onSelect: () -> Void
     let onLongPress: () -> Void
     let onDoubleTap: () -> Void
@@ -1214,7 +1244,7 @@ private struct PadTabThumbnail: View {
         Button(action: onSelect) {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.22) : Color.black.opacity(0.14))
+                    .fill(backgroundFill)
                 Group {
                     if let image = tab.thumbnail {
                         Image(uiImage: image)
@@ -1245,10 +1275,14 @@ private struct PadTabThumbnail: View {
                 if tab.isProtected || isBookmarked {
                     ZStack {
                         Circle()
-                            .fill(tab.isProtected ? Color.orange : Color.yellow)
+                            .fill(
+                                tab.isProtected
+                                    ? Color(red: 0.29, green: 0.67, blue: 1.0).opacity(0.96)
+                                    : Color(red: 1.0, green: 0.80, blue: 0.15).opacity(0.96)
+                            )
                         Image(systemName: tab.isProtected ? "pin.fill" : "star.fill")
                             .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(tab.isProtected ? Color.white : Color.black.opacity(0.75))
+                            .foregroundStyle(Color.white.opacity(0.96))
                     }
                     .frame(width: 16, height: 16)
                     .offset(x: 4, y: -4)
@@ -1268,7 +1302,21 @@ private struct PadTabThumbnail: View {
                     .transition(.scale(scale: 0.7).combined(with: .opacity))
                 }
             }
+            .overlay {
+                if showsDestructiveDismiss {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.red.opacity(0.32))
+                        .overlay(
+                            Image(systemName: "xmark")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(Color.white.opacity(0.96))
+                        )
+                        .transition(.opacity)
+                }
+            }
             .shadow(color: shadowColor, radius: 16, y: 6)
+            .scaleEffect(showsDestructiveDismiss ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.14), value: showsDestructiveDismiss)
         }
         .buttonStyle(.plain)
         .highPriorityGesture(
@@ -1295,22 +1343,29 @@ private struct PadTabThumbnail: View {
 
     private var borderColor: Color {
         if tab.isProtected {
-            return Color.orange.opacity(isSelected ? 0.95 : 0.82)
+            return Color(red: 1.0, green: 0.48, blue: 0.06).opacity(isSelected ? 0.95 : 0.82)
         }
         if isBookmarked {
-            return Color.yellow.opacity(isSelected ? 0.90 : 0.78)
+            return Color(red: 1.0, green: 0.80, blue: 0.16).opacity(isSelected ? 0.90 : 0.78)
         }
         return isSelected ? Color.accentColor.opacity(0.85) : Color.white.opacity(0.08)
     }
 
     private var shadowColor: Color {
         if tab.isProtected {
-            return Color.orange.opacity(isSelected ? 0.42 : 0.28)
+            return Color(red: 1.0, green: 0.48, blue: 0.06).opacity(isSelected ? 0.62 : 0.36)
         }
         if isBookmarked {
-            return Color.yellow.opacity(isSelected ? 0.28 : 0.18)
+            return Color(red: 1.0, green: 0.80, blue: 0.16).opacity(isSelected ? 0.28 : 0.18)
         }
         return isSelected ? Color.accentColor.opacity(0.24) : .clear
+    }
+
+    private var backgroundFill: Color {
+        if showsDestructiveDismiss {
+            return Color.red.opacity(0.24)
+        }
+        return isSelected ? Color.white.opacity(0.22) : Color.black.opacity(0.14)
     }
 }
 

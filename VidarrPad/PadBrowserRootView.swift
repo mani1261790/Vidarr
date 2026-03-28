@@ -394,8 +394,8 @@ struct PadBrowserRootView: View {
                     gestureHUD = state
                 }
             },
-            onHorizontalSwipeDrag: { action, progress in
-                updateInteractiveTabSwitch(for: action, progress: progress)
+            onHorizontalSwipeDrag: { action, totalX in
+                updateInteractiveTabSwitch(for: action, totalX: totalX)
             },
             onHorizontalSwipeCancel: {
                 cancelInteractiveTabSwitch()
@@ -442,7 +442,7 @@ struct PadBrowserRootView: View {
         }
     }
 
-    private func updateInteractiveTabSwitch(for action: PadGestureAction, progress: CGFloat) {
+    private func updateInteractiveTabSwitch(for action: PadGestureAction, totalX: CGFloat) {
         guard let currentID = model.selectedTab?.id,
               let currentIndex = model.tabIndex(for: currentID) else { return }
 
@@ -467,6 +467,8 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction, mode: .standard)
             interactiveTargetID = toTab.id
         }
+        let width = UIScreen.main.bounds.width
+        let progress = abs(totalX) / max(width + 16, 1)
         tabSwitchProgress = min(0.82, max(0, progress))
     }
 

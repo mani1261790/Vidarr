@@ -81,6 +81,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private var latestTimestamp: TimeInterval = 0
     private var currentViewWidth: CGFloat = 0
     private var activeHorizontalAction: PadGestureAction?
+    private var interactiveTabSwipeActive = false
+    private var interactiveTabSwipeTotalX: CGFloat = 0
     private var suppressHorizontalCancelOnReset = false
 
     private lazy var recognizer = PadGestureRecognizer(
@@ -180,6 +182,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         case .capturing:
             appendCaptureDelta(dx: dx, dy: dy)
+            if handleInteractiveTabSwipe(dx: dx, dy: dy) {
+                return
+            }
             updateHUDIfNeeded()
         }
     }
@@ -302,6 +307,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
+        if interactiveTabSwipeActive, let action = activeHorizontalAction {
+            suppressHorizontalCancelOnReset = true
+            activeHorizontalAction = nil
+            onCommit(action)
+            return
+        }
+
         guard !captureInvalidated else {
             onPreview(nil)
             return
@@ -374,6 +386,47 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         return PadGestureResult(name: name, score: 1.0)
     }
 
+    private func handleInteractiveTabSwipe(dx: CGFloat, dy: CGFloat) -> Bool {
+        if captureHasStrongVerticalComponent {
+            return false
+        }
+
+        if interactiveTabSwipeActive, let action = activeHorizontalAction {
+            interactiveTabSwipeTotalX += dx
+            onHorizontalSwipeDrag(action, interactiveTabSwipeTotalX)
+            onPreview(nil)
+            return true
+        }
+
+        guard capturePoints.count >= 4 else { return false }
+
+        let start = capturePoints[0]
+        let end = capturePoints[capturePoints.count - 1]
+        let displacementX = end.x - start.x
+        let displacementY = end.y - start.y
+        let absDX = abs(displacementX)
+        let absDY = abs(displacementY)
+        guard absDX >= 28 else { return false }
+        guard absDX >= absDY * 2.35 else { return false }
+
+        var minY = capturePoints[0].y
+        var maxY = capturePoints[0].y
+        for point in capturePoints {
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+        let verticalExcursion = maxY - minY
+        guard verticalExcursion <= 20 else { return false }
+
+        let action: PadGestureAction = displacementX < 0 ? .previousTab : .nextTab
+        interactiveTabSwipeActive = true
+        interactiveTabSwipeTotalX = displacementX
+        activeHorizontalAction = action
+        onHorizontalSwipeDrag(action, interactiveTabSwipeTotalX)
+        onPreview(nil)
+        return true
+    }
+
     private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {
         guard points.count >= 16 else { return false }
 
@@ -417,7 +470,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "Right":
             return .nextTab
         case "DownRight":
-            return .closeTab
+            return .newTab
         case "DownRightDownRight":
             return .closeAllTabs
         case "U":
@@ -427,13 +480,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "OO":
             return .reloadAll
         case "UpRight":
-            return .back
-        case "UpLeft":
             return .forward
+        case "UpLeft":
+            return .back
         case "S":
             return .search
         case "DownLeft":
-            return .newTab
+            return .closeTab
         default:
             return nil
         }
@@ -457,7 +510,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "Right":
             return "arrow.left.circle.fill"
         case "DownRight":
-            return "xmark.square.fill"
+            return "plus.square.on.square"
         case "DownRightDownRight":
             return "trash.circle.fill"
         case "O":
@@ -467,13 +520,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "OO":
             return "square.stack.3d.up.fill"
         case "UpRight":
-            return "chevron.backward.circle.fill"
-        case "UpLeft":
             return "chevron.forward.circle.fill"
+        case "UpLeft":
+            return "chevron.backward.circle.fill"
         case "S":
             return "magnifyingglass.circle.fill"
         case "DownLeft":
-            return "plus.square.on.square"
+            return "xmark.square.fill"
         default:
             return "questionmark.circle"
         }
@@ -493,6 +546,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         lastLiveCandidate = nil
         captureInvalidated = false
         captureHasStrongVerticalComponent = false
+        interactiveTabSwipeActive = false
+        interactiveTabSwipeTotalX = 0
         if suppressHorizontalCancelOnReset {
             suppressHorizontalCancelOnReset = false
         } else {

@@ -1553,10 +1553,18 @@ private struct PadTabThumbnail: View {
     let thumbnailWidth: CGFloat
     let thumbnailHeight: CGFloat
 
+    private var outerCornerRadius: CGFloat {
+        min(11, max(8, thumbnailHeight * 0.30))
+    }
+
+    private var innerCornerRadius: CGFloat {
+        max(6, outerCornerRadius - 2.5)
+    }
+
     var body: some View {
         Button(action: onSelect) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous)
                     .fill(backgroundFill)
                 Group {
                     if let image = tab.thumbnail {
@@ -1576,12 +1584,13 @@ private struct PadTabThumbnail: View {
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: innerCornerRadius, style: .continuous))
                 .padding(3)
             }
             .frame(width: thumbnailWidth, height: thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
             )
             .overlay(alignment: .topLeading) {
@@ -1617,7 +1626,7 @@ private struct PadTabThumbnail: View {
             }
             .overlay {
                 if destructiveVisualProgress > 0 {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous)
                         .fill(Color.red.opacity(0.18 + (0.18 * destructiveVisualProgress)))
                         .overlay(
                             Image(systemName: "xmark")

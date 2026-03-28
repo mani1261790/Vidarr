@@ -338,20 +338,20 @@ struct PadBrowserRootView: View {
     }
 
     private var bottomRevealZone: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 3) {
             Capsule()
                 .fill(chromeForegroundColor.opacity(0.92))
-                .frame(width: 34, height: 4)
+                .frame(width: 28, height: 3.5)
             Image(systemName: "chevron.up")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(chromeForegroundColor.opacity(0.92))
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(chromeForegroundColor.opacity(0.82))
         }
-        .padding(.top, 6)
-        .padding(.bottom, 8)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
         .background(
             LinearGradient(
-                colors: [.clear, revealGradientColor.opacity(0.12)],
+                colors: [.clear, revealGradientColor.opacity(0.08)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -1020,27 +1020,27 @@ struct PadBrowserRootView: View {
 
     private func interactiveVisualState(for direction: CGFloat, totalX: CGFloat) -> PadTabTransitionVisualState {
         let width = max(webViewportWidth, 1)
-        let gap: CGFloat = 16
+        let gap: CGFloat = isPhoneLayout ? 12 : 16
         let travel = width + gap
-        let clampedFromX = min(travel * 0.82, max(-travel * 0.82, totalX))
+        let clampedFromX = min(travel * (isPhoneLayout ? 0.78 : 0.82), max(-travel * (isPhoneLayout ? 0.78 : 0.82), totalX))
         let toX = (direction * travel) + clampedFromX
         let progress = min(1, abs(clampedFromX) / max(travel, 1))
         return PadTabTransitionVisualState(
             fromX: clampedFromX,
             toX: toX,
-            fromAlpha: 1.0 - (progress * 0.18),
-            toAlpha: 0.9 + (progress * 0.1),
-            dimAlpha: progress * 0.10,
+            fromAlpha: 1.0 - (progress * (isPhoneLayout ? 0.14 : 0.18)),
+            toAlpha: 0.92 + (progress * 0.08),
+            dimAlpha: progress * (isPhoneLayout ? 0.07 : 0.10),
             gapAlpha: 0.9,
-            toShadowOpacity: Float(0.12 + (progress * 0.10))
+            toShadowOpacity: Float((isPhoneLayout ? 0.10 : 0.12) + (progress * (isPhoneLayout ? 0.06 : 0.10)))
         )
     }
 
     private func initialVisualState(for direction: CGFloat, emphasizeBirth: Bool) -> PadTabTransitionVisualState {
         let width = max(webViewportWidth, 1)
-        let gap: CGFloat = 16
+        let gap: CGFloat = isPhoneLayout ? 12 : 16
         let travel = width + gap
-        let entryTravel = travel + (emphasizeBirth ? 24 : 0)
+        let entryTravel = travel + (emphasizeBirth ? (isPhoneLayout ? 16 : 24) : 0)
         return PadTabTransitionVisualState(
             fromX: 0,
             toX: direction * entryTravel,
@@ -1060,44 +1060,44 @@ struct PadBrowserRootView: View {
         emphasizeBirth: Bool
     ) {
         let width = max(webViewportWidth, 1)
-        let gap: CGFloat = 16
+        let gap: CGFloat = isPhoneLayout ? 12 : 16
         let offscreenTravel = width + gap
         let directionSign = -transition.direction
         let now = CACurrentMediaTime()
         let isChained = (now - lastCommittedTabTransitionAt) < 0.42
 
-        let fromMidX = directionSign * width * (emphasizeBirth ? (isChained ? 0.34 : 0.40) : (isChained ? 0.24 : 0.30))
+        let fromMidX = directionSign * width * (isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.28 : 0.33) : (isChained ? 0.18 : 0.24)) : (emphasizeBirth ? (isChained ? 0.34 : 0.40) : (isChained ? 0.24 : 0.30)))
         let fromFinalX = directionSign * offscreenTravel
-        let fromOvershootMagnitude = max(isChained ? 4 : 8, min(isChained ? 12 : 18, width * (isChained ? 0.010 : 0.016)))
+        let fromOvershootMagnitude = max(isPhoneLayout ? (isChained ? 3 : 5) : (isChained ? 4 : 8), min(isPhoneLayout ? (isChained ? 8 : 12) : (isChained ? 12 : 18), width * (isPhoneLayout ? (isChained ? 0.007 : 0.011) : (isChained ? 0.010 : 0.016))))
         let fromOvershootX = fromFinalX + (directionSign * fromOvershootMagnitude)
-        let toMidX = -directionSign * width * (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.08 : 0.11))
-        let toOvershootMagnitude = max(isChained ? 4 : 8, min(isChained ? 10 : 16, width * (isChained ? 0.009 : 0.014)))
+        let toMidX = -directionSign * width * (isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.05 : 0.08)) : (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.08 : 0.11)))
+        let toOvershootMagnitude = max(isPhoneLayout ? (isChained ? 3 : 5) : (isChained ? 4 : 8), min(isPhoneLayout ? (isChained ? 7 : 10) : (isChained ? 10 : 16), width * (isPhoneLayout ? (isChained ? 0.006 : 0.010) : (isChained ? 0.009 : 0.014))))
         let toOvershootX = directionSign * toOvershootMagnitude
 
         if !startFromCurrentFrames {
             tabSwitchVisualState = initialVisualState(for: transition.direction, emphasizeBirth: emphasizeBirth)
         }
 
-        let phase1Duration = emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.09 : 0.12)
-        let phase2Duration = emphasizeBirth ? (isChained ? 0.12 : 0.18) : (isChained ? 0.11 : 0.16)
-        let phase3Duration = emphasizeBirth ? (isChained ? 0.10 : 0.13) : (isChained ? 0.09 : 0.12)
+        let phase1Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.07 : 0.10)) : (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.09 : 0.12))
+        let phase2Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.09 : 0.13)) : (emphasizeBirth ? (isChained ? 0.12 : 0.18) : (isChained ? 0.11 : 0.16))
+        let phase3Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.08 : 0.10) : (isChained ? 0.07 : 0.09)) : (emphasizeBirth ? (isChained ? 0.10 : 0.13) : (isChained ? 0.09 : 0.12))
         let phase1State = PadTabTransitionVisualState(
             fromX: fromMidX,
             toX: toMidX,
             fromAlpha: isChained ? 0.82 : 0.76,
             toAlpha: 1.0,
-            dimAlpha: emphasizeBirth ? (isChained ? 0.14 : 0.20) : (isChained ? 0.10 : 0.16),
+            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.10 : 0.14) : (isChained ? 0.14 : 0.20)) : (isPhoneLayout ? (isChained ? 0.06 : 0.11) : (isChained ? 0.10 : 0.16)),
             gapAlpha: 0.90,
-            toShadowOpacity: 0.22
+            toShadowOpacity: isPhoneLayout ? 0.16 : 0.22
         )
         let phase2State = PadTabTransitionVisualState(
             fromX: fromOvershootX,
             toX: toOvershootX,
             fromAlpha: isChained ? 0.72 : 0.62,
             toAlpha: 1.0,
-            dimAlpha: emphasizeBirth ? (isChained ? 0.14 : 0.20) : (isChained ? 0.10 : 0.16),
+            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.10 : 0.14) : (isChained ? 0.14 : 0.20)) : (isPhoneLayout ? (isChained ? 0.06 : 0.11) : (isChained ? 0.10 : 0.16)),
             gapAlpha: 0.90,
-            toShadowOpacity: isChained ? 0.24 : 0.32
+            toShadowOpacity: isPhoneLayout ? (isChained ? 0.18 : 0.24) : (isChained ? 0.24 : 0.32)
         )
         let phase3State = PadTabTransitionVisualState(
             fromX: fromFinalX,
@@ -1105,8 +1105,8 @@ struct PadBrowserRootView: View {
             fromAlpha: 1.0,
             toAlpha: 1.0,
             dimAlpha: 0,
-            gapAlpha: 0.16,
-            toShadowOpacity: 0.12
+            gapAlpha: isPhoneLayout ? 0.10 : 0.16,
+            toShadowOpacity: isPhoneLayout ? 0.08 : 0.12
         )
 
         withAnimation(.easeOut(duration: phase1Duration)) {
@@ -1151,12 +1151,12 @@ struct PadBrowserRootView: View {
 
     private func scheduleBottomRevealHintFade() {
         bottomRevealHintTask?.cancel()
-        bottomRevealHintOpacity = 0.92
+        bottomRevealHintOpacity = isPhoneLayout ? 0.74 : 0.92
         bottomRevealHintTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.4))
+            try? await Task.sleep(for: .seconds(isPhoneLayout ? 0.95 : 1.4))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.35)) {
-                bottomRevealHintOpacity = 0.18
+            withAnimation(.easeOut(duration: isPhoneLayout ? 0.22 : 0.35)) {
+                bottomRevealHintOpacity = isPhoneLayout ? 0.08 : 0.18
             }
         }
     }
@@ -1748,7 +1748,7 @@ private struct PadTabEditSheet: View {
                             .padding(.vertical, 4)
                         }
 
-                        Section("ページ") {
+                        Section {
                             TextField("URL または検索語", text: $currentURL)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
@@ -1758,17 +1758,19 @@ private struct PadTabEditSheet: View {
                             Button("開く") { onOpenURL() }
                         }
 
-                        Section("操作") {
+                        Section {
                             Button("再読み込み") { onReload() }
-                            Button(isBookmarked ? "ブックマーク解除" : "ブックマーク") { onToggleBookmark() }
-                            Button(tab.isProtected ? "保護を解除" : "保護する") { onToggleProtection() }
-                            Button("共有") {
-                                onShare()
-                                showingShareSheet = true
+                            Menu("このタブ") {
+                                Button(isBookmarked ? "ブックマーク解除" : "ブックマーク") { onToggleBookmark() }
+                                Button(tab.isProtected ? "保護を解除" : "保護する") { onToggleProtection() }
+                                Button("共有") {
+                                    onShare()
+                                    showingShareSheet = true
+                                }
                             }
                         }
 
-                        Section("ページ内検索") {
+                        Section {
                             TextField("このページを検索", text: $pageSearchQuery)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
@@ -1792,7 +1794,7 @@ private struct PadTabEditSheet: View {
                         }
 
                         if currentHost != nil {
-                            Section("このサイト") {
+                            Section {
                                 Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
                                     get: { isDangerousSiteAllowed },
                                     set: { _ in onToggleDangerousSiteAllowed() }

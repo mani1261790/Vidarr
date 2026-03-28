@@ -445,6 +445,7 @@ struct PadBrowserRootView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(uiColor: group.accentColor))
             }
+            .padding(.leading, 10)
             .frame(width: stackedStripLeadingWidth, alignment: .leading)
 
             GeometryReader { stripProxy in
@@ -497,6 +498,7 @@ struct PadBrowserRootView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(chromeForegroundColor.opacity(0.92))
             }
+            .padding(.trailing, 10)
             .frame(width: stackedStripTrailingWidth, alignment: .trailing)
         }
         .frame(height: 52)

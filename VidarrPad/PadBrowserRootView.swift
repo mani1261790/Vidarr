@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 struct PadBrowserRootView: View {
@@ -40,6 +41,8 @@ struct PadBrowserRootView: View {
     @State private var bottomRevealHintTask: Task<Void, Never>?
     @State private var editingTabID: UUID?
     @State private var editingURL = ""
+    @State private var showingQuickSearch = false
+    @State private var quickSearchQuery = ""
     @State private var showingSettings = false
     @State private var activeLibraryPanel: LibraryPanel?
     @State private var protectedClosePrompt: ProtectedClosePrompt?
@@ -95,9 +98,16 @@ struct PadBrowserRootView: View {
                     model.selectTab(id: tab.id)
                     model.reload()
                 },
+                onShare: {
+                    model.selectTab(id: tab.id)
+                },
                 onOpenURL: {
                     model.selectTab(id: tab.id)
                     model.loadSelectedTab(with: editingURL)
+                },
+                onFindInPage: { query, completion in
+                    model.selectTab(id: tab.id)
+                    model.findInSelectedPage(query, completion: completion)
                 }
             )
             .presentationDetents([.medium])
@@ -105,6 +115,18 @@ struct PadBrowserRootView: View {
             .onAppear {
                 editingURL = tab.urlString
             }
+        }
+        .sheet(isPresented: $showingQuickSearch) {
+            PadQuickSearchSheet(
+                query: $quickSearchQuery,
+                onSubmit: { input in
+                    model.openQuickSearch(input)
+                    showingQuickSearch = false
+                    showBottomBar()
+                }
+            )
+            .presentationDetents([.fraction(0.26)])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingSettings) {
             PadSettingsSheet(
@@ -421,10 +443,8 @@ struct PadBrowserRootView: View {
         case .forward:
             model.goForward()
         case .search:
-            if let tab = model.selectedTab {
-                editingURL = tab.urlString
-                editingTabID = tab.id
-            }
+            quickSearchQuery = ""
+            showingQuickSearch = true
         case .newTab:
             animateNewTabCreation()
         }
@@ -996,9 +1016,17 @@ private struct PadSettingsSheet: View {
                     switch selectedTab {
                     case .general:
                         Section("スタートページ") {
-                            TextField("スタートページのURL", text: $homePageURLString)
+                            TextField("", text: $homePageURLString, prompt: Text("Vidarr Start"))
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                            Text("空欄にすると Vidarr Start を開きます。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            if !isHomePageInputValid && !homePageURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("スタートページは http または https の URL を入力してください。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                            }
                         }
 
                         Section("検索") {
@@ -1008,6 +1036,11 @@ private struct PadSettingsSheet: View {
                             Text("検索語は {query} に入ります。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                            if !isSearchTemplateInputValid {
+                                Text("検索URLは空欄にできません。{query} を含む http または https の URL を入力してください。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                            }
                         }
 
                         Section("Webページの表示") {
@@ -1137,9 +1170,29 @@ private struct PadSettingsSheet: View {
                         onDone()
                         dismiss()
                     }
+                    .disabled(!canSave)
                 }
             }
         }
+    }
+
+    private var isSearchTemplateInputValid: Bool {
+        let trimmed = searchTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.contains("{query}") else { return false }
+        let probe = trimmed.replacingOccurrences(of: "{query}", with: "vidarr")
+        guard let url = URL(string: probe), let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    private var isHomePageInputValid: Bool {
+        let trimmed = homePageURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    private var canSave: Bool {
+        isSearchTemplateInputValid && isHomePageInputValid
     }
 }
 
@@ -1433,6 +1486,7 @@ private struct PadTabThumbnail: View {
 }
 
 private struct PadTabEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var tab: PadBrowserModel.Tab
     @Binding var currentURL: String
     let isBookmarked: Bool
@@ -1441,7 +1495,12 @@ private struct PadTabEditSheet: View {
     let onToggleProtection: () -> Void
     let onToggleDangerousSiteAllowed: () -> Void
     let onReload: () -> Void
+    let onShare: () -> Void
     let onOpenURL: () -> Void
+    let onFindInPage: (String, @escaping (String?) -> Void) -> Void
+    @State private var pageSearchQuery = ""
+    @State private var pageSearchResult: String?
+    @State private var showingShareSheet = false
 
     var body: some View {
         NavigationStack {
@@ -1462,7 +1521,7 @@ private struct PadTabEditSheet: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("URL")
+                        Text("ページ")
                             .font(.headline)
                         TextField("URL または検索語", text: $currentURL)
                             .textInputAutocapitalization(.never)
@@ -1482,8 +1541,42 @@ private struct PadTabEditSheet: View {
                             actionButton("再読み込み", systemImage: "arrow.clockwise.circle.fill", action: onReload)
                         }
                         HStack(spacing: 12) {
+                            actionButton("共有", systemImage: "square.and.arrow.up.fill", action: {
+                                onShare()
+                                showingShareSheet = true
+                            })
                             actionButton(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash.fill" : "star.fill", action: onToggleBookmark)
                             actionButton(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open.fill" : "lock.fill", action: onToggleProtection)
+                        }
+                    }
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("ページ内検索")
+                            .font(.headline)
+                        HStack(spacing: 12) {
+                            TextField("このページを検索", text: $pageSearchQuery)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                                .submitLabel(.search)
+                                .onSubmit {
+                                    onFindInPage(pageSearchQuery) { result in
+                                        pageSearchResult = result
+                                    }
+                                }
+                            Button("検索") {
+                                onFindInPage(pageSearchQuery) { result in
+                                    pageSearchResult = result
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        if let pageSearchResult, !pageSearchResult.isEmpty {
+                            Text(pageSearchResult)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding(20)
@@ -1506,8 +1599,20 @@ private struct PadTabEditSheet: View {
             }
             .navigationTitle("タブ設定")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
+            }
         }
         .presentationBackground(.thinMaterial)
+        .sheet(isPresented: $showingShareSheet) {
+            if let shareURL = URL(string: currentURL.isEmpty ? tab.urlString : currentURL) {
+                PadShareSheet(items: [shareURL])
+            }
+        }
     }
 
     private var currentHost: String? {
@@ -1539,6 +1644,60 @@ private struct PadTabEditSheet: View {
         case primary
         case secondary
     }
+}
+
+private struct PadQuickSearchSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var query: String
+    let onSubmit: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("検索")
+                    .font(.system(size: 30, weight: .semibold))
+                Text("検索語または URL を入力します。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("検索語または URL", text: $query)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.go)
+                    .onSubmit { onSubmit(query) }
+                HStack(spacing: 12) {
+                    Button("Vidarr Start を開く") {
+                        onSubmit("")
+                    }
+                    .buttonStyle(.bordered)
+                    Button("開く") {
+                        onSubmit(query)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(24)
+            .navigationTitle("検索")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
+        .presentationBackground(.regularMaterial)
+    }
+}
+
+private struct PadShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private extension UIImage {

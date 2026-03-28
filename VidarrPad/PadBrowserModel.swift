@@ -58,9 +58,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published var navigationStateToken = UUID()
     @Published var selectedSidebarTabID: UUID?
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
+    @Published var lastFindResultSummary: String?
 
     private var closedTabs: [ClosedTabSnapshot] = []
-    private let blankPageBaseURL = URL(string: "https://vidarr.local/blank")!
+    private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
 
     override init() {
         super.init()
@@ -94,7 +95,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if let initialURL {
             load(initialURL, in: webView)
         } else {
-            loadBlankStartPage(in: webView)
+            loadStartPage(in: webView)
             captureThumbnail(for: tab)
         }
         syncAddressBar()
@@ -114,7 +115,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if let initialURL {
             load(initialURL, in: webView)
         } else {
-            loadBlankStartPage(in: webView)
+            loadStartPage(in: webView)
             captureThumbnail(for: tab)
         }
         saveSessionSnapshot()
@@ -203,7 +204,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if let url = tab.webView.url ?? URL(string: tab.urlString) {
             load(url, in: tab.webView)
         } else {
-            loadBlankStartPage(in: tab.webView)
+            loadStartPage(in: tab.webView)
         }
     }
 
@@ -212,7 +213,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             if let url = tab.webView.url ?? URL(string: tab.urlString) {
                 load(url, in: tab.webView)
             } else {
-                loadBlankStartPage(in: tab.webView)
+                loadStartPage(in: tab.webView)
             }
         }
     }
@@ -382,7 +383,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
-        selectedTab?.webView.load(URLRequest(url: url))
+        if let webView = selectedTab?.webView {
+            load(url, in: webView)
+        }
     }
 
     func recentHistory(limit: Int = 8) -> [PadBrowsingItem] {
@@ -460,7 +463,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             if let initialURL {
                 load(initialURL, in: webView)
             } else {
-                loadBlankStartPage(in: webView)
+                loadStartPage(in: webView)
             }
         }
 
@@ -515,63 +518,191 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private func load(_ url: URL, in webView: WKWebView) {
         let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
         if normalized.absoluteString == "about:blank" {
-            loadBlankStartPage(in: webView)
+            loadStartPage(in: webView)
             return
         }
         webView.load(URLRequest(url: normalized))
     }
 
-    private func loadBlankStartPage(in webView: WKWebView) {
-        let home = PadBrowserPreferences.shared.homePageURL.absoluteString
+    private func loadStartPage(in webView: WKWebView) {
+        let searchTemplate = PadBrowserPreferences.shared.searchTemplate
         let html = """
         <!doctype html>
         <html lang="ja">
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>New Tab</title>
+        <title>Vidarr Start</title>
         <style>
         :root { color-scheme: light dark; }
         body {
           margin: 0;
           min-height: 100vh;
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          background:
+            radial-gradient(circle at top, rgba(125, 161, 255, 0.16), transparent 36%),
+            linear-gradient(180deg, #eef3f9 0%, #f8fafc 52%, #f4f7fb 100%);
+          color: #111827;
+        }
+        .shell {
+          min-height: 100vh;
           display: grid;
           place-items: center;
-          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-          background: linear-gradient(180deg, #eef3f9 0%, #f8fafc 100%);
-          color: #1f2937;
+          padding: 32px;
         }
-        .card {
-          width: min(560px, calc(100vw - 48px));
-          padding: 30px 28px;
-          border-radius: 26px;
-          background: rgba(255,255,255,0.84);
-          box-shadow: 0 22px 54px rgba(15, 23, 42, 0.12);
+        .panel {
+          width: min(640px, calc(100vw - 48px));
+          padding: 34px 30px 28px;
+          border-radius: 30px;
+          background: rgba(255,255,255,0.70);
+          border: 1px solid rgba(255,255,255,0.62);
+          box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
           backdrop-filter: blur(18px);
         }
-        h1 { margin: 0 0 10px; font-size: 30px; }
-        p { margin: 0 0 12px; line-height: 1.6; color: #4b5563; }
-        a {
-          display: inline-block;
-          margin-top: 12px;
-          padding: 10px 14px;
-          border-radius: 12px;
-          text-decoration: none;
-          background: rgba(17,24,39,0.92);
-          color: white;
+        .eyebrow {
+          margin: 0 0 10px;
+          font-size: 13px;
           font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #64748b;
+        }
+        h1 {
+          margin: 0 0 10px;
+          font-size: clamp(34px, 5vw, 48px);
+          line-height: 1.04;
+          letter-spacing: -0.04em;
+        }
+        p {
+          margin: 0 0 22px;
+          line-height: 1.55;
+          color: #475569;
+          font-size: 17px;
+        }
+        form {
+          display: grid;
+          gap: 12px;
+        }
+        .search {
+          height: 58px;
+          padding: 0 18px;
+          border-radius: 18px;
+          border: 1px solid rgba(148, 163, 184, 0.34);
+          background: rgba(255,255,255,0.82);
+          font-size: 18px;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .search:focus {
+          border-color: rgba(59, 130, 246, 0.42);
+          box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.12);
+        }
+        .actions {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        button, .secondary {
+          height: 46px;
+          padding: 0 18px;
+          border-radius: 14px;
+          border: 0;
+          font-weight: 600;
+          font-size: 16px;
+          cursor: pointer;
+        }
+        button {
+          background: rgba(17,24,39,0.94);
+          color: white;
+        }
+        .secondary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,0.62);
+          color: #111827;
+          text-decoration: none;
+        }
+        .meta {
+          margin-top: 18px;
+          font-size: 13px;
+          color: #64748b;
         }
         </style>
         <body>
-          <div class="card">
-            <h1>New Tab</h1>
-            <p>ページが指定されていないため、空白ではなく Vidarr の開始ページを開ける状態にしています。</p>
-            <p>下部バーからタブ切替や再読み込み、長押しで URL 編集ができます。</p>
-            <a href="\(home)">開始ページを開く</a>
+          <div class="shell">
+            <div class="panel">
+              <div class="eyebrow">Vidarr Start</div>
+              <h1>検索から始める</h1>
+              <p>開くページが指定されていないときは、ここから検索や URL 入力ができます。</p>
+              <form id="searchForm">
+                <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
+                <div class="actions">
+                  <button type="submit">検索する</button>
+                  <a class="secondary" href="javascript:window.location.reload()">再読み込み</a>
+                </div>
+              </form>
+              <div class="meta">検索先は設定で変更できます。</div>
+            </div>
           </div>
+          <script>
+            const template = \(String(reflecting: searchTemplate));
+            const input = document.getElementById('query');
+            document.getElementById('searchForm').addEventListener('submit', function(event) {
+              event.preventDefault();
+              const raw = input.value.trim();
+              if (!raw) {
+                input.focus();
+                return;
+              }
+              const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
+              const looksLikeHost = raw.includes('.') && !raw.includes(' ');
+              if (hasScheme) {
+                window.location.href = raw;
+                return;
+              }
+              if (looksLikeHost) {
+                window.location.href = 'https://' + raw;
+                return;
+              }
+              window.location.href = template.replace('{query}', encodeURIComponent(raw));
+            });
+            input.focus();
+          </script>
         </body>
         </html>
         """
-        webView.loadHTMLString(html, baseURL: blankPageBaseURL)
+        webView.loadHTMLString(html, baseURL: startPageBaseURL)
+    }
+
+    func openQuickSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            if let webView = selectedTab?.webView {
+                loadStartPage(in: webView)
+            }
+            return
+        }
+        loadSelectedTab(with: trimmed)
+    }
+
+    func findInSelectedPage(_ query: String, completion: @escaping (String?) -> Void) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let webView = selectedTab?.webView else {
+            completion(nil)
+            return
+        }
+
+        let configuration = WKFindConfiguration()
+        configuration.backwards = false
+        configuration.wraps = true
+        configuration.caseSensitive = false
+        webView.find(trimmed, configuration: configuration) { [weak self] result in
+            Task { @MainActor in
+                let summary = result.matchFound ? "見つかりました" : "見つかりませんでした"
+                self?.lastFindResultSummary = summary
+                completion(summary)
+            }
+        }
     }
 
     private func syncTabHistory(for tab: Tab, currentURL: URL) {
@@ -649,12 +780,12 @@ extension PadBrowserModel: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
             guard let self, let tab = self.tabs.first(where: { $0.webView === webView }) else { return }
-            let isInternalBlankPage = webView.url?.host == self.blankPageBaseURL.host
+            let isInternalBlankPage = webView.url?.host == self.startPageBaseURL.host
             tab.title = isInternalBlankPage
-                ? "New Tab"
+                ? "Vidarr Start"
                 : (webView.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    ? (webView.title ?? "New Tab")
-                    : (webView.url?.host ?? webView.url?.absoluteString ?? "New Tab"))
+                    ? (webView.title ?? "Vidarr Start")
+                    : (webView.url?.host ?? webView.url?.absoluteString ?? "Vidarr Start"))
             tab.urlString = isInternalBlankPage ? "" : (webView.url?.absoluteString ?? "")
             if let url = webView.url, !isInternalBlankPage {
                 self.syncTabHistory(for: tab, currentURL: url)

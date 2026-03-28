@@ -12,9 +12,12 @@ struct PadSettingsView: View {
         NavigationStack {
             Form {
                 Section("スタートページ") {
-                    TextField("https://search.fenrir-inc.com/", text: $homePageURL)
+                    TextField("", text: $homePageURL, prompt: Text("Vidarr Start"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    Text("空欄にすると Vidarr Start を開きます。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("検索するときのURL") {
@@ -50,8 +53,22 @@ struct PadSettingsView: View {
                         onSave()
                         dismiss()
                     }
+                    .disabled(!canSave)
                 }
             }
         }
+    }
+
+    private var canSave: Bool {
+        let trimmedSearch = searchTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearch.isEmpty, trimmedSearch.contains("{query}") else { return false }
+        let probe = trimmedSearch.replacingOccurrences(of: "{query}", with: "vidarr")
+        guard let searchURL = URL(string: probe), let searchScheme = searchURL.scheme?.lowercased(), searchScheme == "http" || searchScheme == "https" else {
+            return false
+        }
+        let trimmedHome = homePageURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHome.isEmpty else { return true }
+        guard let homeURL = URL(string: trimmedHome), let homeScheme = homeURL.scheme?.lowercased() else { return false }
+        return homeScheme == "http" || homeScheme == "https"
     }
 }

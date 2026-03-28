@@ -124,10 +124,10 @@ final class PadBrowserPreferences {
     }
 
     var homePageURLString: String {
-        get { defaults.string(forKey: Key.homePageURL) ?? "https://search.fenrir-inc.com/" }
+        get { defaults.string(forKey: Key.homePageURL) ?? "" }
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            defaults.set(trimmed.isEmpty ? "https://search.fenrir-inc.com/" : trimmed, forKey: Key.homePageURL)
+            defaults.set(trimmed, forKey: Key.homePageURL)
         }
     }
 
@@ -268,11 +268,13 @@ final class PadBrowserPreferences {
         set { defaults.set(Array(newValue).sorted(), forKey: Key.harmfulSiteAllowedHosts) }
     }
 
-    var homePageURL: URL {
-        if let url = URL(string: homePageURLString), url.scheme != nil {
+    var homePageURL: URL? {
+        let trimmed = homePageURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let url = URL(string: trimmed), url.scheme != nil {
             return url
         }
-        return URL(string: "https://search.fenrir-inc.com/")!
+        return nil
     }
 
     func searchURL(for query: String) -> URL {
@@ -281,6 +283,21 @@ final class PadBrowserPreferences {
             ? searchTemplate.replacingOccurrences(of: "{query}", with: encodedQuery)
             : "\(searchTemplate)\(encodedQuery)"
         return URL(string: rawURL) ?? URL(string: "https://search.fenrir-inc.com/?q=\(encodedQuery)")!
+    }
+
+    var isSearchTemplateValid: Bool {
+        let trimmed = searchTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.contains("{query}") else { return false }
+        let probe = trimmed.replacingOccurrences(of: "{query}", with: "vidarr")
+        guard let url = URL(string: probe), let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    var isHomePageInputValid: Bool {
+        let trimmed = homePageURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
     }
 
     func normalizedNavigableURL(from url: URL) -> URL {

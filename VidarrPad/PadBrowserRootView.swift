@@ -188,6 +188,13 @@ struct PadBrowserRootView: View {
                 scheduleBottomBarAutoHide()
             }
         }
+        .onChange(of: model.pendingSelectionSearchQuery) { _, query in
+            guard let query, !query.isEmpty else { return }
+            quickSearchQuery = query
+            showingQuickSearch = true
+            showBottomBar(persist: true)
+            model.pendingSelectionSearchQuery = nil
+        }
     }
 
     private var webLayer: some View {

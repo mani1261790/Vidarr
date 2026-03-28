@@ -6,6 +6,8 @@ import WebKit
 
 @MainActor
 final class PadBrowserModel: NSObject, ObservableObject {
+    private static let selectionSearchMessageName = "vidarrPadSelectionSearch"
+
     struct HarmfulSitePrompt: Identifiable {
         let id = UUID()
         let url: URL
@@ -59,9 +61,12 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published var selectedSidebarTabID: UUID?
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
     @Published var lastFindResultSummary: String?
+    @Published var pendingSelectionSearchQuery: String?
 
     private var closedTabs: [ClosedTabSnapshot] = []
     private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
+    private var configuredSelectionControllers: Set<ObjectIdentifier> = []
+    private var selectionHandlerBoxes: [ObjectIdentifier: PadWeakScriptMessageHandler] = [:]
 
     override init() {
         super.init()
@@ -512,7 +517,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if prefs.cookiePolicy == .privateOnly {
             configuration.websiteDataStore = .nonPersistent()
         }
-        return WKWebView(frame: .zero, configuration: configuration)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        installSelectionSearchIfNeeded(for: webView)
+        return webView
     }
 
     private func load(_ url: URL, in webView: WKWebView) {
@@ -674,6 +681,145 @@ final class PadBrowserModel: NSObject, ObservableObject {
         webView.loadHTMLString(html, baseURL: startPageBaseURL)
     }
 
+    private func installSelectionSearchIfNeeded(for webView: WKWebView) {
+        let contentController = webView.configuration.userContentController
+        let controllerID = ObjectIdentifier(contentController)
+        guard !configuredSelectionControllers.contains(controllerID) else { return }
+        configuredSelectionControllers.insert(controllerID)
+
+        let handlerBox = PadWeakScriptMessageHandler(target: self)
+        selectionHandlerBoxes[controllerID] = handlerBox
+        contentController.removeScriptMessageHandler(forName: Self.selectionSearchMessageName)
+        contentController.add(handlerBox, name: Self.selectionSearchMessageName)
+
+        let source = """
+        (() => {
+            if (window.__vidarrSelectionSearchInstalled) { return; }
+            window.__vidarrSelectionSearchInstalled = true;
+
+            const MIN_LENGTH = 1;
+            function ensureButton() {
+                const existing = window.__vidarrSelectionSearchButton;
+                if (existing) { return existing; }
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.setAttribute('aria-label', 'Search selection');
+                button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="6.75" cy="6.75" r="4.75" stroke="rgba(255,255,255,0.96)" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="rgba(255,255,255,0.96)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+                button.style.position = 'fixed';
+                button.style.display = 'none';
+                button.style.alignItems = 'center';
+                button.style.justifyContent = 'center';
+                button.style.width = '38px';
+                button.style.height = '38px';
+                button.style.border = '1px solid rgba(255,255,255,0.26)';
+                button.style.borderRadius = '12px';
+                button.style.background = 'rgba(24,27,31,0.84)';
+                button.style.backdropFilter = 'blur(14px)';
+                button.style.boxShadow = '0 10px 26px rgba(0,0,0,0.22)';
+                button.style.padding = '0';
+                button.style.margin = '0';
+                button.style.zIndex = '2147483647';
+                button.style.opacity = '0';
+                button.style.transition = 'opacity 120ms ease';
+
+                const triggerSearch = (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const text = (window.getSelection ? window.getSelection().toString() : '').trim();
+                    hideButton();
+                    if (!text) { return; }
+                    window.webkit.messageHandlers.\(Self.selectionSearchMessageName).postMessage({ query: text });
+                };
+
+                button.addEventListener('click', triggerSearch, true);
+                button.addEventListener('touchend', triggerSearch, true);
+                button.addEventListener('pointerup', triggerSearch, true);
+
+                document.documentElement.appendChild(button);
+                window.__vidarrSelectionSearchButton = button;
+                return button;
+            }
+
+            function hideButton() {
+                const button = window.__vidarrSelectionSearchButton;
+                if (!button) { return; }
+                button.style.opacity = '0';
+                button.style.display = 'none';
+            }
+
+            function showButtonAt(x, y) {
+                const button = ensureButton();
+                button.style.left = `${x}px`;
+                button.style.top = `${y}px`;
+                button.style.display = 'flex';
+                requestAnimationFrame(() => { button.style.opacity = '1'; });
+            }
+
+            function updateButton() {
+                const selection = window.getSelection ? window.getSelection() : null;
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    hideButton();
+                    return;
+                }
+
+                const selectedText = selection.toString().trim();
+                if (selectedText.length < MIN_LENGTH) {
+                    hideButton();
+                    return;
+                }
+
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                if (!rect || (rect.width === 0 && rect.height === 0)) {
+                    hideButton();
+                    return;
+                }
+
+                const buttonSize = 38;
+                const margin = 10;
+                const maxX = Math.max(margin, window.innerWidth - buttonSize - margin);
+                const x = Math.min(maxX, Math.max(margin, rect.right - buttonSize));
+                const preferredY = rect.top - buttonSize - margin;
+                const fallbackY = rect.bottom + margin;
+                const y = preferredY > margin
+                    ? preferredY
+                    : Math.min(window.innerHeight - buttonSize - margin, Math.max(margin, fallbackY));
+
+                showButtonAt(x, y);
+            }
+
+            document.addEventListener('selectionchange', () => {
+                setTimeout(updateButton, 0);
+            }, true);
+
+            document.addEventListener('mouseup', () => {
+                setTimeout(updateButton, 0);
+            }, true);
+
+            document.addEventListener('touchend', () => {
+                setTimeout(updateButton, 0);
+            }, true);
+
+            document.addEventListener('scroll', hideButton, true);
+            window.addEventListener('blur', hideButton, true);
+
+            document.addEventListener('pointerdown', (event) => {
+                const button = window.__vidarrSelectionSearchButton;
+                if (!button) { return; }
+                if (event.target === button || button.contains(event.target)) { return; }
+                hideButton();
+            }, true);
+        })();
+        """
+
+        let script = WKUserScript(
+            source: source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+        contentController.addUserScript(script)
+    }
+
     func openQuickSearch(_ query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -807,6 +953,19 @@ extension PadBrowserModel: WKNavigationDelegate {
     }
 }
 
+extension PadBrowserModel: WKScriptMessageHandler {
+    nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.selectionSearchMessageName,
+              let body = message.body as? [String: Any],
+              let query = body["query"] as? String else { return }
+        Task { @MainActor [weak self] in
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            self?.pendingSelectionSearchQuery = trimmed
+        }
+    }
+}
+
 extension PadBrowserModel {
     func harmfulSiteWarning(for url: URL) -> HarmfulSitePrompt? {
         guard PadBrowserPreferences.shared.harmfulSiteWarningEnabled,
@@ -884,4 +1043,17 @@ extension PadBrowserModel {
     ]
 
     static let harmfulTLDs: Set<String> = ["zip", "mov", "click", "country", "gq", "work", "download", "stream"]
+}
+
+private final class PadWeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(target: WKScriptMessageHandler) {
+        self.target = target
+        super.init()
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
+    }
 }

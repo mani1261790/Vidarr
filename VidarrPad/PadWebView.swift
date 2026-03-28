@@ -9,7 +9,6 @@ final class PadInteractiveWebView: WKWebView {
 
     override init(frame: CGRect, configuration: WKWebViewConfiguration) {
         super.init(frame: frame, configuration: configuration)
-        installSearchMenuItem()
     }
 
     @available(*, unavailable)
@@ -17,14 +16,34 @@ final class PadInteractiveWebView: WKWebView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(vidarrSearchSelection(_:)) {
-            return true
+    @MainActor
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+
+        guard builder.system == .main else { return }
+
+        let action = UIAction(
+            title: "検索",
+            image: UIImage(systemName: "magnifyingglass")
+        ) { [weak self] _ in
+            self?.performSearchSelection()
         }
-        return super.canPerformAction(action, withSender: sender)
+        let menu = UIMenu(
+            identifier: UIMenu.Identifier("dev.mani.vidarr.selection-search"),
+            options: .displayInline,
+            children: [action]
+        )
+
+        if builder.menu(for: .lookup) != nil {
+            builder.insertSibling(menu, beforeMenu: .lookup)
+        } else if builder.menu(for: .share) != nil {
+            builder.insertSibling(menu, beforeMenu: .share)
+        } else {
+            builder.insertChild(menu, atStartOfMenu: .standardEdit)
+        }
     }
 
-    @objc private func vidarrSearchSelection(_ sender: Any?) {
+    private func performSearchSelection() {
         evaluateJavaScript("window.getSelection ? window.getSelection().toString() : ''") { [weak self] result, _ in
             guard let text = (result as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
                 return
@@ -33,12 +52,6 @@ final class PadInteractiveWebView: WKWebView {
                 self?.onSearchSelection?(text)
             }
         }
-    }
-
-    private func installSearchMenuItem() {
-        UIMenuController.shared.menuItems = [
-            UIMenuItem(title: "検索", action: #selector(vidarrSearchSelection(_:)))
-        ]
     }
 }
 

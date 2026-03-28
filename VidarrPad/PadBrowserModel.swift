@@ -722,7 +722,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func openSelectionSearch(_ query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        openSearchPageInNewTab(initialQuery: trimmed)
+        newTab(initialURL: PadBrowserPreferences.shared.searchURL(for: trimmed))
     }
 
     func copySelectionText(_ query: String) {

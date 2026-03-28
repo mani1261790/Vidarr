@@ -255,61 +255,64 @@ struct PadBrowserRootView: View {
     }
 
     private var tabStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(model.tabs) { tab in
-                    PadTabThumbnail(
-                        tab: tab,
-                        isSelected: model.selectedTab?.id == tab.id,
-                        isBookmarked: model.isBookmarked(tab),
-                        showsBirthPulse: stripBirthTabID == tab.id,
-                        onSelect: {
-                            animateTabSelection(to: tab.id)
-                        },
-                        onLongPress: {
-                            animateTabSelection(to: tab.id)
-                            editingURL = tab.urlString
-                            editingTabID = tab.id
-                        },
-                        onDoubleTap: {
-                            animateTabSelection(to: tab.id)
-                            model.toggleProtectionForSelectedTab()
-                            showBottomBar()
-                        },
-                        onSwipeDown: {
-                            animateTabSelection(to: tab.id)
-                            if tab.isProtected {
-                                protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
-                            } else {
-                                model.closeTab(id: tab.id)
+        GeometryReader { stripProxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(model.tabs) { tab in
+                        PadTabThumbnail(
+                            tab: tab,
+                            isSelected: model.selectedTab?.id == tab.id,
+                            isBookmarked: model.isBookmarked(tab),
+                            showsBirthPulse: stripBirthTabID == tab.id,
+                            onSelect: {
+                                animateTabSelection(to: tab.id)
+                            },
+                            onLongPress: {
+                                animateTabSelection(to: tab.id)
+                                editingURL = tab.urlString
+                                editingTabID = tab.id
+                            },
+                            onDoubleTap: {
+                                animateTabSelection(to: tab.id)
+                                model.toggleProtectionForSelectedTab()
+                                showBottomBar()
+                            },
+                            onSwipeDown: {
+                                animateTabSelection(to: tab.id)
+                                if tab.isProtected {
+                                    protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
+                                } else {
+                                    model.closeTab(id: tab.id)
+                                }
+                                showBottomBar()
                             }
-                            showBottomBar()
-                        }
-                    )
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear
-                                .preference(
-                                    key: PadTabFramePreferenceKey.self,
-                                    value: [tab.id: proxy.frame(in: .named("PadTabStripSpace"))]
-                                )
-                        }
-                    )
+                        )
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear
+                                    .preference(
+                                        key: PadTabFramePreferenceKey.self,
+                                        value: [tab.id: proxy.frame(in: .named("PadTabStripSpace"))]
+                                    )
+                            }
+                        )
+                    }
                 }
+                .frame(minWidth: stripProxy.size.width, alignment: .center)
+                .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 4)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
+                        }
+                        .onChange(of: proxy.size) { _, _ in
+                            tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
+                        }
+                }
+            )
         }
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear {
-                        tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
-                    }
-                    .onChange(of: proxy.size) { _, _ in
-                        tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
-                    }
-            }
-        )
         .coordinateSpace(name: "PadTabStripSpace")
         .onPreferenceChange(PadTabFramePreferenceKey.self) { frames in
             tabStripFrames = frames
@@ -331,6 +334,7 @@ struct PadBrowserRootView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: 52)
     }
 
     private func chromeButton(systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {

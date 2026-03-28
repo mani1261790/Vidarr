@@ -625,15 +625,28 @@ final class PadBrowserModel: NSObject, ObservableObject {
           box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
         button {
-          width: 64px;
-          height: 64px;
-          flex: 0 0 64px;
+          width: 58px;
+          height: 58px;
+          flex: 0 0 58px;
           padding: 0;
-          border-radius: 22px;
-          border: 0;
-          background: var(--strong);
-          color: var(--strongText);
-          font: 600 23px -apple-system, BlinkMacSystemFont, sans-serif;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--stroke) 82%, transparent);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--field) 88%, white 12%) 0%, color-mix(in srgb, var(--field) 68%, transparent) 100%);
+          color: var(--text);
+          font: 600 22px -apple-system, BlinkMacSystemFont, sans-serif;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.34),
+            0 10px 24px rgba(15,23,42,0.14);
+          backdrop-filter: blur(20px) saturate(1.2);
+          transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+          cursor: pointer;
+        }
+        button:active {
+          transform: scale(0.96);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.20),
+            0 6px 16px rgba(15,23,42,0.12);
         }
         @media (max-width: 640px) {
           .panel {
@@ -647,9 +660,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
             border-radius: 19px;
           }
           button {
-            width: 58px;
-            flex-basis: 58px;
-            font-size: 21px;
+            width: 54px;
+            flex-basis: 54px;
+            border-radius: 999px;
+            font-size: 20px;
           }
         }
         </style>
@@ -659,7 +673,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
               <div class="brand">Vidarr</div>
               <form id="searchForm">
                 <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
-                <button type="submit" aria-label="Open">↵</button>
+                <button type="submit" aria-label="Open">→</button>
               </form>
             </div>
           </div>

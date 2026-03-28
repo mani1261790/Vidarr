@@ -25,3 +25,5 @@ xcuserdata/
 *.swo
 *~
 
+# Local scratch / screenshots
+tmp/

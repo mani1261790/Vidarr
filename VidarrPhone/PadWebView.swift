@@ -9,12 +9,23 @@ final class PadInteractiveWebView: WKWebView {
 
     override init(frame: CGRect, configuration: WKWebViewConfiguration) {
         super.init(frame: frame, configuration: configuration)
+        normalizeFullscreenLayout()
         installSearchMenuItemFallback()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        normalizeFullscreenLayout()
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        normalizeFullscreenLayout()
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
@@ -70,6 +81,25 @@ final class PadInteractiveWebView: WKWebView {
         UIMenuController.shared.menuItems = [
             UIMenuItem(title: "検索", action: #selector(vidarrSearchSelection(_:)))
         ]
+    }
+
+    private func normalizeFullscreenLayout() {
+        backgroundColor = .clear
+        isOpaque = false
+        insetsLayoutMarginsFromSafeArea = false
+
+        scrollView.backgroundColor = .clear
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.contentInset = .zero
+        scrollView.scrollIndicatorInsets = .zero
+        if #available(iOS 13.0, *) {
+            scrollView.automaticallyAdjustsScrollIndicatorInsets = false
+        }
+        scrollView.insetsLayoutMarginsFromSafeArea = false
+
+        if scrollView.contentOffset.y < 0 {
+            scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: 0), animated: false)
+        }
     }
 }
 

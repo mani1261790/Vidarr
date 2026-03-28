@@ -726,7 +726,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         <!doctype html>
         <html lang="ja">
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <title>Vidarr Start</title>
         <style>
         :root {
@@ -757,9 +757,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
           }
         }
         * { box-sizing: border-box; }
+        html, body {
+          min-height: 100%;
+          margin: 0;
+        }
         body {
           margin: 0;
-          min-height: 100vh;
+          min-height: 100dvh;
           font-family: -apple-system, BlinkMacSystemFont, sans-serif;
           color: var(--text);
           background:
@@ -768,10 +772,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
             linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
         }
         .shell {
-          min-height: 100vh;
+          min-height: 100dvh;
           display: grid;
           place-items: center;
-          padding: 12px;
+          padding:
+            max(12px, env(safe-area-inset-top))
+            12px
+            max(12px, env(safe-area-inset-bottom))
+            12px;
         }
         .panel {
           width: min(540px, calc(100vw - 16px));
@@ -839,15 +847,40 @@ final class PadBrowserModel: NSObject, ObservableObject {
             0 6px 16px rgba(15,23,42,0.12);
         }
         @media (max-width: 640px) {
-          .panel {
-            width: min(100%, calc(100vw - 10px));
-            padding: 14px 12px 12px;
-            border-radius: 20px;
+          .shell {
+            place-items: stretch;
+            padding:
+              max(16px, env(safe-area-inset-top))
+              16px
+              max(16px, env(safe-area-inset-bottom))
+              16px;
           }
-          .brand { font-size: 26px; margin-bottom: 8px; }
+          .panel {
+            width: 100%;
+            max-width: 100%;
+            padding: 0;
+            border-radius: 0;
+            background: transparent;
+            border: 0;
+            box-shadow: none;
+            backdrop-filter: none;
+            align-self: center;
+          }
+          .brand {
+            font-size: 28px;
+            margin: 0 0 12px;
+            text-align: center;
+          }
+          form {
+            gap: 10px;
+          }
           .search, button {
             height: 42px;
             border-radius: 15px;
+          }
+          .search {
+            background: color-mix(in srgb, var(--field) 76%, transparent);
+            backdrop-filter: blur(18px) saturate(1.14);
           }
           button {
             width: 40px;

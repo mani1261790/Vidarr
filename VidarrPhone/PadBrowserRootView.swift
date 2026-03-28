@@ -87,10 +87,14 @@ struct PadBrowserRootView: View {
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
+    private var windowSafeAreaInsets: UIEdgeInsets { UIApplication.shared.activeWindowSafeAreaInsets }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             webLayer
+            if isPhoneLayout {
+                topSafeAreaFill
+            }
             if showsGroupStripStack {
                 Color.clear
                     .contentShape(Rectangle())
@@ -233,6 +237,8 @@ struct PadBrowserRootView: View {
 
     private var webLayer: some View {
         GeometryReader { proxy in
+            let topInset = max(windowSafeAreaInsets.top, proxy.safeAreaInsets.top)
+            let bottomInset = max(windowSafeAreaInsets.bottom, proxy.safeAreaInsets.bottom)
             ZStack {
                 PadWebStageView(
                     selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
@@ -243,6 +249,11 @@ struct PadBrowserRootView: View {
                         ? gestureConfiguration
                         : nil
                 )
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height + topInset + bottomInset
+                )
+                .offset(y: -topInset)
                 .ignoresSafeArea()
 
                 if tabSwitchTransition == nil, model.selectedTab == nil {
@@ -598,6 +609,31 @@ struct PadBrowserRootView: View {
 
     private var chromeBackgroundAccent: Color {
         prefersLightChrome ? .black : .white
+    }
+
+    private var topSafeAreaBaseColor: Color {
+        if let selectedTab = model.selectedTab {
+            let urlString = selectedTab.urlString
+            if urlString.isEmpty || urlString.contains("vidarr.local/start") {
+                return colorScheme == .dark
+                    ? Color(red: 0.06, green: 0.10, blue: 0.16)
+                    : Color(red: 0.88, green: 0.92, blue: 0.98)
+            }
+            if let thumbnail = selectedTab.thumbnail,
+               let averageColor = thumbnail.averageColor {
+                return Color(uiColor: averageColor)
+            }
+        }
+        return Color(uiColor: .systemBackground)
+    }
+
+    private var topSafeAreaFill: some View {
+        Rectangle()
+            .fill(topSafeAreaBaseColor)
+            .frame(height: max(windowSafeAreaInsets.top, 0))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
     }
 
     private var prefersLightChrome: Bool {
@@ -1948,6 +1984,16 @@ private struct PadTabEditSheet: View {
     }
 }
 
+private extension UIApplication {
+    var activeWindowSafeAreaInsets: UIEdgeInsets {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
+    }
+}
+
 private struct PadQuickSearchSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var query: String
@@ -2003,6 +2049,51 @@ private struct PadShareSheet: UIViewControllerRepresentable {
 }
 
 private extension UIImage {
+    var averageColor: UIColor? {
+        guard let cgImage else { return nil }
+        let sampleSize = CGSize(width: 8, height: 8)
+        let bytesPerRow = Int(sampleSize.width) * 4
+        var data = [UInt8](repeating: 0, count: Int(sampleSize.height) * bytesPerRow)
+        guard let context = CGContext(
+            data: &data,
+            width: Int(sampleSize.width),
+            height: Int(sampleSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .low
+        context.draw(cgImage, in: CGRect(origin: .zero, size: sampleSize))
+
+        let pixelCount = Int(sampleSize.width * sampleSize.height)
+        guard pixelCount > 0 else { return nil }
+
+        var redTotal: CGFloat = 0
+        var greenTotal: CGFloat = 0
+        var blueTotal: CGFloat = 0
+        var alphaTotal: CGFloat = 0
+
+        for pixel in 0..<pixelCount {
+            let offset = pixel * 4
+            redTotal += CGFloat(data[offset]) / 255
+            greenTotal += CGFloat(data[offset + 1]) / 255
+            blueTotal += CGFloat(data[offset + 2]) / 255
+            alphaTotal += CGFloat(data[offset + 3]) / 255
+        }
+
+        let divisor = CGFloat(pixelCount)
+        return UIColor(
+            red: redTotal / divisor,
+            green: greenTotal / divisor,
+            blue: blueTotal / divisor,
+            alpha: max(0.85, alphaTotal / divisor)
+        )
+    }
+
     var averagePerceivedBrightness: CGFloat? {
         guard let cgImage else { return nil }
         let sampleSize = CGSize(width: 8, height: 8)

@@ -386,13 +386,40 @@ final class PadBookmarkStore {
 
     private enum Key {
         static let bookmarkItems = "bookmarks.items"
+        static let bookmarkCloudUpdatedAt = "bookmarks.cloudUpdatedAt"
+    }
+
+    private struct CloudSnapshot: Codable {
+        let updatedAt: Date
+        let items: [PadBrowsingItem]
     }
 
     private var defaults: UserDefaults {
         PadBrowserPreferences.shared.userDefaultsForCurrentProfile()
     }
 
+    private let cloudStore = NSUbiquitousKeyValueStore.default
+    private var cloudKey: String {
+        "vidarr.bookmarks.\(PadBrowserPreferences.shared.currentProfile.id)"
+    }
+
+    init() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCloudChange(_:)),
+            name: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: cloudStore
+        )
+        cloudStore.synchronize()
+        mergeFromCloudIfNeeded(force: false)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     func all() -> [PadBrowsingItem] {
+        mergeFromCloudIfNeeded(force: false)
         guard let data = defaults.data(forKey: Key.bookmarkItems),
               let decoded = try? JSONDecoder().decode([PadBrowsingItem].self, from: data) else {
             return []
@@ -408,9 +435,7 @@ final class PadBookmarkStore {
             let resolvedTitle = (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? (title ?? "") : (url.host ?? url.absoluteString)
             items.insert(PadBrowsingItem(urlString: url.absoluteString, title: resolvedTitle, visitedAt: Date()), at: 0)
         }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: Key.bookmarkItems)
-        }
+        persist(items)
     }
 
     func contains(url: URL?) -> Bool {
@@ -420,6 +445,45 @@ final class PadBookmarkStore {
 
     func clear() {
         defaults.removeObject(forKey: Key.bookmarkItems)
+        let now = Date()
+        defaults.set(now, forKey: Key.bookmarkCloudUpdatedAt)
+        if let cloudData = try? JSONEncoder().encode(CloudSnapshot(updatedAt: now, items: [])) {
+            cloudStore.set(cloudData, forKey: cloudKey)
+            cloudStore.synchronize()
+        }
+    }
+
+    private func persist(_ items: [PadBrowsingItem]) {
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: Key.bookmarkItems)
+        }
+        let now = Date()
+        defaults.set(now, forKey: Key.bookmarkCloudUpdatedAt)
+        if let cloudData = try? JSONEncoder().encode(CloudSnapshot(updatedAt: now, items: items)) {
+            cloudStore.set(cloudData, forKey: cloudKey)
+            cloudStore.synchronize()
+        }
+    }
+
+    @objc private func handleCloudChange(_ note: Notification) {
+        guard let changedKeys = note.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey] as? [String],
+              changedKeys.contains(cloudKey) else {
+            return
+        }
+        mergeFromCloudIfNeeded(force: true)
+    }
+
+    private func mergeFromCloudIfNeeded(force: Bool) {
+        guard let data = cloudStore.data(forKey: cloudKey),
+              let snapshot = try? JSONDecoder().decode(CloudSnapshot.self, from: data) else {
+            return
+        }
+        let localUpdatedAt = defaults.object(forKey: Key.bookmarkCloudUpdatedAt) as? Date ?? .distantPast
+        guard force || snapshot.updatedAt > localUpdatedAt else { return }
+        if let localData = try? JSONEncoder().encode(snapshot.items) {
+            defaults.set(localData, forKey: Key.bookmarkItems)
+        }
+        defaults.set(snapshot.updatedAt, forKey: Key.bookmarkCloudUpdatedAt)
     }
 }
 

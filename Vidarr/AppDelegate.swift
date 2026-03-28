@@ -1154,7 +1154,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             contentLanguagePopup.selectItem(at: 0)
         }
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n前回タブの復元: \(prefs.reopenTabsOnLaunch ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")"
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n前回タブの復元: \(prefs.reopenTabsOnLaunch ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")\nブックマーク共有: 同じ Apple ID の Vidarr 間で自動同期"
         if let summary = generalSummaryLabel.stringValue.isEmpty ? nil : Optional(generalSummaryLabel.stringValue) {
             generalSummaryLabel.stringValue = "現在のプロファイル: \(profileManager.currentProfile.name)\n" + summary
         }

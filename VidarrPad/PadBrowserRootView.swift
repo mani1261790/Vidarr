@@ -992,18 +992,10 @@ private struct PadSettingsSheet: View {
                             Toggle("HTTPS を優先する", isOn: $preferHTTPS)
                         }
 
-                    case .gestures:
-                        Section("ジェスチャーの反応") {
-                            Picker("感度", selection: $gestureSensitivity) {
-                                ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
-                                    Text(sensitivity.displayName).tag(sensitivity)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                        }
-
-                        Section("下部バー") {
-                            Toggle("自動で隠す", isOn: $autoHideBottomBar)
+                        Section("タブと下部バー") {
+                            Toggle("前回終了時のタブを次回も開く", isOn: $reopenTabsOnLaunch)
+                            Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
+                            Toggle("下部のタブバーを自動で隠す", isOn: $autoHideBottomBar)
                             if autoHideBottomBar {
                                 Picker("隠れるまでの時間", selection: $bottomBarAutoHideDelay) {
                                     ForEach(PadBottomBarAutoHideDelay.allCases, id: \.self) { delay in
@@ -1013,9 +1005,20 @@ private struct PadSettingsSheet: View {
                             }
                         }
 
-                        Section("タブの復元") {
-                            Toggle("前回終了時のタブを次回も開く", isOn: $reopenTabsOnLaunch)
-                            Toggle("閉じたタブを復元したとき、前に見ていたページ履歴も戻す", isOn: $restoreClosedTabPageHistory)
+                        Section("ブックマーク共有") {
+                            Text("同じ Apple ID で使っている Vidarr 間では、ブックマークを自動で共有します。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                    case .gestures:
+                        Section("ジェスチャーの反応") {
+                            Picker("感度", selection: $gestureSensitivity) {
+                                ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
+                                    Text(sensitivity.displayName).tag(sensitivity)
+                                }
+                            }
+                            .pickerStyle(.segmented)
                         }
 
                     case .privacy:

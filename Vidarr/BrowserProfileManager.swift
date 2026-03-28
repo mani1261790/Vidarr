@@ -44,7 +44,7 @@ final class BrowserProfileManager {
         let suiteDefaults = BrowserProfileStorage.userDefaults(for: currentProfile, bundleIdentifier: bundleIdentifier)
         BrowserPreferences.useSharedDefaults(suiteDefaults)
         BrowsingHistoryStore.useSharedDefaults(suiteDefaults)
-        BookmarkStore.useSharedDefaults(suiteDefaults)
+        BookmarkStore.useSharedDefaults(suiteDefaults, syncIdentifier: currentProfile.id)
         DownloadStore.useSharedDefaults(suiteDefaults)
         BrowserSessionStore.useSharedDefaults(suiteDefaults)
         MediaPermissionStore.useSharedDefaults(suiteDefaults)

@@ -727,16 +727,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
         <style>
         :root {
           color-scheme: light dark;
-          --bg0: #eef3f9;
-          --bg1: #dfe7f2;
-          --glass: rgba(255,255,255,0.62);
-          --stroke: rgba(255,255,255,0.54);
+          --bg0: #edf3fb;
+          --bg1: #dde6f4;
+          --glass: rgba(255,255,255,0.58);
+          --stroke: rgba(255,255,255,0.46);
           --text: #0f172a;
           --subtle: rgba(15,23,42,0.58);
-          --field: rgba(255,255,255,0.82);
+          --field: rgba(255,255,255,0.84);
           --fieldStroke: rgba(148,163,184,0.30);
-          --strong: #0f172a;
-          --strongText: #ffffff;
           --shadow: rgba(15,23,42,0.14);
         }
         @media (prefers-color-scheme: dark) {
@@ -769,20 +767,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
           min-height: 100vh;
           display: grid;
           place-items: center;
-          padding: 26px;
+          padding: 18px;
         }
         .panel {
-          width: min(700px, calc(100vw - 32px));
-          padding: 34px 28px 28px;
-          border-radius: 32px;
+          width: min(560px, calc(100vw - 20px));
+          padding: 22px 18px 18px;
+          border-radius: 26px;
           background: var(--glass);
           border: 1px solid var(--stroke);
-          backdrop-filter: blur(28px) saturate(1.25);
-          box-shadow: 0 28px 80px var(--shadow);
+          backdrop-filter: blur(28px) saturate(1.22);
+          box-shadow: 0 24px 60px var(--shadow);
         }
         .brand {
-          margin: 0 0 22px;
-          font-size: clamp(34px, 5vw, 52px);
+          margin: 0 0 14px;
+          font-size: clamp(28px, 7vw, 42px);
           font-weight: 700;
           line-height: 0.98;
           letter-spacing: -0.05em;
@@ -793,18 +791,18 @@ final class PadBrowserModel: NSObject, ObservableObject {
         form {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
         .search {
           flex: 1 1 auto;
           width: 100%;
-          height: 64px;
-          padding: 0 20px;
-          border-radius: 22px;
+          height: 52px;
+          padding: 0 18px;
+          border-radius: 18px;
           border: 1px solid var(--fieldStroke);
           background: var(--field);
           color: var(--text);
-          font-size: 18px;
+          font-size: 16px;
           outline: none;
         }
         .search::placeholder { color: color-mix(in srgb, var(--subtle) 78%, transparent); }
@@ -813,16 +811,16 @@ final class PadBrowserModel: NSObject, ObservableObject {
           box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
         button {
-          width: 58px;
-          height: 58px;
-          flex: 0 0 58px;
+          width: 46px;
+          height: 46px;
+          flex: 0 0 46px;
           padding: 0;
           border-radius: 999px;
           border: 1px solid color-mix(in srgb, var(--stroke) 82%, transparent);
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--field) 88%, white 12%) 0%, color-mix(in srgb, var(--field) 68%, transparent) 100%);
           color: var(--text);
-          font: 600 22px -apple-system, BlinkMacSystemFont, sans-serif;
+          font: 600 18px -apple-system, BlinkMacSystemFont, sans-serif;
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.34),
             0 10px 24px rgba(15,23,42,0.14);
@@ -838,20 +836,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         @media (max-width: 640px) {
           .panel {
-            width: min(100%, calc(100vw - 22px));
-            padding: 28px 18px 18px;
-            border-radius: 28px;
+            width: min(100%, calc(100vw - 14px));
+            padding: 18px 14px 14px;
+            border-radius: 22px;
           }
-          .brand { font-size: 34px; }
+          .brand { font-size: 30px; margin-bottom: 12px; }
           .search, button {
-            height: 58px;
-            border-radius: 19px;
+            height: 48px;
+            border-radius: 16px;
           }
           button {
-            width: 54px;
-            flex-basis: 54px;
+            width: 44px;
+            flex-basis: 44px;
             border-radius: 999px;
-            font-size: 20px;
+            font-size: 17px;
           }
         }
         </style>

@@ -539,15 +539,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
         <style>
         :root {
           color-scheme: light dark;
-          --bg0: #f4f7fb;
-          --bg1: #e8eef7;
-          --glass: rgba(255,255,255,0.68);
-          --stroke: rgba(255,255,255,0.58);
+          --bg0: #eef3f9;
+          --bg1: #dfe7f2;
+          --glass: rgba(255,255,255,0.62);
+          --stroke: rgba(255,255,255,0.54);
           --text: #0f172a;
-          --subtle: #526277;
+          --subtle: rgba(15,23,42,0.58);
           --field: rgba(255,255,255,0.82);
           --fieldStroke: rgba(148,163,184,0.30);
-          --soft: rgba(255,255,255,0.56);
           --strong: #0f172a;
           --strongText: #ffffff;
           --shadow: rgba(15,23,42,0.14);
@@ -559,10 +558,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
             --glass: rgba(10,14,22,0.60);
             --stroke: rgba(255,255,255,0.10);
             --text: #f8fafc;
-            --subtle: #b6c2d1;
+            --subtle: rgba(248,250,252,0.58);
             --field: rgba(255,255,255,0.08);
             --fieldStroke: rgba(255,255,255,0.10);
-            --soft: rgba(255,255,255,0.06);
             --strong: #f8fafc;
             --strongText: #111827;
             --shadow: rgba(0,0,0,0.32);
@@ -575,8 +573,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
           font-family: -apple-system, BlinkMacSystemFont, sans-serif;
           color: var(--text);
           background:
-            radial-gradient(circle at 18% 12%, rgba(72, 139, 255, 0.24), transparent 34%),
-            radial-gradient(circle at 82% 16%, rgba(108, 92, 231, 0.10), transparent 24%),
+            radial-gradient(circle at 18% 12%, rgba(72, 139, 255, 0.20), transparent 34%),
+            radial-gradient(circle at 82% 16%, rgba(108, 92, 231, 0.08), transparent 24%),
             linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
         }
         .shell {
@@ -586,44 +584,32 @@ final class PadBrowserModel: NSObject, ObservableObject {
           padding: 26px;
         }
         .panel {
-          width: min(760px, calc(100vw - 32px));
+          width: min(700px, calc(100vw - 32px));
           padding: 34px 28px 28px;
-          border-radius: 34px;
+          border-radius: 32px;
           background: var(--glass);
           border: 1px solid var(--stroke);
           backdrop-filter: blur(28px) saturate(1.25);
           box-shadow: 0 28px 80px var(--shadow);
         }
-        .eyebrow {
-          margin: 0 0 10px;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          color: var(--subtle);
-        }
-        h1 {
-          margin: 0 0 12px;
-          font-size: clamp(36px, 5vw, 56px);
-          line-height: 0.98;
-          letter-spacing: -0.045em;
-        }
-        p {
+        .brand {
           margin: 0 0 22px;
-          max-width: 38rem;
-          font-size: 17px;
-          line-height: 1.58;
-          color: var(--subtle);
+          font-size: clamp(34px, 5vw, 52px);
+          font-weight: 700;
+          line-height: 0.98;
+          letter-spacing: -0.05em;
         }
         form {
-          display: grid;
-          gap: 14px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
         .search {
+          flex: 1 1 auto;
           width: 100%;
-          height: 62px;
+          height: 64px;
           padding: 0 20px;
-          border-radius: 20px;
+          border-radius: 22px;
           border: 1px solid var(--fieldStroke);
           background: var(--field);
           color: var(--text);
@@ -635,100 +621,49 @@ final class PadBrowserModel: NSObject, ObservableObject {
           border-color: rgba(96,165,250,0.42);
           box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
-        .actions {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        button, .secondary, .ghost {
-          height: 46px;
-          padding: 0 18px;
-          border-radius: 15px;
-          border: 0;
-          font: 600 16px -apple-system, BlinkMacSystemFont, sans-serif;
-        }
         button {
+          width: 64px;
+          height: 64px;
+          flex: 0 0 64px;
+          padding: 0;
+          border-radius: 22px;
+          border: 0;
           background: var(--strong);
           color: var(--strongText);
-        }
-        .secondary {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--soft);
-          color: var(--text);
-          text-decoration: none;
-        }
-        .ghost {
-          background: transparent;
-          color: var(--subtle);
-          padding-left: 6px;
-          padding-right: 6px;
-        }
-        .footer {
-          margin-top: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          flex-wrap: wrap;
-        }
-        .chips {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        .chip {
-          padding: 8px 12px;
-          border-radius: 999px;
-          background: var(--soft);
-          color: var(--subtle);
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .meta {
-          font-size: 13px;
-          color: var(--subtle);
+          font: 600 23px -apple-system, BlinkMacSystemFont, sans-serif;
         }
         @media (max-width: 640px) {
           .panel {
             width: min(100%, calc(100vw - 22px));
-            padding: 28px 20px 20px;
+            padding: 28px 18px 18px;
             border-radius: 28px;
           }
-          h1 { font-size: 34px; }
-          p { font-size: 16px; }
-          .actions > * { flex: 1 1 auto; }
+          .brand { font-size: 34px; }
+          .search, button {
+            height: 58px;
+            border-radius: 19px;
+          }
+          button {
+            width: 58px;
+            flex-basis: 58px;
+            font-size: 21px;
+          }
         }
         </style>
         <body>
           <div class="shell">
             <div class="panel">
-              <div class="eyebrow">Vidarr Start</div>
-              <h1>検索と閲覧を、すぐに。</h1>
-              <p>検索語でも URL でも、そのまま入力できます。新規タブや検索ジェスチャーから開かれる、Vidarr のスタートページです。</p>
+              <div class="brand">Vidarr</div>
               <form id="searchForm">
                 <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
-                <div class="actions">
-                  <button type="submit">開く</button>
-                  <a class="secondary" href="javascript:window.location.reload()">再読み込み</a>
-                  <button class="ghost" type="button" id="focusSearch">入力欄に戻る</button>
-                </div>
+                <button type="submit" aria-label="Open">↵</button>
               </form>
-              <div class="footer">
-                <div class="chips">
-                  <div class="chip">検索先は設定から変更</div>
-                  <div class="chip">URL も直接入力可能</div>
-                </div>
-                <div class="meta">空欄ならここが新規ページになります。</div>
-              </div>
             </div>
           </div>
           <script>
             const template = \(String(reflecting: searchTemplate));
             const initialQuery = \(escapedQuery);
             const input = document.getElementById('query');
-            const focusButton = document.getElementById('focusSearch');
             input.value = initialQuery;
             document.getElementById('searchForm').addEventListener('submit', function(event) {
               event.preventDefault();
@@ -748,10 +683,6 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return;
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
-            });
-            focusButton.addEventListener('click', function() {
-              input.focus();
-              input.select();
             });
             input.focus();
             if (initialQuery) {

@@ -10,6 +10,7 @@
 		BE1209A12F4F227E00CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = BE1209A42F4F227E00CB4EE9 /* VidarrCore */; };
 		BE1209A22F4F227E00CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = BE1209A52F4F227E00CB4EE9 /* VidarrCore */; };
 		BE1209B12F4F227E00CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = BE1209BB2F4F227E00CB4EE9 /* VidarrCore */; };
+		D0AA00032F50F00000CB4EE9 /* VidarrCore in Frameworks */ = {isa = PBXBuildFile; productRef = D0AA000B2F50F00000CB4EE9 /* VidarrCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +35,7 @@
 		3C233D8A2F4F228000CB4EE9 /* VidarrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VidarrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C233D942F4F228000CB4EE9 /* VidarrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VidarrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BE1209B22F4F227E00CB4EE9 /* VidarrPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VidarrPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0AA00012F50F00000CB4EE9 /* VidarrPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VidarrPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -55,6 +57,11 @@
 		BE1209B32F4F227E00CB4EE9 /* VidarrPad */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = VidarrPad;
+			sourceTree = "<group>";
+		};
+		D0AA00022F50F00000CB4EE9 /* VidarrPhone */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = VidarrPhone;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -91,6 +98,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D0AA00042F50F00000CB4EE9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0AA00032F50F00000CB4EE9 /* VidarrCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -99,6 +114,7 @@
 			children = (
 				3C233D7C2F4F227E00CB4EE9 /* Vidarr */,
 				BE1209B32F4F227E00CB4EE9 /* VidarrPad */,
+				D0AA00022F50F00000CB4EE9 /* VidarrPhone */,
 				3C233D8D2F4F228000CB4EE9 /* VidarrTests */,
 				3C233D972F4F228000CB4EE9 /* VidarrUITests */,
 				3C233D7B2F4F227E00CB4EE9 /* Products */,
@@ -110,6 +126,7 @@
 			children = (
 				3C233D7A2F4F227E00CB4EE9 /* Vidarr.app */,
 				BE1209B22F4F227E00CB4EE9 /* VidarrPad.app */,
+				D0AA00012F50F00000CB4EE9 /* VidarrPhone.app */,
 				3C233D8A2F4F228000CB4EE9 /* VidarrTests.xctest */,
 				3C233D942F4F228000CB4EE9 /* VidarrUITests.xctest */,
 			);
@@ -212,6 +229,29 @@
 			productReference = BE1209B22F4F227E00CB4EE9 /* VidarrPad.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D0AA00052F50F00000CB4EE9 /* VidarrPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0AA000A2F50F00000CB4EE9 /* Build configuration list for PBXNativeTarget "VidarrPhone" */;
+			buildPhases = (
+				D0AA00062F50F00000CB4EE9 /* Sources */,
+				D0AA00042F50F00000CB4EE9 /* Frameworks */,
+				D0AA00072F50F00000CB4EE9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D0AA00022F50F00000CB4EE9 /* VidarrPhone */,
+			);
+			name = VidarrPhone;
+			packageProductDependencies = (
+				D0AA000B2F50F00000CB4EE9 /* VidarrCore */,
+			);
+			productName = VidarrPhone;
+			productReference = D0AA00012F50F00000CB4EE9 /* VidarrPhone.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -236,6 +276,9 @@
 					BE1209B52F4F227E00CB4EE9 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					D0AA00052F50F00000CB4EE9 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = 3C233D752F4F227E00CB4EE9 /* Build configuration list for PBXProject "Vidarr" */;
@@ -257,6 +300,7 @@
 			targets = (
 				3C233D792F4F227E00CB4EE9 /* Vidarr */,
 				BE1209B52F4F227E00CB4EE9 /* VidarrPad */,
+				D0AA00052F50F00000CB4EE9 /* VidarrPhone */,
 				3C233D892F4F228000CB4EE9 /* VidarrTests */,
 				3C233D932F4F228000CB4EE9 /* VidarrUITests */,
 			);
@@ -292,6 +336,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D0AA00072F50F00000CB4EE9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -317,6 +368,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BE1209B62F4F227E00CB4EE9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D0AA00062F50F00000CB4EE9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -661,6 +719,60 @@
 			};
 			name = Release;
 		};
+		D0AA00082F50F00000CB4EE9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PA8WHP7G46;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPhone;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D0AA00092F50F00000CB4EE9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PA8WHP7G46;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPhone;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -709,6 +821,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D0AA000A2F50F00000CB4EE9 /* Build configuration list for PBXNativeTarget "VidarrPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0AA00082F50F00000CB4EE9 /* Debug */,
+				D0AA00092F50F00000CB4EE9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -730,6 +851,11 @@
 			productName = VidarrCore;
 		};
 		BE1209BB2F4F227E00CB4EE9 /* VidarrCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
+			productName = VidarrCore;
+		};
+		D0AA000B2F50F00000CB4EE9 /* VidarrCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BE1209A32F4F227E00CB4EE9 /* XCLocalSwiftPackageReference "VidarrCore" */;
 			productName = VidarrCore;

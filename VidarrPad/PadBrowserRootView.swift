@@ -437,6 +437,7 @@ struct PadBrowserRootView: View {
     }
 
     private func compactGroupStrip(for group: PadBrowserTabGroup) -> some View {
+        let _ = model.groupStateRevision
         let groupTabs = model.tabs(in: group)
         let selectedTabID = model.selectedTabID(in: group)
         return HStack(spacing: 12) {
@@ -486,12 +487,14 @@ struct PadBrowserRootView: View {
                                     onDoubleTap: {},
                                     onSwipeDown: {}
                                 )
+                                .transition(.opacity.combined(with: .scale(scale: 0.92)))
                             }
                         }
                     }
                     .frame(minWidth: stripProxy.size.width, alignment: .center)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 3)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.90), value: groupTabs.map(\.id))
                 }
             }
             .frame(maxWidth: .infinity)

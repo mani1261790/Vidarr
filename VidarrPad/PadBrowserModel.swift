@@ -109,6 +109,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @Published private(set) var selectedIndex: Int = 0
     @Published var addressInput: String = ""
     @Published var navigationStateToken = UUID()
+    @Published private(set) var groupStateRevision = UUID()
     @Published var selectedSidebarTabID: UUID?
     @Published var pendingHarmfulSitePrompt: HarmfulSitePrompt?
     @Published var lastFindResultSummary: String?
@@ -1158,6 +1159,7 @@ extension PadBrowserModel {
 
     private func setState(_ state: GroupState, for group: PadBrowserTabGroup) {
         states[group] = state
+        groupStateRevision = UUID()
     }
 
     private func ensureAtLeastOneTab(in group: PadBrowserTabGroup) {

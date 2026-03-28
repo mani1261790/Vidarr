@@ -1210,6 +1210,7 @@ private struct PadSettingsSheet: View {
     let onOpenBookmarks: () -> Void
     let onOpenDownloads: () -> Void
     let onDone: () -> Void
+    private var isPhoneLayout: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     var body: some View {
         NavigationStack {
@@ -1220,9 +1221,9 @@ private struct PadSettingsSheet: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.horizontal, isPhoneLayout ? 14 : 20)
+                .padding(.top, isPhoneLayout ? 10 : 14)
+                .padding(.bottom, isPhoneLayout ? 6 : 10)
 
                 Form {
                     switch selectedTab {
@@ -1231,9 +1232,6 @@ private struct PadSettingsSheet: View {
                             TextField("", text: $homePageURLString, prompt: Text("Vidarr Start"))
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                            Text("空欄にすると Vidarr Start を開きます。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                             if !isHomePageInputValid && !homePageURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 Text("スタートページは http または https の URL を入力してください。")
                                     .font(.footnote)
@@ -1245,9 +1243,6 @@ private struct PadSettingsSheet: View {
                             TextField("検索するときのURL", text: $searchTemplate)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                            Text("検索語は {query} に入ります。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                             if !isSearchTemplateInputValid {
                                 Text("検索URLは空欄にできません。{query} を含む http または https の URL を入力してください。")
                                     .font(.footnote)
@@ -1287,12 +1282,14 @@ private struct PadSettingsSheet: View {
                                 .foregroundStyle(PadBrowserPreferences.shared.bookmarkSyncEnabled ? .green : .secondary)
                                 Spacer()
                             }
-                            Text(PadBrowserPreferences.shared.bookmarkSyncStatusText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            Text("同期されるのはブックマークのみです。履歴、開いているタブ、Cookie、ダウンロード一覧は同期しません。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if !isPhoneLayout {
+                                Text(PadBrowserPreferences.shared.bookmarkSyncStatusText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Text("同期されるのはブックマークのみです。履歴、開いているタブ、Cookie、ダウンロード一覧は同期しません。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
                     case .gestures:
@@ -1356,6 +1353,7 @@ private struct PadSettingsSheet: View {
                         }
                     }
                 }
+                .listStyle(.insetGrouped)
             }
             .navigationTitle("設定")
             .toolbar {
@@ -1431,6 +1429,7 @@ private struct PadLibraryPanelSheet: View {
     @ObservedObject var model: PadBrowserModel
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
+    private var isPhoneLayout: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     var body: some View {
         NavigationStack {
@@ -1442,8 +1441,8 @@ private struct PadLibraryPanelSheet: View {
                             model.openHistoryItem(item)
                             dismiss()
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title).font(.headline).lineLimit(1)
+                            VStack(alignment: .leading, spacing: isPhoneLayout ? 2 : 4) {
+                                Text(item.title).font(isPhoneLayout ? .subheadline.weight(.semibold) : .headline).lineLimit(1)
                                 Text(item.urlString).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
@@ -1459,8 +1458,8 @@ private struct PadLibraryPanelSheet: View {
                             model.openBookmarkItem(item)
                             dismiss()
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title).font(.headline).lineLimit(1)
+                            VStack(alignment: .leading, spacing: isPhoneLayout ? 2 : 4) {
+                                Text(item.title).font(isPhoneLayout ? .subheadline.weight(.semibold) : .headline).lineLimit(1)
                                 Text(item.urlString).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
@@ -1472,9 +1471,9 @@ private struct PadLibraryPanelSheet: View {
 
                 case .downloads:
                     ForEach(filteredDownloads) { item in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: isPhoneLayout ? 6 : 8) {
                             Text(item.destinationURL.lastPathComponent)
-                                .font(.headline)
+                                .font(isPhoneLayout ? .subheadline.weight(.semibold) : .headline)
                                 .lineLimit(1)
                             Text(item.sourceURL?.host ?? item.sourceURLString)
                                 .font(.footnote)
@@ -1485,11 +1484,12 @@ private struct PadLibraryPanelSheet: View {
                                     .font(.footnote)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, isPhoneLayout ? 2 : 4)
                     }
                 }
             }
             .searchable(text: $searchText, prompt: searchPrompt)
+            .listStyle(.insetGrouped)
             .navigationTitle(navigationTitle)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1717,61 +1717,48 @@ private struct PadTabEditSheet: View {
     @State private var pageSearchQuery = ""
     @State private var pageSearchResult: String?
     @State private var showingShareSheet = false
+    private var isPhoneLayout: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(tab.title)
-                            .font(.title2.weight(.semibold))
-                            .lineLimit(2)
-                        if let host = currentHost {
-                            Text(host)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+            Group {
+                if isPhoneLayout {
+                    Form {
+                        Section {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(tab.title)
+                                    .font(.headline)
+                                    .lineLimit(2)
+                                if let host = currentHost {
+                                    Text(host)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 4)
                         }
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("ページ")
-                            .font(.headline)
-                        TextField("URL または検索語", text: $currentURL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textFieldStyle(.roundedBorder)
-                            .submitLabel(.go)
-                            .onSubmit { onOpenURL() }
-                    }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("タブの操作")
-                            .font(.headline)
-                        HStack(spacing: 12) {
-                            actionButton("開く", systemImage: "arrow.up.right.circle.fill", role: .primary, action: onOpenURL)
-                            actionButton("再読み込み", systemImage: "arrow.clockwise.circle.fill", action: onReload)
+                        Section("ページ") {
+                            TextField("URL または検索語", text: $currentURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                                .submitLabel(.go)
+                                .onSubmit { onOpenURL() }
+                            Button("開く") { onOpenURL() }
                         }
-                        HStack(spacing: 12) {
-                            actionButton("共有", systemImage: "square.and.arrow.up.fill", action: {
+
+                        Section("操作") {
+                            Button("再読み込み") { onReload() }
+                            Button(isBookmarked ? "ブックマーク解除" : "ブックマーク") { onToggleBookmark() }
+                            Button(tab.isProtected ? "保護を解除" : "保護する") { onToggleProtection() }
+                            Button("共有") {
                                 onShare()
                                 showingShareSheet = true
-                            })
-                            actionButton(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash.fill" : "star.fill", action: onToggleBookmark)
-                            actionButton(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open.fill" : "lock.fill", action: onToggleProtection)
+                            }
                         }
-                    }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("ページ内検索")
-                            .font(.headline)
-                        HStack(spacing: 12) {
+                        Section("ページ内検索") {
                             TextField("このページを検索", text: $pageSearchQuery)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
@@ -1787,31 +1774,118 @@ private struct PadTabEditSheet: View {
                                     pageSearchResult = result
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
+                            if let pageSearchResult, !pageSearchResult.isEmpty {
+                                Text(pageSearchResult)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        if let pageSearchResult, !pageSearchResult.isEmpty {
-                            Text(pageSearchResult)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+
+                        if currentHost != nil {
+                            Section("このサイト") {
+                                Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
+                                    get: { isDangerousSiteAllowed },
+                                    set: { _ in onToggleDangerousSiteAllowed() }
+                                ))
+                            }
                         }
                     }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .listStyle(.insetGrouped)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(tab.title)
+                                    .font(.title2.weight(.semibold))
+                                    .lineLimit(2)
+                                if let host = currentHost {
+                                    Text(host)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-                    if currentHost != nil {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("このサイト")
-                                .font(.headline)
-                            Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
-                                get: { isDangerousSiteAllowed },
-                                set: { _ in onToggleDangerousSiteAllowed() }
-                            ))
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("ページ")
+                                    .font(.headline)
+                                TextField("URL または検索語", text: $currentURL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .textFieldStyle(.roundedBorder)
+                                    .submitLabel(.go)
+                                    .onSubmit { onOpenURL() }
+                            }
+                            .padding(20)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("タブの操作")
+                                    .font(.headline)
+                                HStack(spacing: 12) {
+                                    actionButton("開く", systemImage: "arrow.up.right.circle.fill", role: .primary, action: onOpenURL)
+                                    actionButton("再読み込み", systemImage: "arrow.clockwise.circle.fill", action: onReload)
+                                }
+                                HStack(spacing: 12) {
+                                    actionButton("共有", systemImage: "square.and.arrow.up.fill", action: {
+                                        onShare()
+                                        showingShareSheet = true
+                                    })
+                                    actionButton(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash.fill" : "star.fill", action: onToggleBookmark)
+                                    actionButton(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open.fill" : "lock.fill", action: onToggleProtection)
+                                }
+                            }
+                            .padding(20)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("ページ内検索")
+                                    .font(.headline)
+                                HStack(spacing: 12) {
+                                    TextField("このページを検索", text: $pageSearchQuery)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .textFieldStyle(.roundedBorder)
+                                        .submitLabel(.search)
+                                        .onSubmit {
+                                            onFindInPage(pageSearchQuery) { result in
+                                                pageSearchResult = result
+                                            }
+                                        }
+                                    Button("検索") {
+                                        onFindInPage(pageSearchQuery) { result in
+                                            pageSearchResult = result
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                                if let pageSearchResult, !pageSearchResult.isEmpty {
+                                    Text(pageSearchResult)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(20)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                            if currentHost != nil {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("このサイト")
+                                        .font(.headline)
+                                    Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
+                                        get: { isDangerousSiteAllowed },
+                                        set: { _ in onToggleDangerousSiteAllowed() }
+                                    ))
+                                }
+                                .padding(20)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            }
                         }
                         .padding(20)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                     }
                 }
-                .padding(20)
             }
             .navigationTitle("タブ設定")
             .navigationBarTitleDisplayMode(.inline)

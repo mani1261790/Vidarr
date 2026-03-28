@@ -229,13 +229,29 @@ struct PadBrowserRootView: View {
     }
 
     private var bottomRevealZone: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .frame(height: 20)
-            .ignoresSafeArea(edges: .bottom)
-            .onTapGesture {
-                showBottomBar()
-            }
+        VStack(spacing: 6) {
+            Capsule()
+                .fill(Color.white.opacity(0.92))
+                .frame(width: 42, height: 5)
+            Image(systemName: "chevron.up")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.12)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .contentShape(Rectangle())
+        .ignoresSafeArea(edges: .bottom)
+        .onTapGesture {
+            showBottomBar()
+        }
     }
 
     private var tabStrip: some View {
@@ -254,6 +270,20 @@ struct PadBrowserRootView: View {
                             animateTabSelection(to: tab.id)
                             editingURL = tab.urlString
                             editingTabID = tab.id
+                        },
+                        onDoubleTap: {
+                            animateTabSelection(to: tab.id)
+                            model.toggleProtectionForSelectedTab()
+                            showBottomBar()
+                        },
+                        onSwipeDown: {
+                            animateTabSelection(to: tab.id)
+                            if tab.isProtected {
+                                protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
+                            } else {
+                                model.closeTab(id: tab.id)
+                            }
+                            showBottomBar()
                         }
                     )
                     .background(
@@ -1173,6 +1203,8 @@ private struct PadTabThumbnail: View {
     let showsBirthPulse: Bool
     let onSelect: () -> Void
     let onLongPress: () -> Void
+    let onDoubleTap: () -> Void
+    let onSwipeDown: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
@@ -1235,6 +1267,20 @@ private struct PadTabThumbnail: View {
             .shadow(color: shadowColor, radius: 16, y: 6)
         }
         .buttonStyle(.plain)
+        .highPriorityGesture(
+            TapGesture(count: 2)
+                .onEnded {
+                    onDoubleTap()
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 14)
+                .onEnded { value in
+                    guard value.translation.height >= 24 else { return }
+                    guard abs(value.translation.height) > abs(value.translation.width) * 1.2 else { return }
+                    onSwipeDown()
+                }
+        )
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.45)
                 .onEnded { _ in

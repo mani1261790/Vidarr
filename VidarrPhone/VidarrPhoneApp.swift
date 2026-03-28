@@ -31,6 +31,7 @@ final class VidarrPhoneSceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.backgroundColor = .systemBackground
         self.window = window
         window.makeKeyAndVisible()
+        window.rootViewController?.setNeedsStatusBarAppearanceUpdate()
     }
 }
 
@@ -38,6 +39,8 @@ final class VidarrPhoneHostingController<Content: View>: UIHostingController<Con
     override var prefersStatusBarHidden: Bool { true }
 
     override var childForStatusBarHidden: UIViewController? { nil }
+
+    override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .fade }
 
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.top, .bottom] }
 
@@ -47,5 +50,10 @@ final class VidarrPhoneHostingController<Content: View>: UIHostingController<Con
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         view.insetsLayoutMarginsFromSafeArea = false
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        setNeedsStatusBarAppearanceUpdate()
     }
 }

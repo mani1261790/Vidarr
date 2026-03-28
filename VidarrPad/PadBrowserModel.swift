@@ -423,6 +423,54 @@ final class PadBrowserModel: NSObject, ObservableObject {
         saveSessionSnapshot()
     }
 
+    func closeAllTabs(in group: PadBrowserTabGroup) {
+        let selectedWebView = group == currentGroup ? selectedTab?.webView : nil
+        var state = state(for: group)
+        var retained: [Tab] = []
+        let snapshots = state.tabs.compactMap { tab -> ClosedTabSnapshot? in
+            if tab.isProtected {
+                retained.append(tab)
+                return nil
+            }
+            return ClosedTabSnapshot(
+                group: group,
+                url: URL(string: tab.urlString),
+                title: tab.title,
+                isProtected: tab.isProtected,
+                historyURLs: tab.historyURLs,
+                historyIndex: tab.historyIndex
+            )
+        }
+        closedTabs.insert(contentsOf: snapshots.reversed(), at: 0)
+        if closedTabs.count > 20 {
+            closedTabs.removeLast(closedTabs.count - 20)
+        }
+        state.tabs = retained
+
+        if state.tabs.isEmpty {
+            setState(state, for: group)
+            if group == currentGroup {
+                ensureAtLeastOneTab(in: group)
+            } else {
+                saveSessionSnapshot()
+            }
+            return
+        }
+
+        if let selectedWebView,
+           let retainedIndex = state.tabs.firstIndex(where: { $0.webView === selectedWebView }) {
+            state.selectedIndex = retainedIndex
+        } else {
+            state.selectedIndex = 0
+        }
+        setState(state, for: group)
+        if group == currentGroup {
+            selectedSidebarTabID = selectedTab?.id
+            syncPublishedState()
+        }
+        saveSessionSnapshot()
+    }
+
     func restoreClosedTab() {
         guard let snapshot = closedTabs.first else { return }
         closedTabs.removeFirst()

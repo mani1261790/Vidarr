@@ -63,6 +63,9 @@ struct PadBrowserRootView: View {
     @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     @FocusState private var editingURLFocused: Bool
 
+    private let stackedStripLeadingWidth: CGFloat = 164
+    private let stackedStripTrailingWidth: CGFloat = 82
+
     var body: some View {
         ZStack(alignment: .bottom) {
             webLayer
@@ -436,40 +439,65 @@ struct PadBrowserRootView: View {
     private func compactGroupStrip(for group: PadBrowserTabGroup) -> some View {
         let groupTabs = model.tabs(in: group)
         let selectedTabID = model.selectedTabID(in: group)
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                if groupTabs.isEmpty {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(Color(uiColor: group.accentColor).opacity(0.10))
-                        .overlay(
+        return HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Button {
+                    model.closeAllTabs(in: group)
+                    showBottomBar(persist: true)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(chromeForegroundColor.opacity(0.92))
+
+                Image(systemName: group.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(uiColor: group.accentColor))
+            }
+            .frame(width: stackedStripLeadingWidth, alignment: .leading)
+
+            GeometryReader { stripProxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        if groupTabs.isEmpty {
                             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(Color(uiColor: group.accentColor).opacity(0.26), lineWidth: 1)
-                        )
-                        .frame(width: 80, height: 46)
-                } else {
-                    ForEach(groupTabs) { tab in
-                        PadTabThumbnail(
-                            tab: tab,
-                            isSelected: selectedTabID == tab.id,
-                            isBookmarked: model.isBookmarked(tab),
-                            groupAccentColor: Color(uiColor: group.accentColor),
-                            showsBirthPulse: false,
-                            showsDestructiveDismiss: false,
-                            onSelect: {
-                                model.selectTab(in: group, id: tab.id)
-                                dismissGroupStripStack()
-                                showBottomBar()
-                            },
-                            onLongPress: {},
-                            onDoubleTap: {},
-                            onSwipeDown: {}
-                        )
+                                .fill(Color(uiColor: group.accentColor).opacity(0.10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                        .stroke(Color(uiColor: group.accentColor).opacity(0.26), lineWidth: 1)
+                                )
+                                .frame(width: 80, height: 46)
+                        } else {
+                            ForEach(groupTabs) { tab in
+                                PadTabThumbnail(
+                                    tab: tab,
+                                    isSelected: selectedTabID == tab.id,
+                                    isBookmarked: model.isBookmarked(tab),
+                                    groupAccentColor: Color(uiColor: group.accentColor),
+                                    showsBirthPulse: false,
+                                    showsDestructiveDismiss: false,
+                                    onSelect: {
+                                        model.selectTab(in: group, id: tab.id)
+                                        dismissGroupStripStack()
+                                        showBottomBar()
+                                    },
+                                    onLongPress: {},
+                                    onDoubleTap: {},
+                                    onSwipeDown: {}
+                                )
+                            }
+                        }
                     }
+                    .frame(minWidth: stripProxy.size.width, alignment: .center)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 3)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity)
+
+            Color.clear
+                .frame(width: stackedStripTrailingWidth, height: 1)
         }
         .frame(height: 52)
         .background(PadLiquidGlassBackground(cornerRadius: 18))

@@ -68,21 +68,21 @@ struct PadBrowserRootView: View {
         UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact
     }
 
-    private var stackedStripLeadingWidth: CGFloat { isPhoneLayout ? 64 : 164 }
-    private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 34 : 82 }
-    private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 4 : 18 }
+    private var stackedStripLeadingWidth: CGFloat { isPhoneLayout ? 52 : 164 }
+    private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 30 : 82 }
+    private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 3 : 18 }
     private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 0 : 6 }
-    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
-    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 4 : 10 }
-    private var chromeButtonSize: CGFloat { isPhoneLayout ? 24 : 30 }
-    private var groupButtonSize: CGFloat { isPhoneLayout ? 24 : 30 }
-    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 52 : 80 }
-    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 30 : 46 }
-    private var tabStripHeight: CGFloat { isPhoneLayout ? 36 : 52 }
-    private var tabStripSpacing: CGFloat { isPhoneLayout ? 8 : 12 }
-    private var barCornerRadius: CGFloat { isPhoneLayout ? 14 : 20 }
-    private var groupStripHeight: CGFloat { isPhoneLayout ? 38 : 52 }
-    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 44 : 60 }
+    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 4 : 12 }
+    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 3 : 10 }
+    private var chromeButtonSize: CGFloat { isPhoneLayout ? 22 : 30 }
+    private var groupButtonSize: CGFloat { isPhoneLayout ? 22 : 30 }
+    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 46 : 80 }
+    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 27 : 46 }
+    private var tabStripHeight: CGFloat { isPhoneLayout ? 31 : 52 }
+    private var tabStripSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
+    private var barCornerRadius: CGFloat { isPhoneLayout ? 13 : 20 }
+    private var groupStripHeight: CGFloat { isPhoneLayout ? 32 : 52 }
+    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 36 : 60 }
     private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
@@ -327,7 +327,8 @@ struct PadBrowserRootView: View {
         let yOffset = showsGroupStripStack ? -(CGFloat(index + 1) * groupStripOffsetStep) : 0
         let rowScale: CGFloat = showsGroupStripStack ? 1 : 0.96
         let rowOpacity: CGFloat = showsGroupStripStack ? 1 : 0
-        let animation = Animation.spring(response: 0.34, dampingFraction: 0.86).delay(Double(index) * 0.03)
+        let animation = Animation.spring(response: isPhoneLayout ? 0.28 : 0.34, dampingFraction: 0.88)
+            .delay(Double(index) * (isPhoneLayout ? 0.02 : 0.03))
 
         return compactGroupStrip(for: group)
             .offset(y: yOffset)
@@ -337,16 +338,16 @@ struct PadBrowserRootView: View {
     }
 
     private var bottomRevealZone: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             Capsule()
                 .fill(chromeForegroundColor.opacity(0.92))
-                .frame(width: 42, height: 5)
+                .frame(width: 34, height: 4)
             Image(systemName: "chevron.up")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(chromeForegroundColor.opacity(0.92))
         }
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
         .background(
             LinearGradient(
@@ -466,8 +467,8 @@ struct PadBrowserRootView: View {
         let _ = model.groupStateRevision
         let groupTabs = model.tabs(in: group)
         let selectedTabID = model.selectedTabID(in: group)
-        return HStack(spacing: 12) {
-            HStack(spacing: 8) {
+        return HStack(spacing: isPhoneLayout ? 8 : 12) {
+            HStack(spacing: isPhoneLayout ? 6 : 8) {
                 Button {
                     withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
                         model.switchGroup(group)
@@ -481,7 +482,7 @@ struct PadBrowserRootView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.leading, isPhoneLayout ? 12 : 16)
+            .padding(.leading, isPhoneLayout ? 10 : 16)
             .frame(width: stackedStripLeadingWidth, alignment: .leading)
 
             GeometryReader { stripProxy in
@@ -520,14 +521,14 @@ struct PadBrowserRootView: View {
                         }
                     }
                     .frame(minWidth: stripProxy.size.width, alignment: .center)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 3)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.90), value: groupTabs.map(\.id))
+                    .padding(.horizontal, isPhoneLayout ? 2 : 4)
+                    .padding(.vertical, isPhoneLayout ? 2 : 3)
+                    .animation(.spring(response: isPhoneLayout ? 0.24 : 0.28, dampingFraction: 0.90), value: groupTabs.map(\.id))
                 }
             }
             .frame(maxWidth: .infinity)
 
-            HStack(spacing: 8) {
+            HStack(spacing: isPhoneLayout ? 6 : 8) {
                 Button {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
                         model.closeAllTabs(in: group)
@@ -540,18 +541,18 @@ struct PadBrowserRootView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(chromeForegroundColor.opacity(0.92))
             }
-            .padding(.trailing, isPhoneLayout ? 12 : 16)
+            .padding(.trailing, isPhoneLayout ? 10 : 16)
             .frame(width: stackedStripTrailingWidth, alignment: .trailing)
         }
         .frame(height: groupStripHeight)
-        .background(PadLiquidGlassBackground(cornerRadius: isPhoneLayout ? 16 : 18))
+        .background(PadLiquidGlassBackground(cornerRadius: isPhoneLayout ? 14 : 18))
         .overlay(
-            RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous)
+            RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous)
                 .stroke(Color(uiColor: group.accentColor).opacity(0.20), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: isPhoneLayout ? 8 : 10, y: 4)
-        .contentShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
+        .shadow(color: .black.opacity(isPhoneLayout ? 0.06 : 0.08), radius: isPhoneLayout ? 6 : 10, y: isPhoneLayout ? 3 : 4)
+        .contentShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
         .onTapGesture {
             if groupTabs.isEmpty {
                 model.switchGroup(group)

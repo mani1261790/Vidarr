@@ -37,14 +37,18 @@ struct PadGestureConfiguration {
 
 final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate {
     private struct CaptureConfig {
-        let triggerHorizontalDelta: CGFloat = 4.5
-        let triggerDominanceRatio: CGFloat = 1.65
+        let triggerHorizontalDelta: CGFloat = 3.8
+        let triggerDominanceRatio: CGFloat = 1.52
         let triggerWindowMs: TimeInterval = 90
         let seedHistoryWindowMs: TimeInterval = 240
-        let minPathLength: CGFloat = 90
-        let matchScoreThreshold: CGFloat = 0.68
-        let livePreviewScoreThreshold: CGFloat = 0.52
+        let minPathLength: CGFloat = 78
+        let matchScoreThreshold: CGFloat = 0.66
+        let livePreviewScoreThreshold: CGFloat = 0.48
         let upStrokeDominanceRatio: CGFloat = 2.0
+        let horizontalSwipeStartDistance: CGFloat = 24
+        let horizontalSwipeConfirmDistance: CGFloat = 30
+        let horizontalSwipeDominanceRatio: CGFloat = 2.1
+        let horizontalSwipeVerticalExcursion: CGFloat = 18
     }
 
     private struct DeltaSample {
@@ -358,7 +362,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let absDX = abs(dx)
         let absDY = abs(dy)
 
-        guard absDX >= 36 else { return nil }
+        guard absDX >= config.horizontalSwipeConfirmDistance else { return nil }
         guard absDX >= absDY * 1.6 else { return nil }
 
         let path = pathLength(points)
@@ -398,8 +402,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let displacementY = end.y - start.y
         let absDX = abs(displacementX)
         let absDY = abs(displacementY)
-        guard absDX >= 28 else { return false }
-        guard absDX >= absDY * 2.35 else { return false }
+        guard absDX >= config.horizontalSwipeStartDistance else { return false }
+        guard absDX >= absDY * config.horizontalSwipeDominanceRatio else { return false }
 
         var minY = capturePoints[0].y
         var maxY = capturePoints[0].y
@@ -408,7 +412,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             maxY = max(maxY, point.y)
         }
         let verticalExcursion = maxY - minY
-        guard verticalExcursion <= 20 else { return false }
+        guard verticalExcursion <= config.horizontalSwipeVerticalExcursion else { return false }
 
         let action: PadGestureAction = displacementX < 0 ? .nextTab : .previousTab
         interactiveTabSwipeActive = true

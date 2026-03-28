@@ -767,20 +767,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
           min-height: 100vh;
           display: grid;
           place-items: center;
-          padding: 18px;
+          padding: 12px;
         }
         .panel {
-          width: min(560px, calc(100vw - 20px));
-          padding: 22px 18px 18px;
-          border-radius: 26px;
+          width: min(540px, calc(100vw - 16px));
+          padding: 16px 14px 14px;
+          border-radius: 24px;
           background: var(--glass);
           border: 1px solid var(--stroke);
           backdrop-filter: blur(28px) saturate(1.22);
           box-shadow: 0 24px 60px var(--shadow);
         }
         .brand {
-          margin: 0 0 14px;
-          font-size: clamp(28px, 7vw, 42px);
+          margin: 0 0 10px;
+          font-size: clamp(24px, 6.6vw, 38px);
           font-weight: 700;
           line-height: 0.98;
           letter-spacing: -0.05em;
@@ -791,18 +791,18 @@ final class PadBrowserModel: NSObject, ObservableObject {
         form {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
         .search {
           flex: 1 1 auto;
           width: 100%;
-          height: 52px;
-          padding: 0 18px;
-          border-radius: 18px;
+          height: 46px;
+          padding: 0 15px;
+          border-radius: 16px;
           border: 1px solid var(--fieldStroke);
           background: var(--field);
           color: var(--text);
-          font-size: 16px;
+          font-size: 15px;
           outline: none;
         }
         .search::placeholder { color: color-mix(in srgb, var(--subtle) 78%, transparent); }
@@ -811,16 +811,16 @@ final class PadBrowserModel: NSObject, ObservableObject {
           box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
         button {
-          width: 46px;
-          height: 46px;
-          flex: 0 0 46px;
+          width: 42px;
+          height: 42px;
+          flex: 0 0 42px;
           padding: 0;
           border-radius: 999px;
           border: 1px solid color-mix(in srgb, var(--stroke) 82%, transparent);
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--field) 88%, white 12%) 0%, color-mix(in srgb, var(--field) 68%, transparent) 100%);
           color: var(--text);
-          font: 600 18px -apple-system, BlinkMacSystemFont, sans-serif;
+          font: 600 17px -apple-system, BlinkMacSystemFont, sans-serif;
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.34),
             0 10px 24px rgba(15,23,42,0.14);
@@ -836,20 +836,20 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         @media (max-width: 640px) {
           .panel {
-            width: min(100%, calc(100vw - 14px));
-            padding: 18px 14px 14px;
-            border-radius: 22px;
+            width: min(100%, calc(100vw - 10px));
+            padding: 14px 12px 12px;
+            border-radius: 20px;
           }
-          .brand { font-size: 30px; margin-bottom: 12px; }
+          .brand { font-size: 26px; margin-bottom: 8px; }
           .search, button {
-            height: 48px;
-            border-radius: 16px;
+            height: 42px;
+            border-radius: 15px;
           }
           button {
-            width: 44px;
-            flex-basis: 44px;
+            width: 40px;
+            flex-basis: 40px;
             border-radius: 999px;
-            font-size: 17px;
+            font-size: 16px;
           }
         }
         </style>

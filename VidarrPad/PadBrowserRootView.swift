@@ -1262,6 +1262,7 @@ private struct PadLibraryPanelSheet: View {
 
 private struct PadTabThumbnail: View {
     @ObservedObject var tab: PadBrowserModel.Tab
+    @GestureState private var swipeTranslation: CGSize = .zero
     let isSelected: Bool
     let isBookmarked: Bool
     let showsBirthPulse: Bool
@@ -1334,20 +1335,23 @@ private struct PadTabThumbnail: View {
                 }
             }
             .overlay {
-                if showsDestructiveDismiss {
+                if destructiveVisualProgress > 0 {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.red.opacity(0.32))
+                        .fill(Color.red.opacity(0.18 + (0.18 * destructiveVisualProgress)))
                         .overlay(
                             Image(systemName: "xmark")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(Color.white.opacity(0.96))
+                                .scaleEffect(0.84 + (0.16 * destructiveVisualProgress))
+                                .opacity(0.72 + (0.28 * destructiveVisualProgress))
                         )
-                        .transition(.opacity)
                 }
             }
             .shadow(color: shadowColor, radius: 16, y: 6)
-            .scaleEffect(showsDestructiveDismiss ? 0.92 : 1)
+            .scaleEffect(destructiveVisualProgress > 0 ? (1 - (0.08 * destructiveVisualProgress)) : 1)
+            .offset(y: previewOffsetY)
             .animation(.easeOut(duration: 0.14), value: showsDestructiveDismiss)
+            .animation(.easeOut(duration: 0.10), value: destructivePreviewProgress)
         }
         .buttonStyle(.plain)
         .highPriorityGesture(
@@ -1358,6 +1362,9 @@ private struct PadTabThumbnail: View {
         )
         .simultaneousGesture(
             DragGesture(minimumDistance: 14)
+                .updating($swipeTranslation) { value, state, _ in
+                    state = value.translation
+                }
                 .onEnded { value in
                     guard value.translation.height >= 24 else { return }
                     guard abs(value.translation.height) > abs(value.translation.width) * 1.2 else { return }
@@ -1370,6 +1377,20 @@ private struct PadTabThumbnail: View {
                     onLongPress()
                 }
         )
+    }
+
+    private var destructivePreviewProgress: CGFloat {
+        guard swipeTranslation.height > 0 else { return 0 }
+        guard abs(swipeTranslation.height) > abs(swipeTranslation.width) * 1.1 else { return 0 }
+        return min(1, max(0, (swipeTranslation.height - 8) / 32))
+    }
+
+    private var destructiveVisualProgress: CGFloat {
+        max(destructivePreviewProgress, showsDestructiveDismiss ? 1 : 0)
+    }
+
+    private var previewOffsetY: CGFloat {
+        min(12, max(0, swipeTranslation.height * 0.24))
     }
 
     private var borderColor: Color {
@@ -1393,8 +1414,8 @@ private struct PadTabThumbnail: View {
     }
 
     private var backgroundFill: Color {
-        if showsDestructiveDismiss {
-            return Color.red.opacity(0.24)
+        if destructiveVisualProgress > 0 {
+            return Color.red.opacity(0.16 + (0.16 * destructiveVisualProgress))
         }
         return isSelected ? Color.white.opacity(0.22) : Color.black.opacity(0.14)
     }

@@ -405,7 +405,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let verticalExcursion = maxY - minY
         guard verticalExcursion <= 20 else { return false }
 
-        let action: PadGestureAction = displacementX < 0 ? .previousTab : .nextTab
+        let action: PadGestureAction = displacementX < 0 ? .nextTab : .previousTab
         interactiveTabSwipeActive = true
         interactiveTabSwipeTotalX = displacementX
         activeHorizontalAction = action
@@ -453,9 +453,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private func mapAction(name: String) -> PadGestureAction? {
         switch name {
         case "Left":
-            return .previousTab
-        case "Right":
             return .nextTab
+        case "Right":
+            return .previousTab
         case "DownRight":
             return .closeTab
         case "DownRightDownRight":

@@ -125,58 +125,28 @@ struct PadBrowserRootView: View {
     }
 
     private var webLayer: some View {
-        GeometryReader { proxy in
-            ZStack {
-                if let transition = tabSwitchTransition {
-                    let gap: CGFloat = 16
-                    let width = max(proxy.size.width, 1)
-                    let travel = width + gap
-                    let fromX = -transition.direction * travel * tabSwitchProgress
-                    let toX = transition.direction * travel * (1 - tabSwitchProgress)
-                    let fromEdge = fromX + (transition.direction > 0 ? width : 0)
-                    let toEdge = toX + (transition.direction > 0 ? 0 : width)
-                    let gapX = ((fromEdge + toEdge) * 0.5) - (gap * 0.5)
-                    let dimOpacity = transition.mode == .newTab ? 0.14 : 0.10
+        ZStack {
+            PadWebStageView(
+                selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
+                transitionFromWebView: tabSwitchTransition?.fromTab.webView,
+                transitionToWebView: tabSwitchTransition?.toTab.webView,
+                transitionDirection: tabSwitchTransition?.direction,
+                emphasizeBirth: tabSwitchTransition?.mode == .newTab,
+                transitionProgress: tabSwitchProgress,
+                gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
+                    ? gestureConfiguration
+                    : nil
+            )
+            .ignoresSafeArea()
 
-                    PadWebView(
-                        webView: transition.fromTab.webView,
-                        gestureConfiguration: interactiveTargetID != nil ? gestureConfiguration : nil
-                    )
-                        .id("from-\(transition.id)")
-                        .ignoresSafeArea()
-                        .offset(x: fromX)
-                        .overlay(Color.black.opacity(dimOpacity * tabSwitchProgress))
-                    PadWebView(webView: transition.toTab.webView)
-                        .id("to-\(transition.id)")
-                        .ignoresSafeArea()
-                        .offset(x: toX)
-                        .scaleEffect(transition.mode == .newTab ? (0.985 + (0.015 * tabSwitchProgress)) : 1, anchor: .center)
-                        .shadow(color: .black.opacity(0.14), radius: transition.mode == .newTab ? 16 : 10, y: 4)
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-                        .frame(width: gap, height: proxy.size.height)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.12), radius: 10, y: 0)
-                        .offset(x: gapX)
-                } else if let tab = model.selectedTab {
-                    PadWebView(
-                        webView: tab.webView,
-                        gestureConfiguration: gestureConfiguration
-                    )
-                        .id(tab.id)
-                        .ignoresSafeArea()
-                } else {
-                    ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+            if tabSwitchTransition == nil, model.selectedTab == nil {
+                ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-                if let gestureHUD {
-                    PadGestureHUD(state: gestureHUD)
-                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                }
+            if let gestureHUD {
+                PadGestureHUD(state: gestureHUD)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
     }

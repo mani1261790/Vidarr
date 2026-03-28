@@ -334,6 +334,17 @@ final class PadBrowserPreferences {
         }
         harmfulSiteAllowedHosts = hosts
     }
+
+    var bookmarkSyncEnabled: Bool {
+        FileManager.default.ubiquityIdentityToken != nil
+    }
+
+    var bookmarkSyncStatusText: String {
+        if bookmarkSyncEnabled {
+            return "この Apple ID の Vidarr とブックマークを同期します"
+        }
+        return "iCloud にサインインし、iCloud 対応の署名で動かすとブックマーク同期を使えます"
+    }
 }
 
 struct PadBrowsingItem: Codable, Identifiable {

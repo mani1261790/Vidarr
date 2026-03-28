@@ -1034,7 +1034,18 @@ private struct PadSettingsSheet: View {
                         }
 
                         Section("ブックマーク共有") {
-                            Text("同じ Apple ID で使っている Vidarr 間では、ブックマークを自動で共有します。")
+                            HStack {
+                                Label(
+                                    PadBrowserPreferences.shared.bookmarkSyncEnabled ? "同期中" : "未接続",
+                                    systemImage: PadBrowserPreferences.shared.bookmarkSyncEnabled ? "checkmark.icloud.fill" : "icloud.slash"
+                                )
+                                .foregroundStyle(PadBrowserPreferences.shared.bookmarkSyncEnabled ? .green : .secondary)
+                                Spacer()
+                            }
+                            Text(PadBrowserPreferences.shared.bookmarkSyncStatusText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Text("同期されるのはブックマークのみです。履歴、開いているタブ、Cookie、ダウンロード一覧は同期しません。")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }

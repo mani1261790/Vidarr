@@ -82,6 +82,7 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] ダウンロード先フォルダ設定
 - [x] 閲覧データ削除、設定リセット
 - [x] プロファイル切替の土台実装
+- [x] 同じ Apple ID 間でのブックマーク同期用コード（iCloud Key-Value Store）
 
 開発基盤:
 - [x] `VidarrCore` 共有パッケージを追加
@@ -89,6 +90,17 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] `GestureRecognizer` 単体テスト
 - [ ] iPad target 追加
 - [ ] iPad UI 実装
+
+### ブックマーク同期
+- Vidarr は、同じ Apple ID で使っている Vidarr 間で `ブックマークだけ` を同期します。
+- 次のデータは同期しません:
+  - 履歴
+  - 開いているタブ
+  - Cookie / サイトデータ
+  - ダウンロード一覧
+  - サイトごとの権限状態
+- 同期コードは入っていますが、実際に使うには `Signing & Capabilities` で `iCloud` を有効にし、`Key-value storage` が使える Team で署名する必要があります。
+- `Personal Team` では iCloud capability を使えないため、ローカル開発ビルドでは同期が無効のままになることがあります。
 
 ### テスト実行
 ```bash

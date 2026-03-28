@@ -4,6 +4,7 @@ import WebKit
 
 struct PadBrowserRootView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     enum LibraryPanel: String, Identifiable {
         case history
@@ -63,8 +64,29 @@ struct PadBrowserRootView: View {
     @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     @FocusState private var editingURLFocused: Bool
 
-    private let stackedStripLeadingWidth: CGFloat = 164
-    private let stackedStripTrailingWidth: CGFloat = 82
+    private var isPhoneLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact
+    }
+
+    private var stackedStripLeadingWidth: CGFloat { isPhoneLayout ? 78 : 164 }
+    private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 34 : 82 }
+    private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 10 : 18 }
+    private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 4 : 6 }
+    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 8 : 12 }
+    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 6 : 10 }
+    private var chromeButtonSize: CGFloat { isPhoneLayout ? 28 : 30 }
+    private var groupButtonSize: CGFloat { isPhoneLayout ? 28 : 30 }
+    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 64 : 80 }
+    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 38 : 46 }
+    private var tabStripHeight: CGFloat { isPhoneLayout ? 44 : 52 }
+    private var tabStripSpacing: CGFloat { isPhoneLayout ? 8 : 12 }
+    private var barCornerRadius: CGFloat { isPhoneLayout ? 18 : 20 }
+    private var groupStripHeight: CGFloat { isPhoneLayout ? 44 : 52 }
+    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 52 : 60 }
+    private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
+    private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
+    private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
+    private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -79,13 +101,13 @@ struct PadBrowserRootView: View {
             }
             if showsGroupStripStack {
                 groupStripStackOverlay
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, bottomBarHorizontalPadding)
+                    .padding(.bottom, bottomBarBottomPadding)
                     .transition(.identity)
             }
             bottomBar
-                .padding(.horizontal, 18)
-                .padding(.bottom, 6)
+                .padding(.horizontal, bottomBarHorizontalPadding)
+                .padding(.bottom, bottomBarBottomPadding)
                 .offset(y: bottomBarVisible ? 0 : 96)
                 .opacity(bottomBarVisible ? 1 : 0.001)
                 .allowsHitTesting(bottomBarVisible)
@@ -128,7 +150,7 @@ struct PadBrowserRootView: View {
                     model.findInSelectedPage(query, completion: completion)
                 }
             )
-            .presentationDetents([.medium])
+            .presentationDetents(compactSheetDetents)
             .presentationDragIndicator(.visible)
             .onAppear {
                 editingURL = tab.urlString
@@ -143,7 +165,7 @@ struct PadBrowserRootView: View {
                     showBottomBar()
                 }
             )
-            .presentationDetents([.fraction(0.26)])
+            .presentationDetents(quickSearchDetents)
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingSettings) {
@@ -156,7 +178,7 @@ struct PadBrowserRootView: View {
                     showingSettings = false
                 }
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents(settingsSheetDetents)
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $activeLibraryPanel) { panel in
@@ -164,7 +186,7 @@ struct PadBrowserRootView: View {
                 panel: panel,
                 model: model
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents(librarySheetDetents)
             .presentationDragIndicator(.visible)
         }
         .alert(item: $model.pendingHarmfulSitePrompt) { prompt in
@@ -242,8 +264,8 @@ struct PadBrowserRootView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 10) {
+        HStack(spacing: bottomBarSpacing) {
+            HStack(spacing: chromeControlSpacing) {
                 chromeButton(systemName: "chevron.left", disabled: !model.canGoBack(), action: model.goBack)
                 chromeButton(systemName: "chevron.right", disabled: !model.canGoForward(), action: model.goForward)
                 chromeButton(systemName: "arrow.clockwise", disabled: false, action: model.reload)
@@ -253,7 +275,7 @@ struct PadBrowserRootView: View {
 
             tabStrip
 
-            HStack(spacing: 10) {
+            HStack(spacing: chromeControlSpacing) {
                 chromeButton(systemName: "gearshape", disabled: false) {
                     showingSettings = true
                 }
@@ -263,16 +285,16 @@ struct PadBrowserRootView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.vertical, isPhoneLayout ? 5 : 6)
         .background(
-            PadLiquidGlassBackground(cornerRadius: 20)
+            PadLiquidGlassBackground(cornerRadius: barCornerRadius)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous)
                 .strokeBorder(chromeForegroundColor.opacity(0.16), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.11), radius: 14, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.11), radius: isPhoneLayout ? 12 : 14, y: isPhoneLayout ? 4 : 6)
     }
 
     private var groupSwitcher: some View {
@@ -287,10 +309,10 @@ struct PadBrowserRootView: View {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(Color(uiColor: model.currentGroup.accentColor).opacity(0.14))
                 Image(systemName: model.currentGroup.systemImage)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: isPhoneLayout ? 14 : 15, weight: .semibold))
                     .foregroundStyle(chromeForegroundColor)
             }
-            .frame(width: 30, height: 30)
+            .frame(width: groupButtonSize, height: groupButtonSize)
         }
         .buttonStyle(.plain)
     }
@@ -299,17 +321,23 @@ struct PadBrowserRootView: View {
         let groups = stackedGroups
         return ZStack(alignment: .bottom) {
             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                compactGroupStrip(for: group)
-                    .offset(y: showsGroupStripStack ? CGFloat(-((index + 1) * 60)) : 0)
-                    .opacity(showsGroupStripStack ? 1 : 0)
-                    .scaleEffect(showsGroupStripStack ? 1 : 0.96, anchor: .bottom)
-                    .animation(
-                        .spring(response: 0.34, dampingFraction: 0.86).delay(Double(index) * 0.03),
-                        value: showsGroupStripStack
-                    )
+                groupStripStackRow(for: group, index: index)
             }
         }
         .allowsHitTesting(showsGroupStripStack)
+    }
+
+    private func groupStripStackRow(for group: PadBrowserTabGroup, index: Int) -> some View {
+        let yOffset = showsGroupStripStack ? -(CGFloat(index + 1) * groupStripOffsetStep) : 0
+        let rowScale: CGFloat = showsGroupStripStack ? 1 : 0.96
+        let rowOpacity: CGFloat = showsGroupStripStack ? 1 : 0
+        let animation = Animation.spring(response: 0.34, dampingFraction: 0.86).delay(Double(index) * 0.03)
+
+        return compactGroupStrip(for: group)
+            .offset(y: yOffset)
+            .opacity(rowOpacity)
+            .scaleEffect(rowScale, anchor: .bottom)
+            .animation(animation, value: showsGroupStripStack)
     }
 
     private var bottomRevealZone: some View {
@@ -366,7 +394,7 @@ struct PadBrowserRootView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 52)
+        .frame(height: tabStripHeight)
     }
 
     private func interactiveTabStrip(
@@ -376,7 +404,7 @@ struct PadBrowserRootView: View {
     ) -> some View {
         GeometryReader { stripProxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: tabStripSpacing) {
                     ForEach(tabs) { tab in
                         PadTabThumbnail(
                             tab: tab,
@@ -406,7 +434,9 @@ struct PadBrowserRootView: View {
                                     animateDestructiveClose(for: tab.id)
                                 }
                                 showBottomBar()
-                            }
+                            },
+                            thumbnailWidth: tabThumbnailWidth,
+                            thumbnailHeight: tabThumbnailHeight
                         )
                         .background(
                             GeometryReader { proxy in
@@ -446,20 +476,20 @@ struct PadBrowserRootView: View {
                     showBottomBar(persist: true)
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: isPhoneLayout ? 13 : 14, weight: .semibold))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(chromeForegroundColor.opacity(0.92))
 
                 Image(systemName: group.systemImage)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: isPhoneLayout ? 14 : 15, weight: .semibold))
                     .foregroundStyle(Color(uiColor: group.accentColor))
             }
             .frame(width: stackedStripLeadingWidth, alignment: .leading)
 
             GeometryReader { stripProxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: tabStripSpacing) {
                         if groupTabs.isEmpty {
                             RoundedRectangle(cornerRadius: 13, style: .continuous)
                                 .fill(Color(uiColor: group.accentColor).opacity(0.10))
@@ -467,7 +497,7 @@ struct PadBrowserRootView: View {
                                     RoundedRectangle(cornerRadius: 13, style: .continuous)
                                         .stroke(Color(uiColor: group.accentColor).opacity(0.26), lineWidth: 1)
                                 )
-                                .frame(width: 80, height: 46)
+                                .frame(width: tabThumbnailWidth, height: tabThumbnailHeight)
                         } else {
                             ForEach(groupTabs) { tab in
                                 PadTabThumbnail(
@@ -484,7 +514,9 @@ struct PadBrowserRootView: View {
                                     },
                                     onLongPress: {},
                                     onDoubleTap: {},
-                                    onSwipeDown: {}
+                                    onSwipeDown: {},
+                                    thumbnailWidth: tabThumbnailWidth,
+                                    thumbnailHeight: tabThumbnailHeight
                                 )
                             }
                         }
@@ -499,15 +531,15 @@ struct PadBrowserRootView: View {
             Color.clear
                 .frame(width: stackedStripTrailingWidth, height: 1)
         }
-        .frame(height: 52)
-        .background(PadLiquidGlassBackground(cornerRadius: 18))
+        .frame(height: groupStripHeight)
+        .background(PadLiquidGlassBackground(cornerRadius: isPhoneLayout ? 16 : 18))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous)
                 .stroke(Color(uiColor: group.accentColor).opacity(0.20), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: isPhoneLayout ? 8 : 10, y: 4)
+        .contentShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 16 : 18, style: .continuous))
         .onTapGesture {
             if groupTabs.isEmpty {
                 model.switchGroup(group)
@@ -524,8 +556,8 @@ struct PadBrowserRootView: View {
     private func chromeButton(systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
-                .frame(width: 30, height: 30)
+                .font(.system(size: isPhoneLayout ? 14 : 15, weight: .semibold))
+                .frame(width: chromeButtonSize, height: chromeButtonSize)
         }
         .buttonStyle(.plain)
         .foregroundStyle(disabled ? chromeDisabledColor : chromeForegroundColor)
@@ -1505,6 +1537,8 @@ private struct PadTabThumbnail: View {
     let onLongPress: () -> Void
     let onDoubleTap: () -> Void
     let onSwipeDown: () -> Void
+    let thumbnailWidth: CGFloat
+    let thumbnailHeight: CGFloat
 
     var body: some View {
         Button(action: onSelect) {
@@ -1532,7 +1566,7 @@ private struct PadTabThumbnail: View {
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .padding(3)
             }
-            .frame(width: 80, height: 46)
+            .frame(width: thumbnailWidth, height: thumbnailHeight)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)

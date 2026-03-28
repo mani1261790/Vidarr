@@ -598,7 +598,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
           font-weight: 700;
           line-height: 0.98;
           letter-spacing: -0.05em;
-          font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, sans-serif;
+          font-family: "Snell Roundhand", "Apple Chancery", "Savoye LET", cursive;
+          font-weight: 600;
+          letter-spacing: -0.02em;
         }
         form {
           display: flex;

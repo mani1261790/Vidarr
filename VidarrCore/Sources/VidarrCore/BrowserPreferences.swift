@@ -50,6 +50,18 @@ public final class BrowserPreferences {
         }
     }
 
+    public struct AppleAccount: Equatable {
+        public let userID: String
+        public let email: String?
+        public let displayName: String?
+
+        public init(userID: String, email: String?, displayName: String?) {
+            self.userID = userID
+            self.email = email
+            self.displayName = displayName
+        }
+    }
+
     private enum Key {
         static let homePageURL = "prefs.homePageURL"
         static let searchTemplate = "prefs.searchTemplate"
@@ -68,6 +80,9 @@ public final class BrowserPreferences {
         static let sendDoNotTrack = "prefs.sendDoNotTrack"
         static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
         static let reopenTabsOnLaunch = "prefs.reopenTabsOnLaunch"
+        static let appleAccountUserID = "prefs.appleAccountUserID"
+        static let appleAccountEmail = "prefs.appleAccountEmail"
+        static let appleAccountDisplayName = "prefs.appleAccountDisplayName"
     }
 
     private let defaults: UserDefaults
@@ -281,6 +296,29 @@ public final class BrowserPreferences {
             defaults.set(newValue, forKey: Key.reopenTabsOnLaunch)
             notifyChanged()
         }
+    }
+
+    public var appleAccount: AppleAccount? {
+        guard let userID = defaults.string(forKey: Key.appleAccountUserID), !userID.isEmpty else {
+            return nil
+        }
+        let email = defaults.string(forKey: Key.appleAccountEmail)
+        let displayName = defaults.string(forKey: Key.appleAccountDisplayName)
+        return AppleAccount(userID: userID, email: email, displayName: displayName)
+    }
+
+    public func setAppleAccount(userID: String, email: String?, displayName: String?) {
+        defaults.set(userID, forKey: Key.appleAccountUserID)
+        defaults.set(email, forKey: Key.appleAccountEmail)
+        defaults.set(displayName, forKey: Key.appleAccountDisplayName)
+        notifyChanged()
+    }
+
+    public func clearAppleAccount() {
+        defaults.removeObject(forKey: Key.appleAccountUserID)
+        defaults.removeObject(forKey: Key.appleAccountEmail)
+        defaults.removeObject(forKey: Key.appleAccountDisplayName)
+        notifyChanged()
     }
 
     public var homePageURL: URL {

@@ -177,6 +177,16 @@ public final class BookmarkStore {
         persist()
     }
 
+    public var isCloudSyncAvailable: Bool {
+        FileManager.default.ubiquityIdentityToken != nil
+    }
+
+    public func forceSynchronize() {
+        cloudStore.synchronize()
+        mergeFromCloudIfNeeded(force: true)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+
     private func normalizedTitle(_ title: String?, fallbackURL: URL) -> String {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty { return trimmed }

@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import AuthenticationServices
 import VidarrCore
 import WebKit
 
@@ -629,6 +630,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private let prefs = BrowserPreferences.shared
     private let profileManager = BrowserProfileManager.shared
+    private let appleSignInCoordinator = AppleSignInCoordinator()
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
@@ -643,6 +645,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let addProfileButton = NSButton(title: "新しいプロファイルを追加", target: nil, action: nil)
     private let contentLanguagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let generalSummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let syncSummaryLabel = NSTextField(wrappingLabelWithString: "")
+    private let appleAccountLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureListLabel = NSTextField(wrappingLabelWithString: "")
     private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
@@ -657,6 +661,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let restoreClosedTabHistoryCheckbox = NSButton(checkboxWithTitle: "閉じたタブを復元したとき、前に見ていたページ履歴も戻す", target: nil, action: nil)
     private let reopenTabsOnLaunchCheckbox = NSButton(checkboxWithTitle: "前回終了時のタブを次回も開く", target: nil, action: nil)
     private let clearDataButton = NSButton(title: "閲覧データを削除", target: nil, action: nil)
+    private let signInWithAppleButton = SignInWithAppleButtonHost()
+    private let signOutAppleButton = NSButton(title: "Apple アカウント連携を解除", target: nil, action: nil)
+    private let syncNowButton = NSButton(title: "今すぐ同期", target: nil, action: nil)
     private let sensitivityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let gestureTestView = GesturePracticeView(frame: .zero)
     private let summaryLabel = NSTextField(labelWithString: "")
@@ -836,6 +843,18 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             $0.target = self
             $0.controlSize = .regular
         }
+        signOutAppleButton.translatesAutoresizingMaskIntoConstraints = false
+        signOutAppleButton.target = self
+        signOutAppleButton.action = #selector(signOutAppleAccount)
+        signOutAppleButton.controlSize = .regular
+        syncNowButton.translatesAutoresizingMaskIntoConstraints = false
+        syncNowButton.target = self
+        syncNowButton.action = #selector(forceBookmarkSync)
+        syncNowButton.controlSize = .regular
+        signInWithAppleButton.translatesAutoresizingMaskIntoConstraints = false
+        signInWithAppleButton.onPress = { [weak self] in
+            self?.beginAppleSignIn()
+        }
         clearDataButton.controlSize = .regular
         openDownloadsButton.action = #selector(openDownloads)
         openHistoryButton.action = #selector(openHistory)
@@ -853,7 +872,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             clearDownloadFolderButton,
             clearDataButton,
             resetButton,
-            addProfileButton
+            addProfileButton,
+            signOutAppleButton,
+            syncNowButton
         ].forEach {
             $0.bezelStyle = .rounded
         }
@@ -889,6 +910,20 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         generalStack.addArrangedSubview(generalGrid)
         generalGrid.addArrangedSubview(openDownloadsButton)
         generalGrid.addArrangedSubview(openHistoryButton)
+        let syncTitle = makeFieldLabel("Apple アカウントと同期")
+        generalStack.addArrangedSubview(syncTitle)
+        generalStack.addArrangedSubview(configureSummaryLabel(syncSummaryLabel))
+        generalStack.addArrangedSubview(configureSummaryLabel(appleAccountLabel))
+        let signInRow = makeControlRow(for: signInWithAppleButton, height: 34)
+        generalStack.addArrangedSubview(signInRow)
+        let syncControlsRow = NSStackView()
+        syncControlsRow.translatesAutoresizingMaskIntoConstraints = false
+        syncControlsRow.orientation = .horizontal
+        syncControlsRow.alignment = .centerY
+        syncControlsRow.spacing = 10
+        syncControlsRow.addArrangedSubview(syncNowButton)
+        syncControlsRow.addArrangedSubview(signOutAppleButton)
+        generalStack.addArrangedSubview(makeControlRow(for: syncControlsRow, height: 30))
 
         let gestureSection = makeSectionContentStack()
         let gestureStack = gestureSection
@@ -959,6 +994,10 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             profileRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             contentLanguageRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             generalGrid.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            syncSummaryLabel.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            appleAccountLabel.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            signInRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
+            syncControlsRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
 
             gestureListLabel.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
@@ -1154,10 +1193,30 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             contentLanguagePopup.selectItem(at: 0)
         }
-        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n前回タブの復元: \(prefs.reopenTabsOnLaunch ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")\nブックマーク共有: 同じ Apple ID の Vidarr 間で自動同期"
+        let syncAvailable = BookmarkStore.shared.isCloudSyncAvailable
+        generalSummaryLabel.stringValue = "現在のスタートページ: \(homeHost)\n検索先: \(searchHost)\nWebページの表示言語: \(prefs.preferredContentLanguage.displayName)\n更新通知: \(prefs.updatesEnabled ? "オン" : "オフ")\n前回タブの復元: \(prefs.reopenTabsOnLaunch ? "オン" : "オフ")\n閉じたタブの履歴復元: \(prefs.restoreClosedTabPageHistory ? "オン" : "オフ")\nブックマーク同期: \(syncAvailable ? "利用可能" : "未接続")"
         if let summary = generalSummaryLabel.stringValue.isEmpty ? nil : Optional(generalSummaryLabel.stringValue) {
             generalSummaryLabel.stringValue = "現在のプロファイル: \(profileManager.currentProfile.name)\n" + summary
         }
+        let bookmarkCount = BookmarkStore.shared.all().count
+        syncSummaryLabel.stringValue = "同期対象: ブックマークのみ\niCloud 経由の状態: \(syncAvailable ? "利用可能" : "未接続")\nこのプロファイルのブックマーク: \(bookmarkCount)件"
+        if let account = prefs.appleAccount {
+            if let displayName = account.displayName, !displayName.isEmpty,
+               let email = account.email, !email.isEmpty {
+                appleAccountLabel.stringValue = "Apple アカウント: \(displayName)\n\(email)"
+            } else if let email = account.email, !email.isEmpty {
+                appleAccountLabel.stringValue = "Apple アカウント: \(email)"
+            } else if let displayName = account.displayName, !displayName.isEmpty {
+                appleAccountLabel.stringValue = "Apple アカウント: \(displayName)"
+            } else {
+                appleAccountLabel.stringValue = "Apple アカウント: 連携済み"
+            }
+        } else {
+            appleAccountLabel.stringValue = "Apple アカウント: 未連携"
+        }
+        signInWithAppleButton.isHidden = (prefs.appleAccount != nil)
+        signOutAppleButton.isHidden = (prefs.appleAccount == nil)
+        syncNowButton.isEnabled = syncAvailable
 
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureListLabel.stringValue = [
@@ -1184,7 +1243,6 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         ].joined(separator: " / ")
 
         let historyCount = BrowsingHistoryStore.shared.all().count
-        let bookmarkCount = BookmarkStore.shared.all().count
         let downloadCount = DownloadStore.shared.all().count
         let contentExceptionCount = prefs.contentBlockingDisabledHosts.count
         let harmfulExceptionCount = prefs.harmfulSiteAllowedHosts.count
@@ -1406,6 +1464,59 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let index = sender.indexOfSelectedItem
         guard index >= 0, index < BrowserPreferences.GestureSensitivity.allCases.count else { return }
         prefs.gestureSensitivity = BrowserPreferences.GestureSensitivity.allCases[index]
+        loadValues()
+    }
+
+    @objc private func beginAppleSignIn() {
+        guard let window else { return }
+        appleSignInCoordinator.begin(window: window) { [weak self] result in
+            guard let self else { return }
+            let fullName = [result.fullName?.givenName, result.fullName?.familyName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            let displayName = fullName.isEmpty ? nil : fullName
+            self.prefs.setAppleAccount(userID: result.userID, email: result.email, displayName: displayName)
+            BookmarkStore.shared.forceSynchronize()
+            self.loadValues()
+        } onFailure: { [weak self] error in
+            guard let self else { return }
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                return
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Apple でサインインできませんでした"
+            alert.informativeText = error.localizedDescription
+            if let window = self.window {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
+        }
+    }
+
+    @objc private func signOutAppleAccount() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Apple アカウント連携を解除しますか？"
+        alert.informativeText = "Vidarr に保存している Apple アカウント表示情報だけを削除します。システムの Apple ID や iCloud からはサインアウトしません。"
+        alert.addButton(withTitle: "解除")
+        alert.addButton(withTitle: "キャンセル")
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            self.prefs.clearAppleAccount()
+            self.loadValues()
+        }
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
+    }
+
+    @objc private func forceBookmarkSync() {
+        BookmarkStore.shared.forceSynchronize()
         loadValues()
     }
 
@@ -1835,5 +1946,97 @@ private final class GesturePracticeView: NSView {
         case "S": return "S 検索"
         default: return gesture
         }
+    }
+}
+
+private final class SignInWithAppleButtonHost: NSView {
+    var onPress: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.target = self
+        button.action = #selector(handlePress)
+        addSubview(button)
+
+        NSLayoutConstraint.activate([
+            button.leadingAnchor.constraint(equalTo: leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: trailingAnchor),
+            button.topAnchor.constraint(equalTo: topAnchor),
+            button.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: 32)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func handlePress() {
+        onPress?()
+    }
+}
+
+private final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    struct Result {
+        let userID: String
+        let email: String?
+        let fullName: PersonNameComponents?
+    }
+
+    private weak var presentationWindow: NSWindow?
+    private var onSuccess: ((Result) -> Void)?
+    private var onFailure: ((Error) -> Void)?
+
+    func begin(
+        window: NSWindow,
+        onSuccess: @escaping (Result) -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
+        presentationWindow = window
+        self.onSuccess = onSuccess
+        self.onFailure = onFailure
+
+        let provider = ASAuthorizationAppleIDProvider()
+        let request = provider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        controller.performRequests()
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        presentationWindow ?? NSApp.keyWindow ?? NSWindow()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            onFailure?(NSError(domain: "VidarrAppleSignIn", code: 1, userInfo: [NSLocalizedDescriptionKey: "Apple ID credential could not be resolved."]))
+            clearCallbacks()
+            return
+        }
+
+        onSuccess?(Result(
+            userID: credential.user,
+            email: credential.email,
+            fullName: credential.fullName
+        ))
+        clearCallbacks()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        onFailure?(error)
+        clearCallbacks()
+    }
+
+    private func clearCallbacks() {
+        onSuccess = nil
+        onFailure = nil
+        presentationWindow = nil
     }
 }

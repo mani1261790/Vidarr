@@ -471,9 +471,18 @@ struct PadBrowserRootView: View {
         let selectedTabID = model.selectedTabID(in: group)
         return HStack(spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: group.systemImage)
-                    .font(.system(size: isPhoneLayout ? 14 : 15, weight: .semibold))
-                    .foregroundStyle(Color(uiColor: group.accentColor))
+                Button {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+                        model.switchGroup(group)
+                        dismissGroupStripStack()
+                    }
+                    showBottomBar()
+                } label: {
+                    Image(systemName: group.systemImage)
+                        .font(.system(size: isPhoneLayout ? 14 : 15, weight: .semibold))
+                        .foregroundStyle(Color(uiColor: group.accentColor))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.leading, isPhoneLayout ? 12 : 16)
             .frame(width: stackedStripLeadingWidth, alignment: .leading)
@@ -521,7 +530,9 @@ struct PadBrowserRootView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    model.closeAllTabs(in: group)
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
+                        model.closeAllTabs(in: group)
+                    }
                     showBottomBar(persist: true)
                 } label: {
                     Image(systemName: "trash")

@@ -466,8 +466,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         setState(state, for: group)
         if group == currentGroup {
             selectedSidebarTabID = selectedTab?.id
-            syncPublishedState()
         }
+        syncPublishedState()
         saveSessionSnapshot()
     }
 

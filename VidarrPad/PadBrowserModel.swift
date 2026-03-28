@@ -97,6 +97,40 @@ final class PadBrowserModel: NSObject, ObservableObject {
         saveSessionSnapshot()
     }
 
+    @discardableResult
+    func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1) -> Tab {
+        let webView = makeWebView()
+        let tab = Tab(webView: webView)
+        webView.navigationDelegate = self
+        let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
+        tab.historyURLs = resolvedHistory
+        tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
+        tabs.append(tab)
+        if let initialURL {
+            load(initialURL, in: webView)
+        } else {
+            loadBlankStartPage(in: webView)
+            captureThumbnail(for: tab)
+        }
+        saveSessionSnapshot()
+        return tab
+    }
+
+    func discardTab(id: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs.remove(at: index)
+        if tabs.isEmpty {
+            newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+            return
+        }
+        if selectedIndex >= tabs.count {
+            selectedIndex = max(0, tabs.count - 1)
+        }
+        selectedSidebarTabID = selectedTab?.id
+        syncAddressBar()
+        saveSessionSnapshot()
+    }
+
     func closeTab(id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs[index]

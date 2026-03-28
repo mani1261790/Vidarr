@@ -37,6 +37,7 @@ struct PadBrowserRootView: View {
     @State private var tabSwitchToken = UUID()
     @State private var interactiveTargetID: UUID?
     @State private var webViewportWidth: CGFloat = 1
+    @State private var edgePreviewTabID: UUID?
     @FocusState private var editingURLFocused: Bool
 
     var body: some View {
@@ -406,6 +407,7 @@ struct PadBrowserRootView: View {
         tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction, mode: .standard)
         tabSwitchProgress = 0
         interactiveTargetID = nil
+        edgePreviewTabID = nil
 
         withAnimation(.easeInOut(duration: 0.24)) {
             tabSwitchProgress = 1
@@ -432,7 +434,10 @@ struct PadBrowserRootView: View {
             targetIndex = currentIndex - 1
             direction = -1
         case .nextTab:
-            guard currentIndex < model.tabs.count - 1 else { return }
+            guard currentIndex < model.tabs.count - 1 else {
+                prepareRightEdgeNewTabPreview(totalX: totalX)
+                return
+            }
             targetIndex = currentIndex + 1
             direction = 1
         default:
@@ -444,6 +449,7 @@ struct PadBrowserRootView: View {
         if interactiveTargetID != toTab.id || tabSwitchTransition == nil {
             tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: direction, mode: .standard)
             interactiveTargetID = toTab.id
+            edgePreviewTabID = nil
         }
         let width = max(webViewportWidth, 1)
         let progress = abs(totalX) / max(width + 16, 1)
@@ -460,6 +466,10 @@ struct PadBrowserRootView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(190))
             guard tabSwitchToken == token else { return }
+            if let edgePreviewTabID {
+                model.discardTab(id: edgePreviewTabID)
+                self.edgePreviewTabID = nil
+            }
             tabSwitchTransition = nil
             tabSwitchProgress = 0
             interactiveTargetID = nil
@@ -526,6 +536,7 @@ struct PadBrowserRootView: View {
             if shouldCommit {
                 model.selectTab(id: targetID)
             }
+            edgePreviewTabID = nil
             tabSwitchTransition = nil
             tabSwitchProgress = 0
             interactiveTargetID = nil
@@ -543,6 +554,7 @@ struct PadBrowserRootView: View {
         tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: toTab, direction: 1, mode: .newTab)
         tabSwitchProgress = 0
         interactiveTargetID = nil
+        edgePreviewTabID = nil
 
         withAnimation(.easeInOut(duration: 0.20)) {
             tabSwitchProgress = 1
@@ -554,6 +566,28 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = nil
             tabSwitchProgress = 0
         }
+    }
+
+    private func prepareRightEdgeNewTabPreview(totalX: CGFloat) {
+        guard let fromTab = model.selectedTab else { return }
+        let previewTab: PadBrowserModel.Tab
+        if let edgePreviewTabID,
+           let existing = model.tabs.first(where: { $0.id == edgePreviewTabID }) {
+            previewTab = existing
+        } else {
+            let created = model.addBackgroundTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+            edgePreviewTabID = created.id
+            previewTab = created
+        }
+
+        if interactiveTargetID != previewTab.id || tabSwitchTransition == nil {
+            tabSwitchTransition = TabSwitchTransition(fromTab: fromTab, toTab: previewTab, direction: 1, mode: .newTab)
+            interactiveTargetID = previewTab.id
+        }
+
+        let width = max(webViewportWidth, 1)
+        let progress = abs(totalX) / max(width + 16, 1)
+        tabSwitchProgress = min(0.82, max(0, progress))
     }
 
     private func showBottomBar(persist: Bool = false) {

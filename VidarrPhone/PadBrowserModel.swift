@@ -703,6 +703,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
         webView.onSearchSelection = { [weak self] text in
             self?.openSelectionSearch(text)
         }
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInset = .zero
+        webView.scrollView.scrollIndicatorInsets = .zero
+        webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
         return webView
     }
 

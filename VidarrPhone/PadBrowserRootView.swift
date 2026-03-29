@@ -72,22 +72,32 @@ struct PadBrowserRootView: View {
     private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 30 : 82 }
     private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 10 : 18 }
     private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 8 : 6 }
-    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 10 : 12 }
-    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 8 : 10 }
-    private var chromeButtonSize: CGFloat { isPhoneLayout ? 32 : 30 }
-    private var groupButtonSize: CGFloat { isPhoneLayout ? 32 : 30 }
-    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 70 : 80 }
-    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 42 : 46 }
-    private var tabStripHeight: CGFloat { isPhoneLayout ? 50 : 52 }
+    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 11 : 12 }
+    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 9 : 10 }
+    private var chromeButtonSize: CGFloat { isPhoneLayout ? 34 : 30 }
+    private var groupButtonSize: CGFloat { isPhoneLayout ? 34 : 30 }
+    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 72 : 80 }
+    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 44 : 46 }
+    private var tabStripHeight: CGFloat { isPhoneLayout ? 56 : 52 }
     private var tabStripSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
-    private var barCornerRadius: CGFloat { isPhoneLayout ? 13 : 20 }
-    private var groupStripHeight: CGFloat { isPhoneLayout ? 32 : 52 }
-    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 36 : 60 }
+    private var barCornerRadius: CGFloat { isPhoneLayout ? 16 : 20 }
+    private var groupStripHeight: CGFloat { isPhoneLayout ? 36 : 52 }
+    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 48 : 60 }
     private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
     private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
+    private var chromeBarMaxWidth: CGFloat? {
+        guard isPhoneLayout else { return nil }
+        let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
+        return max(min(available, 390), 280)
+    }
+    private var groupStackRowMaxWidth: CGFloat? {
+        guard isPhoneLayout else { return nil }
+        let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
+        return max(min(available, 390), 280)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -105,7 +115,7 @@ struct PadBrowserRootView: View {
             if showsGroupStripStack {
                 groupStripStackOverlay
                     .padding(.horizontal, bottomBarHorizontalPadding)
-                    .padding(.bottom, bottomBarBottomPadding)
+                    .padding(.bottom, bottomBarBottomPadding + tabStripHeight + 10)
                     .transition(.identity)
             }
             bottomBar
@@ -294,6 +304,7 @@ struct PadBrowserRootView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.11), radius: isPhoneLayout ? 12 : 14, y: isPhoneLayout ? 4 : 6)
+        .frame(maxWidth: chromeBarMaxWidth)
     }
 
     private var groupSwitcher: some View {
@@ -307,9 +318,7 @@ struct PadBrowserRootView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: isPhoneLayout ? 9 : 11, style: .continuous)
                     .fill(Color(uiColor: model.currentGroup.accentColor).opacity(0.14))
-                Image(systemName: model.currentGroup.systemImage)
-                    .font(.system(size: isPhoneLayout ? 12 : 15, weight: .semibold))
-                    .foregroundStyle(chromeForegroundColor)
+                PadTabGroupSwitcherGlyph(color: chromeForegroundColor, isCompact: isPhoneLayout)
             }
             .frame(width: groupButtonSize, height: groupButtonSize)
         }
@@ -556,6 +565,7 @@ struct PadBrowserRootView: View {
         .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
         .shadow(color: .black.opacity(isPhoneLayout ? 0.06 : 0.08), radius: isPhoneLayout ? 6 : 10, y: isPhoneLayout ? 3 : 4)
         .contentShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
+        .frame(maxWidth: groupStackRowMaxWidth)
         .onTapGesture {
             if groupTabs.isEmpty {
                 model.switchGroup(group)
@@ -1200,6 +1210,29 @@ private struct PadTabFramePreferenceKey: PreferenceKey {
 
     static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct PadTabGroupSwitcherGlyph: View {
+    let color: Color
+    let isCompact: Bool
+
+    private var dotSize: CGFloat { isCompact ? 3.2 : 3.6 }
+    private var spacing: CGFloat { isCompact ? 2.2 : 2.6 }
+
+    var body: some View {
+        VStack(spacing: spacing) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: spacing) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 1.0, style: .continuous)
+                            .fill(color)
+                            .frame(width: dotSize, height: dotSize)
+                    }
+                }
+            }
+        }
+        .compositingGroup()
     }
 }
 

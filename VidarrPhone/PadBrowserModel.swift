@@ -729,7 +729,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             if (window.__vidarrLongPressInstalled) { return; }
             window.__vidarrLongPressInstalled = true;
 
-            const HOLD_MS = 420;
+            const HOLD_MS = 360;
             const MOVE_TOLERANCE = 14;
             let timer = null;
             const origin = { x: 0, y: 0 };
@@ -801,6 +801,17 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return true;
             }
 
+            const calloutStyle = document.createElement('style');
+            calloutStyle.textContent = `
+                a[href], img[src] {
+                    -webkit-touch-callout: none !important;
+                }
+                body > img:only-child {
+                    -webkit-touch-callout: default !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(calloutStyle);
+
             function payloadFromEvent(event) {
                 const path = event.composedPath ? event.composedPath() : [];
                 for (const node of path) {
@@ -871,6 +882,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
                     }
                 }, { capture: true, passive: true });
             });
+
+            document.addEventListener('contextmenu', (event) => {
+                const payload = payloadFromEvent(event);
+                if (!payload || !payload.href) { return; }
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
 
             document.addEventListener('click', (event) => {
                 if (!suppressTap.value) { return; }

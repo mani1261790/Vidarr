@@ -117,6 +117,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private var closedTabs: [ClosedTabSnapshot] = []
     private let privateWebsiteDataStore = WKWebsiteDataStore.nonPersistent()
     private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
+    private var scriptHandlerBoxes: [ObjectIdentifier: PadWeakScriptMessageHandler] = [:]
+    private static let longPressOpenMessageName = "vidarrLongPressOpen"
 
     override init() {
         super.init()
@@ -699,6 +701,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         } else if prefs.cookiePolicy == .privateOnly {
             configuration.websiteDataStore = .nonPersistent()
         }
+        installLongPressOpenInBackgroundIfNeeded(on: configuration.userContentController)
         let webView = PadInteractiveWebView(frame: .zero, configuration: configuration)
         webView.onSearchSelection = { [weak self] text in
             self?.openSelectionSearch(text)
@@ -708,6 +711,161 @@ final class PadBrowserModel: NSObject, ObservableObject {
         webView.scrollView.scrollIndicatorInsets = .zero
         webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
         return webView
+    }
+
+    private func installLongPressOpenInBackgroundIfNeeded(on contentController: WKUserContentController) {
+        let controllerID = ObjectIdentifier(contentController)
+        guard scriptHandlerBoxes[controllerID] == nil else { return }
+
+        let handlerBox = PadWeakScriptMessageHandler(target: self)
+        scriptHandlerBoxes[controllerID] = handlerBox
+        contentController.removeScriptMessageHandler(forName: Self.longPressOpenMessageName)
+        contentController.add(handlerBox, name: Self.longPressOpenMessageName)
+
+        let source = """
+        (() => {
+            if (window.__vidarrLongPressInstalled) { return; }
+            window.__vidarrLongPressInstalled = true;
+
+            const HOLD_MS = 420;
+            const MOVE_TOLERANCE = 14;
+            let timer = null;
+            const origin = { x: 0, y: 0 };
+            const active = { href: null };
+            const suppressTap = { value: false };
+            const indicator = document.createElement('div');
+            indicator.style.position = 'fixed';
+            indicator.style.width = '40px';
+            indicator.style.height = '40px';
+            indicator.style.marginLeft = '-20px';
+            indicator.style.marginTop = '-20px';
+            indicator.style.display = 'none';
+            indicator.style.alignItems = 'center';
+            indicator.style.justifyContent = 'center';
+            indicator.style.pointerEvents = 'none';
+            indicator.style.zIndex = '2147483647';
+            indicator.style.opacity = '0';
+            indicator.style.transition = 'opacity 120ms ease, transform 140ms ease';
+            indicator.style.transform = 'scale(0.92)';
+            indicator.innerHTML = `
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                    <circle cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.18)" stroke-width="3"></circle>
+                    <circle id="vidarrRing" cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="97.39" stroke-dashoffset="97.39"></circle>
+                </svg>
+            `;
+            const ring = indicator.querySelector('#vidarrRing');
+            document.documentElement.appendChild(indicator);
+
+            function resetTimer() {
+                if (timer !== null) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+            }
+
+            function hideIndicator(committed = false) {
+                resetTimer();
+                indicator.style.opacity = '0';
+                indicator.style.transform = committed ? 'scale(1.08)' : 'scale(0.94)';
+                ring.style.transition = 'none';
+                ring.style.strokeDashoffset = '97.39';
+                setTimeout(() => {
+                    indicator.style.display = 'none';
+                    indicator.style.transform = 'scale(0.92)';
+                }, committed ? 120 : 80);
+            }
+
+            function showIndicator(x, y) {
+                indicator.style.left = `${x}px`;
+                indicator.style.top = `${y}px`;
+                indicator.style.display = 'flex';
+                indicator.style.opacity = '1';
+                indicator.style.transform = 'scale(1)';
+                ring.style.transition = 'none';
+                ring.style.strokeDashoffset = '97.39';
+                requestAnimationFrame(() => {
+                    ring.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                    ring.style.strokeDashoffset = '0';
+                });
+            }
+
+            function payloadFromEvent(event) {
+                const path = event.composedPath ? event.composedPath() : [];
+                for (const node of path) {
+                    if (!node || !node.tagName) { continue; }
+                    const tag = node.tagName.toLowerCase();
+                    if (tag === 'a' && node.href) { return { href: node.href, kind: 'link' }; }
+                    if (tag === 'img' && node.src) { return { href: node.src, kind: 'image' }; }
+                }
+                if (event.target && event.target.closest) {
+                    const anchor = event.target.closest('a[href]');
+                    if (anchor && anchor.href) { return { href: anchor.href, kind: 'link' }; }
+                    const image = event.target.closest('img[src]');
+                    if (image && image.src) { return { href: image.src, kind: 'image' }; }
+                }
+                return null;
+            }
+
+            function resetState() {
+                active.href = null;
+                hideIndicator(false);
+            }
+
+            document.addEventListener('touchstart', (event) => {
+                if (event.touches.length !== 1) {
+                    resetState();
+                    return;
+                }
+                const payload = payloadFromEvent(event);
+                if (!payload || !payload.href) {
+                    resetState();
+                    return;
+                }
+                active.href = payload.href;
+                origin.x = event.touches[0].clientX;
+                origin.y = event.touches[0].clientY;
+                showIndicator(origin.x, origin.y);
+                resetTimer();
+                timer = setTimeout(() => {
+                    if (!active.href) { return; }
+                    suppressTap.value = true;
+                    window.webkit.messageHandlers.\(Self.longPressOpenMessageName).postMessage({ href: active.href });
+                    active.href = null;
+                    hideIndicator(true);
+                }, HOLD_MS);
+            }, { capture: true, passive: true });
+
+            document.addEventListener('touchmove', (event) => {
+                if (!active.href || event.touches.length !== 1) { return; }
+                const dx = event.touches[0].clientX - origin.x;
+                const dy = event.touches[0].clientY - origin.y;
+                if (Math.hypot(dx, dy) > MOVE_TOLERANCE) {
+                    resetState();
+                }
+            }, { capture: true, passive: true });
+
+            ['touchend', 'touchcancel', 'scroll', 'dragstart'].forEach((name) => {
+                document.addEventListener(name, () => {
+                    if (active.href) {
+                        resetState();
+                    } else {
+                        hideIndicator(false);
+                    }
+                }, { capture: true, passive: true });
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!suppressTap.value) { return; }
+                suppressTap.value = false;
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
+        })();
+        """
+
+        contentController.addUserScript(
+            WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
     }
 
     private func load(_ url: URL, in webView: WKWebView) {
@@ -773,49 +931,54 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         .shell {
           min-height: 100dvh;
-          display: grid;
-          place-items: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
           padding:
-            max(12px, env(safe-area-inset-top))
-            12px
-            max(12px, env(safe-area-inset-bottom))
-            12px;
+            max(10px, calc(env(safe-area-inset-top) + 6px))
+            16px
+            max(22px, calc(env(safe-area-inset-bottom) + 10px))
+            16px;
         }
         .panel {
-          width: min(540px, calc(100vw - 16px));
-          padding: 16px 14px 14px;
-          border-radius: 24px;
-          background: var(--glass);
-          border: 1px solid var(--stroke);
-          backdrop-filter: blur(28px) saturate(1.22);
-          box-shadow: 0 24px 60px var(--shadow);
+          width: 100%;
+          max-width: 460px;
+          padding: 0;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          backdrop-filter: none;
         }
         .brand {
-          margin: 0 0 10px;
-          font-size: clamp(24px, 6.6vw, 38px);
+          margin: 0 0 14px;
+          font-size: clamp(26px, 6.6vw, 38px);
           font-weight: 700;
           line-height: 0.98;
           letter-spacing: -0.05em;
           font-family: "Snell Roundhand", "Apple Chancery", "Savoye LET", cursive;
           font-weight: 600;
           letter-spacing: -0.02em;
+          text-align: center;
         }
         form {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
         .search {
           flex: 1 1 auto;
           width: 100%;
-          height: 46px;
-          padding: 0 15px;
-          border-radius: 16px;
+          height: 50px;
+          padding: 0 16px;
+          border-radius: 18px;
           border: 1px solid var(--fieldStroke);
           background: var(--field);
           color: var(--text);
-          font-size: 15px;
+          font-size: 16px;
           outline: none;
+          backdrop-filter: blur(18px) saturate(1.16);
+          box-shadow: 0 10px 24px rgba(15,23,42,0.08);
         }
         .search::placeholder { color: color-mix(in srgb, var(--subtle) 78%, transparent); }
         .search:focus {
@@ -823,16 +986,16 @@ final class PadBrowserModel: NSObject, ObservableObject {
           box-shadow: 0 0 0 5px rgba(96,165,250,0.12);
         }
         button {
-          width: 42px;
-          height: 42px;
-          flex: 0 0 42px;
+          width: 46px;
+          height: 46px;
+          flex: 0 0 46px;
           padding: 0;
           border-radius: 999px;
           border: 1px solid color-mix(in srgb, var(--stroke) 82%, transparent);
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--field) 88%, white 12%) 0%, color-mix(in srgb, var(--field) 68%, transparent) 100%);
           color: var(--text);
-          font: 600 17px -apple-system, BlinkMacSystemFont, sans-serif;
+          font: 600 18px -apple-system, BlinkMacSystemFont, sans-serif;
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.34),
             0 10px 24px rgba(15,23,42,0.14);
@@ -848,45 +1011,37 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         @media (max-width: 640px) {
           .shell {
-            place-items: stretch;
             padding:
-              max(16px, env(safe-area-inset-top))
+              max(8px, calc(env(safe-area-inset-top) + 4px))
               16px
-              max(16px, env(safe-area-inset-bottom))
+              max(18px, calc(env(safe-area-inset-bottom) + 8px))
               16px;
           }
           .panel {
             width: 100%;
             max-width: 100%;
-            padding: 0;
-            border-radius: 0;
-            background: transparent;
-            border: 0;
-            box-shadow: none;
-            backdrop-filter: none;
-            align-self: center;
           }
           .brand {
-            font-size: 28px;
-            margin: 0 0 12px;
+            font-size: 30px;
+            margin: 0 0 14px;
             text-align: center;
           }
           form {
             gap: 10px;
           }
           .search, button {
-            height: 42px;
-            border-radius: 15px;
+            height: 46px;
+            border-radius: 17px;
           }
           .search {
             background: color-mix(in srgb, var(--field) 76%, transparent);
             backdrop-filter: blur(18px) saturate(1.14);
           }
           button {
-            width: 40px;
-            flex-basis: 40px;
+            width: 44px;
+            flex-basis: 44px;
             border-radius: 999px;
-            font-size: 16px;
+            font-size: 17px;
           }
         }
         </style>
@@ -1042,6 +1197,21 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         tab.historyURLs = nextHistory
         tab.historyIndex = nextHistory.count - 1
+    }
+}
+
+extension PadBrowserModel: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.longPressOpenMessageName,
+              let body = message.body as? [String: Any],
+              let href = body["href"] as? String,
+              let url = URL(string: href) else {
+            return
+        }
+
+        let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
+        let targetGroup = message.webView.flatMap { self.group(for: $0) } ?? currentGroup
+        addBackgroundTab(initialURL: normalized, in: targetGroup)
     }
 }
 
@@ -1239,4 +1409,16 @@ extension PadBrowserModel {
     ]
 
     static let harmfulTLDs: Set<String> = ["zip", "mov", "click", "country", "gq", "work", "download", "stream"]
+}
+
+private final class PadWeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(target: WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
+    }
 }

@@ -117,6 +117,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private var closedTabs: [ClosedTabSnapshot] = []
     private let privateWebsiteDataStore = WKWebsiteDataStore.nonPersistent()
     private let startPageBaseURL = URL(string: "https://vidarr.local/start")!
+    private var scriptHandlerBoxes: [ObjectIdentifier: PadWeakScriptMessageHandler] = [:]
+    private static let longPressOpenMessageName = "vidarrLongPressOpen"
 
     override init() {
         super.init()
@@ -699,11 +701,167 @@ final class PadBrowserModel: NSObject, ObservableObject {
         } else if prefs.cookiePolicy == .privateOnly {
             configuration.websiteDataStore = .nonPersistent()
         }
+        installLongPressOpenInBackgroundIfNeeded(on: configuration.userContentController)
         let webView = PadInteractiveWebView(frame: .zero, configuration: configuration)
         webView.onSearchSelection = { [weak self] text in
             self?.openSelectionSearch(text)
         }
         return webView
+    }
+
+    private func installLongPressOpenInBackgroundIfNeeded(on contentController: WKUserContentController) {
+        let controllerID = ObjectIdentifier(contentController)
+        guard scriptHandlerBoxes[controllerID] == nil else { return }
+
+        let handlerBox = PadWeakScriptMessageHandler(target: self)
+        scriptHandlerBoxes[controllerID] = handlerBox
+        contentController.removeScriptMessageHandler(forName: Self.longPressOpenMessageName)
+        contentController.add(handlerBox, name: Self.longPressOpenMessageName)
+
+        let source = """
+        (() => {
+            if (window.__vidarrLongPressInstalled) { return; }
+            window.__vidarrLongPressInstalled = true;
+
+            const HOLD_MS = 420;
+            const MOVE_TOLERANCE = 14;
+            let timer = null;
+            let origin = { x: 0, y: 0 };
+            let active = { href: null };
+            let suppressTap = { value: false };
+            let indicator = document.createElement('div');
+            indicator.style.position = 'fixed';
+            indicator.style.width = '40px';
+            indicator.style.height = '40px';
+            indicator.style.marginLeft = '-20px';
+            indicator.style.marginTop = '-20px';
+            indicator.style.display = 'none';
+            indicator.style.alignItems = 'center';
+            indicator.style.justifyContent = 'center';
+            indicator.style.pointerEvents = 'none';
+            indicator.style.zIndex = '2147483647';
+            indicator.style.opacity = '0';
+            indicator.style.transition = 'opacity 120ms ease, transform 140ms ease';
+            indicator.style.transform = 'scale(0.92)';
+            indicator.innerHTML = `
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                    <circle cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.18)" stroke-width="3"></circle>
+                    <circle id="vidarrRing" cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="97.39" stroke-dashoffset="97.39"></circle>
+                </svg>
+            `;
+            const ring = indicator.querySelector('#vidarrRing');
+            document.documentElement.appendChild(indicator);
+
+            function resetTimer() {
+                if (timer !== null) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+            }
+
+            function hideIndicator(committed = false) {
+                resetTimer();
+                indicator.style.opacity = '0';
+                indicator.style.transform = committed ? 'scale(1.08)' : 'scale(0.94)';
+                ring.style.transition = 'none';
+                ring.style.strokeDashoffset = '97.39';
+                setTimeout(() => {
+                    indicator.style.display = 'none';
+                    indicator.style.transform = 'scale(0.92)';
+                }, committed ? 120 : 80);
+            }
+
+            function showIndicator(x, y) {
+                indicator.style.left = `${x}px`;
+                indicator.style.top = `${y}px`;
+                indicator.style.display = 'flex';
+                indicator.style.opacity = '1';
+                indicator.style.transform = 'scale(1)';
+                ring.style.transition = 'none';
+                ring.style.strokeDashoffset = '97.39';
+                requestAnimationFrame(() => {
+                    ring.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                    ring.style.strokeDashoffset = '0';
+                });
+            }
+
+            function payloadFromEvent(event) {
+                const path = event.composedPath ? event.composedPath() : [];
+                for (const node of path) {
+                    if (!node || !node.tagName) { continue; }
+                    const tag = node.tagName.toLowerCase();
+                    if (tag === 'a' && node.href) { return { href: node.href, kind: 'link' }; }
+                    if (tag === 'img' && node.src) { return { href: node.src, kind: 'image' }; }
+                }
+                if (event.target && event.target.closest) {
+                    const anchor = event.target.closest('a[href]');
+                    if (anchor && anchor.href) { return { href: anchor.href, kind: 'link' }; }
+                    const image = event.target.closest('img[src]');
+                    if (image && image.src) { return { href: image.src, kind: 'image' }; }
+                }
+                return null;
+            }
+
+            function resetState() {
+                active.href = null;
+                hideIndicator(false);
+            }
+
+            document.addEventListener('touchstart', (event) => {
+                if (event.touches.length !== 1) {
+                    resetState();
+                    return;
+                }
+                const payload = payloadFromEvent(event);
+                if (!payload || !payload.href) {
+                    resetState();
+                    return;
+                }
+                active.href = payload.href;
+                origin.x = event.touches[0].clientX;
+                origin.y = event.touches[0].clientY;
+                showIndicator(origin.x, origin.y);
+                resetTimer();
+                timer = setTimeout(() => {
+                    if (!active.href) { return; }
+                    suppressTap.value = true;
+                    window.webkit.messageHandlers.\(Self.longPressOpenMessageName).postMessage({ href: active.href });
+                    active.href = null;
+                    hideIndicator(true);
+                }, HOLD_MS);
+            }, { capture: true, passive: true });
+
+            document.addEventListener('touchmove', (event) => {
+                if (!active.href || event.touches.length !== 1) { return; }
+                const dx = event.touches[0].clientX - origin.x;
+                const dy = event.touches[0].clientY - origin.y;
+                if (Math.hypot(dx, dy) > MOVE_TOLERANCE) {
+                    resetState();
+                }
+            }, { capture: true, passive: true });
+
+            ['touchend', 'touchcancel', 'scroll', 'dragstart'].forEach((name) => {
+                document.addEventListener(name, () => {
+                    if (active.href) {
+                        resetState();
+                    } else {
+                        hideIndicator(false);
+                    }
+                }, { capture: true, passive: true });
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!suppressTap.value) { return; }
+                suppressTap.value = false;
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
+        })();
+        """
+
+        contentController.addUserScript(
+            WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
     }
 
     private func load(_ url: URL, in webView: WKWebView) {
@@ -1010,6 +1168,21 @@ final class PadBrowserModel: NSObject, ObservableObject {
     }
 }
 
+extension PadBrowserModel: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == Self.longPressOpenMessageName,
+              let body = message.body as? [String: Any],
+              let href = body["href"] as? String,
+              let url = URL(string: href) else {
+            return
+        }
+
+        let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
+        let targetGroup = message.webView.flatMap { self.group(for: $0) } ?? currentGroup
+        addBackgroundTab(initialURL: normalized, in: targetGroup)
+    }
+}
+
 extension PadBrowserModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else {
@@ -1204,4 +1377,16 @@ extension PadBrowserModel {
     ]
 
     static let harmfulTLDs: Set<String> = ["zip", "mov", "click", "country", "gq", "work", "download", "stream"]
+}
+
+private final class PadWeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: WKScriptMessageHandler?
+
+    init(target: WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
+    }
 }

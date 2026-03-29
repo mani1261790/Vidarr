@@ -937,7 +937,7 @@ final class MainWindowController: NSWindowController {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.pdf, .html, .plainText]
+        panel.allowedContentTypes = [.pdf, .html, .plainText, .image]
 
         let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
@@ -985,9 +985,9 @@ final class MainWindowController: NSWindowController {
         guard url.isFileURL else { return false }
         let ext = url.pathExtension.lowercased()
         if let type = UTType(filenameExtension: ext) {
-            return type.conforms(to: .pdf) || type.conforms(to: .html) || type.conforms(to: .plainText)
+            return type.conforms(to: .pdf) || type.conforms(to: .html) || type.conforms(to: .plainText) || type.conforms(to: .image)
         }
-        return ["pdf", "html", "htm", "txt"].contains(ext)
+        return ["pdf", "html", "htm", "txt", "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"].contains(ext)
     }
 
     func restoreSavedSessionIfAvailable() {
@@ -1107,10 +1107,12 @@ final class MainWindowController: NSWindowController {
             const MOVE_TOLERANCE = 14;
             const SELECTION_MIN_LENGTH = 1;
             var timer = null;
-            var activeAnchor = null;
+            var activeTargetHref = null;
             var startX = 0;
             var startY = 0;
             var selectionButton = null;
+            var holdIndicator = null;
+            var holdRing = null;
 
             function ensureSelectionButton() {
                 if (selectionButton) { return selectionButton; }
@@ -1213,49 +1215,118 @@ final class MainWindowController: NSWindowController {
                 }
             }
 
-            function anchorFromEvent(event) {
+            function ensureHoldIndicator() {
+                if (holdIndicator) { return holdIndicator; }
+                const container = document.createElement('div');
+                container.style.position = 'fixed';
+                container.style.width = '42px';
+                container.style.height = '42px';
+                container.style.marginLeft = '-21px';
+                container.style.marginTop = '-21px';
+                container.style.display = 'none';
+                container.style.alignItems = 'center';
+                container.style.justifyContent = 'center';
+                container.style.pointerEvents = 'none';
+                container.style.zIndex = '2147483647';
+                container.style.opacity = '0';
+                container.style.transition = 'opacity 120ms ease, transform 140ms ease';
+                container.style.transform = 'scale(0.92)';
+                container.innerHTML = `
+                    <svg width="42" height="42" viewBox="0 0 42 42" fill="none" aria-hidden="true">
+                        <circle cx="21" cy="21" r="16.5" stroke="rgba(255,255,255,0.18)" stroke-width="3"></circle>
+                        <circle id="vidarrHoldRing" cx="21" cy="21" r="16.5" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="103.67" stroke-dashoffset="103.67"></circle>
+                    </svg>
+                `;
+                holdIndicator = container;
+                holdRing = container.querySelector('#vidarrHoldRing');
+                document.documentElement.appendChild(container);
+                return container;
+            }
+
+            function showHoldIndicator(x, y) {
+                const indicator = ensureHoldIndicator();
+                indicator.style.left = `${x}px`;
+                indicator.style.top = `${y}px`;
+                indicator.style.display = 'flex';
+                indicator.style.opacity = '1';
+                indicator.style.transform = 'scale(1)';
+                holdRing.style.transition = 'none';
+                holdRing.style.strokeDashoffset = '103.67';
+                requestAnimationFrame(() => {
+                    holdRing.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                    holdRing.style.strokeDashoffset = '0';
+                });
+            }
+
+            function hideHoldIndicator(committed = false) {
+                if (!holdIndicator) { return; }
+                holdIndicator.style.opacity = '0';
+                holdIndicator.style.transform = committed ? 'scale(1.08)' : 'scale(0.94)';
+                if (holdRing) {
+                    holdRing.style.transition = 'none';
+                    holdRing.style.strokeDashoffset = '103.67';
+                }
+                setTimeout(() => {
+                    if (!holdIndicator) { return; }
+                    holdIndicator.style.display = 'none';
+                    holdIndicator.style.transform = 'scale(0.92)';
+                }, committed ? 120 : 80);
+            }
+
+            function targetHrefFromEvent(event) {
                 const path = event.composedPath ? event.composedPath() : [];
                 for (const node of path) {
-                    if (node && node.tagName && node.tagName.toLowerCase() === 'a' && node.href) {
-                        return node;
+                    if (!node || !node.tagName) { continue; }
+                    const tag = node.tagName.toLowerCase();
+                    if (tag === 'a' && node.href) {
+                        return node.href;
+                    }
+                    if (tag === 'img' && node.src) {
+                        return node.src;
                     }
                 }
                 if (event.target && event.target.closest) {
-                    const found = event.target.closest('a[href]');
-                    if (found && found.href) { return found; }
+                    const anchor = event.target.closest('a[href]');
+                    if (anchor && anchor.href) { return anchor.href; }
+                    const image = event.target.closest('img[src]');
+                    if (image && image.src) { return image.src; }
                 }
                 return null;
             }
 
             function resetState() {
                 clearTimer();
-                activeAnchor = null;
+                activeTargetHref = null;
                 startX = 0;
                 startY = 0;
+                hideHoldIndicator(false);
             }
 
             document.addEventListener('mousedown', (event) => {
                 if (event.button !== 0) { return; }
-                const anchor = anchorFromEvent(event);
-                if (!anchor) {
+                const href = targetHrefFromEvent(event);
+                if (!href) {
                     resetState();
                     return;
                 }
-                activeAnchor = anchor;
+                activeTargetHref = href;
                 startX = event.clientX;
                 startY = event.clientY;
+                showHoldIndicator(startX, startY);
                 clearTimer();
                 timer = setTimeout(() => {
-                    if (!activeAnchor || !activeAnchor.href) { return; }
+                    if (!activeTargetHref) { return; }
                     window.__vidarrSuppressLongPressClick = true;
                     window.webkit.messageHandlers.\(Self.longPressLinkMessageName).postMessage({
-                        href: activeAnchor.href
+                        href: activeTargetHref
                     });
+                    activeTargetHref = null;
+                    hideHoldIndicator(true);
                 }, HOLD_MS);
             }, true);
 
             document.addEventListener('mousemove', (event) => {
-                if (!activeAnchor) { return; }
+                if (!activeTargetHref) { return; }
                 const dx = event.clientX - startX;
                 const dy = event.clientY - startY;
                 if (Math.hypot(dx, dy) > MOVE_TOLERANCE) {

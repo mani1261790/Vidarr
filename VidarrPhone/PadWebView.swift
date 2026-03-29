@@ -262,6 +262,11 @@ struct PadWebStageView: UIViewRepresentable {
         }
 
         func containerDidLayout(bounds: CGRect) {
+            #if DEBUG
+            if let containerView {
+                print("[VidarrPhone] stage container bounds:", bounds, "super:", containerView.superview?.bounds ?? .zero)
+            }
+            #endif
             if let fromWebView = activeFromWebView,
                let toWebView = activeToWebView,
                let currentVisualState {

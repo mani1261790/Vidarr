@@ -99,6 +99,7 @@ final class MainWindowController: NSWindowController {
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
     ]
     private static let longPressLinkMessageName = "vidarrLongPressLink"
+    private static let imageContextMenuMessageName = "vidarrImageContextMenu"
     private static let selectionSearchMessageName = "vidarrSelectionSearch"
 
     private static let toolbarPrimaryForegroundColor = NSColor(name: nil) { appearance in
@@ -1094,8 +1095,10 @@ final class MainWindowController: NSWindowController {
         let handlerBox = WeakScriptMessageHandler(target: self)
         longPressHandlerBoxes[controllerID] = handlerBox
         contentController.removeScriptMessageHandler(forName: Self.longPressLinkMessageName)
+        contentController.removeScriptMessageHandler(forName: Self.imageContextMenuMessageName)
         contentController.removeScriptMessageHandler(forName: Self.selectionSearchMessageName)
         contentController.add(handlerBox, name: Self.longPressLinkMessageName)
+        contentController.add(handlerBox, name: Self.imageContextMenuMessageName)
         contentController.add(handlerBox, name: Self.selectionSearchMessageName)
 
         let source = """
@@ -1233,8 +1236,8 @@ final class MainWindowController: NSWindowController {
                 container.style.transform = 'scale(0.92)';
                 container.innerHTML = `
                     <svg width="42" height="42" viewBox="0 0 42 42" fill="none" aria-hidden="true">
-                        <circle cx="21" cy="21" r="16.5" stroke="rgba(255,255,255,0.18)" stroke-width="3"></circle>
-                        <circle id="vidarrHoldRing" cx="21" cy="21" r="16.5" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="103.67" stroke-dashoffset="103.67"></circle>
+                        <circle cx="21" cy="21" r="16.5" stroke="rgba(10,132,255,0.22)" stroke-width="3"></circle>
+                        <circle id="vidarrHoldRing" cx="21" cy="21" r="16.5" stroke="rgba(10,132,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="103.67" stroke-dashoffset="103.67"></circle>
                     </svg>
                 `;
                 holdIndicator = container;
@@ -1273,6 +1276,16 @@ final class MainWindowController: NSWindowController {
                 }, committed ? 120 : 80);
             }
 
+            function isStandaloneImageDocument() {
+                const body = document.body;
+                if (!body) { return false; }
+                const children = Array.from(body.children || []);
+                if (children.length !== 1) { return false; }
+                const only = children[0];
+                if (!only || only.tagName.toLowerCase() !== 'img') { return false; }
+                return true;
+            }
+
             function targetHrefFromEvent(event) {
                 const path = event.composedPath ? event.composedPath() : [];
                 for (const node of path) {
@@ -1293,6 +1306,20 @@ final class MainWindowController: NSWindowController {
                 }
                 return null;
             }
+
+            document.addEventListener('contextmenu', (event) => {
+                if (!isStandaloneImageDocument()) { return; }
+                const href = targetHrefFromEvent(event);
+                if (!href) { return; }
+                const image = event.target && event.target.closest ? event.target.closest('img[src]') : null;
+                if (!image) { return; }
+                event.preventDefault();
+                window.webkit.messageHandlers.\(Self.imageContextMenuMessageName).postMessage({
+                    href,
+                    x: event.clientX,
+                    y: event.clientY
+                });
+            }, true);
 
             function resetState() {
                 clearTimer();
@@ -3075,12 +3102,81 @@ extension MainWindowController: WKScriptMessageHandler {
             return
         }
 
+        if message.name == Self.imageContextMenuMessageName {
+            guard
+                let href = body["href"] as? String,
+                let url = URL(string: href),
+                let webView = message.webView
+            else { return }
+            let x = (body["x"] as? Double).map { CGFloat($0) } ?? webView.bounds.midX
+            let domY = (body["y"] as? Double).map { CGFloat($0) } ?? webView.bounds.midY
+            let point = NSPoint(x: x, y: webView.bounds.height - domY)
+            presentStandaloneImageMenu(for: url, at: point, in: webView)
+            return
+        }
+
         if message.name == Self.selectionSearchMessageName {
             guard let query = body["query"] as? String else { return }
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             actions.openLocationInput(trimmed)
         }
+    }
+}
+
+private extension MainWindowController {
+    func presentStandaloneImageMenu(for url: URL, at point: NSPoint, in view: NSView) {
+        let menu = NSMenu()
+        let copyItem = NSMenuItem(title: "画像をコピー", action: #selector(copyStandaloneImageFromMenu(_:)), keyEquivalent: "")
+        copyItem.target = self
+        copyItem.representedObject = url
+        let saveItem = NSMenuItem(title: "画像を保存...", action: #selector(saveStandaloneImageFromMenu(_:)), keyEquivalent: "")
+        saveItem.target = self
+        saveItem.representedObject = url
+        menu.addItem(copyItem)
+        menu.addItem(saveItem)
+        menu.popUp(positioning: nil, at: point, in: view)
+    }
+
+    @objc func copyStandaloneImageFromMenu(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        loadImageData(for: url) { data in
+            guard let data, let image = NSImage(data: data) else { return }
+            DispatchQueue.main.async {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.writeObjects([image])
+            }
+        }
+    }
+
+    @objc func saveStandaloneImageFromMenu(_ sender: NSMenuItem) {
+        guard let sourceURL = sender.representedObject as? URL else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = sourceURL.lastPathComponent.isEmpty ? "Image" : sourceURL.lastPathComponent
+        guard let modalWindow = window ?? NSApp.keyWindow else { return }
+        panel.beginSheetModal(for: modalWindow) { [weak self] response in
+            guard response == .OK, let destinationURL = panel.url else { return }
+            self?.loadImageData(for: sourceURL) { data in
+                guard let data else { return }
+                try? data.write(to: destinationURL, options: .atomic)
+            }
+        }
+    }
+
+    func loadImageData(for url: URL, completion: @escaping (Data?) -> Void) {
+        if url.isFileURL {
+            completion(try? Data(contentsOf: url))
+            return
+        }
+        URLSession.shared.dataTask(with: url) { data, response, _ in
+            let mime = (response as? HTTPURLResponse)?.mimeType?.lowercased()
+            if let mime, !mime.hasPrefix("image/") {
+                completion(nil)
+                return
+            }
+            completion(data)
+        }.resume()
     }
 }
 

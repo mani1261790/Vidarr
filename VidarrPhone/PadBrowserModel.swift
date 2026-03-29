@@ -178,7 +178,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
-        let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
+        let preferredInitialURL = resolvedInitialURL(from: initialURL)
+        let resolvedHistory = historyURLs.isEmpty ? (preferredInitialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
         var state = state(for: group)
@@ -186,8 +187,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         state.selectedIndex = max(0, state.tabs.count - 1)
         setState(state, for: group)
         selectedSidebarTabID = tab.id
-        if let initialURL {
-            load(initialURL, in: webView)
+        if let preferredInitialURL {
+            load(preferredInitialURL, in: webView)
         } else {
             loadStartPage(in: webView)
             captureThumbnail(for: tab)
@@ -203,14 +204,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
-        let resolvedHistory = historyURLs.isEmpty ? (initialURL.map { [$0] } ?? []) : historyURLs
+        let preferredInitialURL = resolvedInitialURL(from: initialURL)
+        let resolvedHistory = historyURLs.isEmpty ? (preferredInitialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
         tab.historyIndex = min(max(historyIndex, resolvedHistory.isEmpty ? -1 : 0), max(resolvedHistory.count - 1, -1))
         var state = state(for: targetGroup)
         state.tabs.append(tab)
         setState(state, for: targetGroup)
-        if let initialURL {
-            load(initialURL, in: webView)
+        if let preferredInitialURL {
+            load(preferredInitialURL, in: webView)
         } else {
             loadStartPage(in: webView)
             captureThumbnail(for: tab)
@@ -312,7 +314,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if let url = tab.webView.url ?? URL(string: tab.urlString) {
             load(url, in: tab.webView)
         } else {
-            loadStartPage(in: tab.webView)
+            loadDefaultNewTabPage(in: tab.webView)
         }
     }
 
@@ -321,7 +323,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             if let url = tab.webView.url ?? URL(string: tab.urlString) {
                 load(url, in: tab.webView)
             } else {
-                loadStartPage(in: tab.webView)
+                loadDefaultNewTabPage(in: tab.webView)
             }
         }
     }
@@ -749,8 +751,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
             indicator.style.transform = 'scale(0.92)';
             indicator.innerHTML = `
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-                    <circle cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.18)" stroke-width="3"></circle>
-                    <circle id="vidarrRing" cx="20" cy="20" r="15.5" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="97.39" stroke-dashoffset="97.39"></circle>
+                    <circle cx="20" cy="20" r="15.5" stroke="rgba(10,132,255,0.22)" stroke-width="3"></circle>
+                    <circle id="vidarrRing" cx="20" cy="20" r="15.5" stroke="rgba(10,132,255,0.98)" stroke-width="3" stroke-linecap="round" stroke-dasharray="97.39" stroke-dashoffset="97.39"></circle>
                 </svg>
             `;
             const ring = indicator.querySelector('#vidarrRing');
@@ -887,7 +889,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private func load(_ url: URL, in webView: WKWebView) {
         let normalized = PadBrowserPreferences.shared.normalizedNavigableURL(from: url)
         if normalized.absoluteString == "about:blank" {
-            loadStartPage(in: webView)
+            loadDefaultNewTabPage(in: webView)
             return
         }
         webView.load(URLRequest(url: normalized))
@@ -1383,6 +1385,22 @@ extension PadBrowserModel {
         groupStateRevision = UUID()
     }
 
+    private func resolvedInitialURL(from candidate: URL?) -> URL? {
+        if let candidate, candidate.absoluteString != "about:blank" {
+            return PadBrowserPreferences.shared.normalizedNavigableURL(from: candidate)
+        }
+        return PadBrowserPreferences.shared.homePageURL
+            .map { PadBrowserPreferences.shared.normalizedNavigableURL(from: $0) }
+    }
+
+    private func loadDefaultNewTabPage(in webView: WKWebView) {
+        if let url = resolvedInitialURL(from: nil) {
+            webView.load(URLRequest(url: url))
+        } else {
+            loadStartPage(in: webView)
+        }
+    }
+
     private func ensureAtLeastOneTab(in group: PadBrowserTabGroup) {
         let state = state(for: group)
         guard state.tabs.isEmpty else {
@@ -1392,7 +1410,7 @@ extension PadBrowserModel {
             return
         }
         currentGroup = group
-        newTab(initialURL: PadBrowserPreferences.shared.homePageURL)
+        newTab(initialURL: resolvedInitialURL(from: nil))
         currentGroup = group
         syncPublishedState()
     }

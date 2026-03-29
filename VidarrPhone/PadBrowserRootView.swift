@@ -88,6 +88,7 @@ struct PadBrowserRootView: View {
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
     private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
+    private var activeWindowSafeAreaInsets: UIEdgeInsets { UIApplication.shared.activeWindowSafeAreaInsets }
     private var chromeBarMaxWidth: CGFloat? {
         guard isPhoneLayout else { return nil }
         let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
@@ -104,6 +105,9 @@ struct PadBrowserRootView: View {
             rootBackgroundColor
                 .ignoresSafeArea()
             webLayer
+            if isPhoneLayout {
+                topSafeAreaCover
+            }
             if showsGroupStripStack {
                 Color.clear
                     .contentShape(Rectangle())
@@ -241,6 +245,16 @@ struct PadBrowserRootView: View {
                 scheduleBottomBarAutoHide()
             }
         }
+    }
+
+    private var topSafeAreaCover: some View {
+        VStack(spacing: 0) {
+            topSafeAreaBaseColor
+                .frame(height: activeWindowSafeAreaInsets.top)
+            Spacer(minLength: 0)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 
     private var webLayer: some View {
@@ -1949,6 +1963,14 @@ private extension UIApplication {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .bounds ?? UIScreen.main.bounds
+    }
+
+    var activeWindowSafeAreaInsets: UIEdgeInsets {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
     }
 }
 

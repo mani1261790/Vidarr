@@ -2163,7 +2163,13 @@ final class MainWindowController: NSWindowController {
 
         tabInteractionView.onFileDropURLs = { [weak self] urls in
             guard let self else { return }
-            urls.forEach { self.openLocalDocument($0, preferNewTab: true) }
+            urls.forEach {
+                if $0.isFileURL {
+                    self.openLocalDocument($0, preferNewTab: true)
+                } else {
+                    self.tabManager.newTab(url: $0)
+                }
+            }
         }
     }
 
@@ -3294,12 +3300,12 @@ private final class TabInteractionView: NonDraggableView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, NSPasteboard.PasteboardType("public.url"), .tiff, .png])
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, NSPasteboard.PasteboardType("public.url"), .tiff, .png])
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -3379,11 +3385,44 @@ private final class TabInteractionView: NonDraggableView {
     }
 
     private func acceptedFileURLs(from sender: NSDraggingInfo) -> [URL]? {
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] else {
+        let pasteboard = sender.draggingPasteboard
+        var accepted: [URL] = []
+
+        let fileOptions: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: fileOptions) as? [URL] {
+            accepted.append(contentsOf: fileURLs.filter(MainWindowController.isBrowserOpenableLocalDocument(_:)))
+        }
+
+        let urlOptions: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: false]
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: urlOptions) as? [URL] {
+            accepted.append(contentsOf: urls.filter { !$0.isFileURL && ($0.scheme == "http" || $0.scheme == "https") })
+        }
+
+        if accepted.isEmpty, let imageURL = temporaryImageURL(from: pasteboard) {
+            accepted.append(imageURL)
+        }
+
+        return accepted.isEmpty ? nil : accepted
+    }
+
+    private func temporaryImageURL(from pasteboard: NSPasteboard) -> URL? {
+        guard let image = NSImage(pasteboard: pasteboard),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
             return nil
         }
-        return urls.filter(MainWindowController.isBrowserOpenableLocalDocument(_:))
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("VidarrDroppedImages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension("png")
+        do {
+            try pngData.write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            return nil
+        }
     }
 
     private func setDropTargetHighlighted(_ highlighted: Bool) {

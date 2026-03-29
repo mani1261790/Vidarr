@@ -80,7 +80,7 @@ struct PadBrowserRootView: View {
             if showsGroupStripStack {
                 groupStripStackOverlay
                     .padding(.horizontal, 18)
-                    .padding(.bottom, 6)
+                    .padding(.bottom, 6 + 52 + 10)
                     .transition(.identity)
             }
             bottomBar

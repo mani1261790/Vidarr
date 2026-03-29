@@ -81,7 +81,7 @@ struct PadBrowserRootView: View {
     private var tabStripHeight: CGFloat { isPhoneLayout ? 56 : 52 }
     private var tabStripSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
     private var barCornerRadius: CGFloat { isPhoneLayout ? 16 : 20 }
-    private var groupStripHeight: CGFloat { isPhoneLayout ? 36 : 52 }
+    private var groupStripHeight: CGFloat { isPhoneLayout ? 52 : 52 }
     private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 48 : 60 }
     private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }

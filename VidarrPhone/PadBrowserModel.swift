@@ -631,16 +631,16 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 state.tabs.append(tab)
                 let initialURL: URL?
                 if tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count {
-                    initialURL = tab.historyURLs[tab.historyIndex]
+                    initialURL = resolvedInitialURL(from: tab.historyURLs[tab.historyIndex])
                 } else if let urlString = tabSnapshot.urlString, let url = URL(string: urlString) {
-                    initialURL = url
+                    initialURL = resolvedInitialURL(from: url)
                 } else {
                     initialURL = nil
                 }
                 if let initialURL {
                     load(initialURL, in: webView)
                 } else {
-                    loadStartPage(in: webView)
+                    loadDefaultNewTabPage(in: webView)
                 }
             }
             state.selectedIndex = min(max(0, groupSnapshot.selectedIndex), max(state.tabs.count - 1, 0))

@@ -88,6 +88,7 @@ struct PadBrowserRootView: View {
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
     private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
+    private var activeWindowSafeAreaInsets: UIEdgeInsets { UIApplication.shared.activeWindowSafeAreaInsets }
     private var chromeBarMaxWidth: CGFloat? {
         guard isPhoneLayout else { return nil }
         let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
@@ -256,6 +257,7 @@ struct PadBrowserRootView: View {
                     : nil
             )
             .frame(width: stageBounds.width, height: stageBounds.height)
+            .offset(y: webContentTopInset * 0.5)
             .ignoresSafeArea()
 
             if tabSwitchTransition == nil, model.selectedTab == nil {
@@ -617,12 +619,31 @@ struct PadBrowserRootView: View {
         isPhoneLayout ? topSafeAreaBaseColor : Color(uiColor: .systemBackground)
     }
 
+    private var displaysWebInTopSafeArea: Bool {
+        !isPhoneLayout || PadBrowserPreferences.shared.displayWebInTopSafeArea
+    }
+
+    private var webContentTopInset: CGFloat {
+        displaysWebInTopSafeArea ? 0 : activeWindowSafeAreaInsets.top
+    }
+
     private var resolvedStageBounds: CGRect {
         let windowBounds = activeWindowBounds
         if windowBounds.width > 1, windowBounds.height > 1 {
-            return windowBounds
+            return CGRect(
+                x: 0,
+                y: 0,
+                width: windowBounds.width,
+                height: max(1, windowBounds.height - webContentTopInset)
+            )
         }
-        return UIScreen.main.bounds
+        let screenBounds = UIScreen.main.bounds
+        return CGRect(
+            x: 0,
+            y: 0,
+            width: screenBounds.width,
+            height: max(1, screenBounds.height - webContentTopInset)
+        )
     }
 
     private var topSafeAreaBaseColor: Color {
@@ -1270,6 +1291,7 @@ private struct PadSettingsSheet: View {
     @State private var stripTrackingParameters = PadBrowserPreferences.shared.stripTrackingParameters
     @State private var harmfulSiteWarningEnabled = PadBrowserPreferences.shared.harmfulSiteWarningEnabled
     @State private var cookiePolicy = PadBrowserPreferences.shared.cookiePolicy
+    @State private var displayWebInTopSafeArea = PadBrowserPreferences.shared.displayWebInTopSafeArea
     @State private var historyCount = PadBrowsingHistoryStore.shared.all().count
     @State private var bookmarkCount = PadBookmarkStore.shared.all().count
 
@@ -1322,6 +1344,9 @@ private struct PadSettingsSheet: View {
                                 ForEach(PadPreferredContentLanguage.allCases, id: \.self) { language in
                                     Text(language.displayName).tag(language)
                                 }
+                            }
+                            if isPhoneLayout {
+                                Toggle("上端までWebページを表示", isOn: $displayWebInTopSafeArea)
                             }
                             Toggle("JavaScript を使う", isOn: $allowsJavaScript)
                             Toggle("HTTPS を優先する", isOn: $preferHTTPS)
@@ -1434,6 +1459,7 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.homePageURLString = homePageURLString
                         PadBrowserPreferences.shared.searchTemplate = searchTemplate
                         PadBrowserPreferences.shared.preferredContentLanguage = preferredContentLanguage
+                        PadBrowserPreferences.shared.displayWebInTopSafeArea = displayWebInTopSafeArea
                         PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
                         PadBrowserPreferences.shared.reopenTabsOnLaunch = reopenTabsOnLaunch
                         PadBrowserPreferences.shared.autoHideBottomBar = autoHideBottomBar
@@ -2021,6 +2047,14 @@ private extension UIApplication {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .bounds ?? UIScreen.main.bounds
+    }
+
+    var activeWindowSafeAreaInsets: UIEdgeInsets {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
     }
 }
 

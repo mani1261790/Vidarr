@@ -92,6 +92,7 @@ final class PadBrowserPreferences {
         static let reopenTabsOnLaunch = "prefs.reopenTabsOnLaunch"
         static let autoHideBottomBar = "prefs.autoHideBottomBar"
         static let bottomBarAutoHideDelay = "prefs.bottomBarAutoHideDelay"
+        static let displayWebInTopSafeArea = "prefs.displayWebInTopSafeArea"
         static let allowsJavaScript = "prefs.allowsJavaScript"
         static let stripTrackingParameters = "prefs.stripTrackingParameters"
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
@@ -192,6 +193,18 @@ final class PadBrowserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Key.autoHideBottomBar)
+        }
+    }
+
+    var displayWebInTopSafeArea: Bool {
+        get {
+            if defaults.object(forKey: Key.displayWebInTopSafeArea) == nil {
+                return false
+            }
+            return defaults.bool(forKey: Key.displayWebInTopSafeArea)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.displayWebInTopSafeArea)
         }
     }
 

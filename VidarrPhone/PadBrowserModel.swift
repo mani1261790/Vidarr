@@ -789,19 +789,35 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 });
             }
 
+            function isStandaloneImageDocument() {
+                const body = document.body;
+                if (!body) { return false; }
+                const children = Array.from(body.children || []);
+                if (children.length !== 1) { return false; }
+                const only = children[0];
+                if (!only || only.tagName.toLowerCase() !== 'img') { return false; }
+                return true;
+            }
+
             function payloadFromEvent(event) {
                 const path = event.composedPath ? event.composedPath() : [];
                 for (const node of path) {
                     if (!node || !node.tagName) { continue; }
                     const tag = node.tagName.toLowerCase();
                     if (tag === 'a' && node.href) { return { href: node.href, kind: 'link' }; }
-                    if (tag === 'img' && node.src) { return { href: node.src, kind: 'image' }; }
+                    if (tag === 'img' && node.src) {
+                        if (isStandaloneImageDocument()) { return null; }
+                        return { href: node.src, kind: 'image' };
+                    }
                 }
                 if (event.target && event.target.closest) {
                     const anchor = event.target.closest('a[href]');
                     if (anchor && anchor.href) { return { href: anchor.href, kind: 'link' }; }
                     const image = event.target.closest('img[src]');
-                    if (image && image.src) { return { href: image.src, kind: 'image' }; }
+                    if (image && image.src) {
+                        if (isStandaloneImageDocument()) { return null; }
+                        return { href: image.src, kind: 'image' };
+                    }
                 }
                 return null;
             }

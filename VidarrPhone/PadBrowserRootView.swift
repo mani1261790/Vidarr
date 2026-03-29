@@ -71,7 +71,7 @@ struct PadBrowserRootView: View {
     private var stackedStripLeadingWidth: CGFloat { isPhoneLayout ? 52 : 164 }
     private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 30 : 82 }
     private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 10 : 18 }
-    private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 8 : 6 }
+    private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 14 : 6 }
     private var bottomBarSpacing: CGFloat { isPhoneLayout ? 11 : 12 }
     private var chromeControlSpacing: CGFloat { isPhoneLayout ? 9 : 10 }
     private var chromeButtonSize: CGFloat { isPhoneLayout ? 34 : 30 }
@@ -82,7 +82,7 @@ struct PadBrowserRootView: View {
     private var tabStripSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
     private var barCornerRadius: CGFloat { isPhoneLayout ? 16 : 20 }
     private var groupStripHeight: CGFloat { isPhoneLayout ? 52 : 52 }
-    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 48 : 60 }
+    private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 60 : 60 }
     private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
@@ -115,7 +115,7 @@ struct PadBrowserRootView: View {
             if showsGroupStripStack {
                 groupStripStackOverlay
                     .padding(.horizontal, bottomBarHorizontalPadding)
-                    .padding(.bottom, bottomBarBottomPadding + tabStripHeight + 10)
+                    .padding(.bottom, bottomBarBottomPadding + tabStripHeight + 14)
                     .transition(.identity)
             }
             bottomBar
@@ -300,7 +300,7 @@ struct PadBrowserRootView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous)
-                .strokeBorder(chromeForegroundColor.opacity(0.16), lineWidth: 1)
+                .strokeBorder(chromeForegroundColor.opacity(0.10), lineWidth: 0.75)
         )
         .clipShape(RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.11), radius: isPhoneLayout ? 12 : 14, y: isPhoneLayout ? 4 : 6)

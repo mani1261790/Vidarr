@@ -70,15 +70,15 @@ struct PadBrowserRootView: View {
 
     private var stackedStripLeadingWidth: CGFloat { isPhoneLayout ? 52 : 164 }
     private var stackedStripTrailingWidth: CGFloat { isPhoneLayout ? 30 : 82 }
-    private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 3 : 18 }
-    private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 0 : 6 }
-    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 4 : 12 }
-    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 3 : 10 }
-    private var chromeButtonSize: CGFloat { isPhoneLayout ? 22 : 30 }
-    private var groupButtonSize: CGFloat { isPhoneLayout ? 22 : 30 }
-    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 46 : 80 }
-    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 27 : 46 }
-    private var tabStripHeight: CGFloat { isPhoneLayout ? 31 : 52 }
+    private var bottomBarHorizontalPadding: CGFloat { isPhoneLayout ? 10 : 18 }
+    private var bottomBarBottomPadding: CGFloat { isPhoneLayout ? 8 : 6 }
+    private var bottomBarSpacing: CGFloat { isPhoneLayout ? 10 : 12 }
+    private var chromeControlSpacing: CGFloat { isPhoneLayout ? 8 : 10 }
+    private var chromeButtonSize: CGFloat { isPhoneLayout ? 32 : 30 }
+    private var groupButtonSize: CGFloat { isPhoneLayout ? 32 : 30 }
+    private var tabThumbnailWidth: CGFloat { isPhoneLayout ? 70 : 80 }
+    private var tabThumbnailHeight: CGFloat { isPhoneLayout ? 42 : 46 }
+    private var tabStripHeight: CGFloat { isPhoneLayout ? 50 : 52 }
     private var tabStripSpacing: CGFloat { isPhoneLayout ? 6 : 12 }
     private var barCornerRadius: CGFloat { isPhoneLayout ? 13 : 20 }
     private var groupStripHeight: CGFloat { isPhoneLayout ? 32 : 52 }
@@ -87,14 +87,13 @@ struct PadBrowserRootView: View {
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
-    private var windowSafeAreaInsets: UIEdgeInsets { UIApplication.shared.activeWindowSafeAreaInsets }
+    private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            rootBackgroundColor
+                .ignoresSafeArea()
             webLayer
-            if isPhoneLayout {
-                topSafeAreaFill
-            }
             if showsGroupStripStack {
                 Color.clear
                     .contentShape(Rectangle())
@@ -119,7 +118,6 @@ struct PadBrowserRootView: View {
                 bottomRevealZone
             }
         }
-        .background(Color(uiColor: .systemBackground))
         .ignoresSafeArea()
         .sheet(item: editingTabBinding) { tab in
             PadTabEditSheet(
@@ -236,42 +234,36 @@ struct PadBrowserRootView: View {
     }
 
     private var webLayer: some View {
-        GeometryReader { proxy in
-            let topInset = max(windowSafeAreaInsets.top, proxy.safeAreaInsets.top)
-            let bottomInset = max(windowSafeAreaInsets.bottom, proxy.safeAreaInsets.bottom)
-            ZStack {
-                PadWebStageView(
-                    selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
-                    transitionFromWebView: tabSwitchTransition?.fromTab.webView,
-                    transitionToWebView: tabSwitchTransition?.toTab.webView,
-                    transitionVisualState: tabSwitchTransition == nil ? nil : tabSwitchVisualState,
-                    gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
-                        ? gestureConfiguration
-                        : nil
-                )
-                .frame(
-                    width: proxy.size.width,
-                    height: proxy.size.height + topInset + bottomInset
-                )
-                .offset(y: -topInset)
-                .ignoresSafeArea()
+        let stageBounds = resolvedStageBounds
+        return ZStack {
+            PadWebStageView(
+                selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
+                transitionFromWebView: tabSwitchTransition?.fromTab.webView,
+                transitionToWebView: tabSwitchTransition?.toTab.webView,
+                transitionVisualState: tabSwitchTransition == nil ? nil : tabSwitchVisualState,
+                gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
+                    ? gestureConfiguration
+                    : nil
+            )
+            .frame(width: stageBounds.width, height: stageBounds.height)
+            .ignoresSafeArea()
 
-                if tabSwitchTransition == nil, model.selectedTab == nil {
-                    ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+            if tabSwitchTransition == nil, model.selectedTab == nil {
+                ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-                if let gestureHUD {
-                    PadGestureHUD(state: gestureHUD)
-                        .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                }
+            if let gestureHUD {
+                PadGestureHUD(state: gestureHUD)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
-            .onAppear {
-                webViewportWidth = max(proxy.size.width, 1)
-            }
-            .onChange(of: proxy.size.width) { _, width in
-                webViewportWidth = max(width, 1)
-            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            webViewportWidth = max(stageBounds.width, 1)
+        }
+        .onChange(of: stageBounds.width) { _, width in
+            webViewportWidth = max(width, 1)
         }
     }
 
@@ -291,8 +283,8 @@ struct PadBrowserRootView: View {
                 }
             }
         }
-        .padding(.horizontal, isPhoneLayout ? 8 : 10)
-        .padding(.vertical, isPhoneLayout ? 4 : 6)
+        .padding(.horizontal, isPhoneLayout ? 12 : 10)
+        .padding(.vertical, isPhoneLayout ? 6 : 6)
         .background(
             PadLiquidGlassBackground(cornerRadius: barCornerRadius)
         )
@@ -611,6 +603,18 @@ struct PadBrowserRootView: View {
         prefersLightChrome ? .black : .white
     }
 
+    private var rootBackgroundColor: Color {
+        isPhoneLayout ? topSafeAreaBaseColor : Color(uiColor: .systemBackground)
+    }
+
+    private var resolvedStageBounds: CGRect {
+        let windowBounds = activeWindowBounds
+        if windowBounds.width > 1, windowBounds.height > 1 {
+            return windowBounds
+        }
+        return UIScreen.main.bounds
+    }
+
     private var topSafeAreaBaseColor: Color {
         if let selectedTab = model.selectedTab {
             let urlString = selectedTab.urlString
@@ -624,16 +628,9 @@ struct PadBrowserRootView: View {
                 return Color(uiColor: averageColor)
             }
         }
-        return Color(uiColor: .systemBackground)
-    }
-
-    private var topSafeAreaFill: some View {
-        Rectangle()
-            .fill(topSafeAreaBaseColor)
-            .frame(height: max(windowSafeAreaInsets.top, 0))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
+        return colorScheme == .dark
+            ? Color(red: 0.06, green: 0.10, blue: 0.16)
+            : Color(red: 0.88, green: 0.92, blue: 0.98)
     }
 
     private var prefersLightChrome: Bool {
@@ -1985,12 +1982,12 @@ private struct PadTabEditSheet: View {
 }
 
 private extension UIApplication {
-    var activeWindowSafeAreaInsets: UIEdgeInsets {
+    var activeWindowBounds: CGRect {
         connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
-            .safeAreaInsets ?? .zero
+            .bounds ?? UIScreen.main.bounds
     }
 }
 

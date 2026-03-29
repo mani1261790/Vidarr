@@ -2,6 +2,15 @@ import SwiftUI
 import UIKit
 import WebKit
 
+final class PadWebStageContainerView: UIView {
+    var onLayout: ((CGRect) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?(bounds)
+    }
+}
+
 final class PadInteractiveWebView: WKWebView {
     var onSearchSelection: ((String) -> Void)?
 
@@ -135,9 +144,12 @@ struct PadWebStageView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = PadWebStageContainerView()
         view.backgroundColor = .clear
         view.clipsToBounds = true
+        view.onLayout = { [weak coordinator = context.coordinator] bounds in
+            coordinator?.containerDidLayout(bounds: bounds)
+        }
         context.coordinator.containerView = view
         context.coordinator.installChromeIfNeeded(in: view)
         return view
@@ -165,6 +177,7 @@ struct PadWebStageView: UIViewRepresentable {
         private weak var activeFromWebView: WKWebView?
         private weak var activeToWebView: WKWebView?
         private weak var activeSelectedWebView: WKWebView?
+        private var currentVisualState: PadTabTransitionVisualState?
 
         func installChromeIfNeeded(in container: UIView) {
             if dimView.superview == nil {
@@ -204,6 +217,7 @@ struct PadWebStageView: UIViewRepresentable {
                let toWebView = transitionToWebView,
                let visualState = transitionVisualState
             {
+                currentVisualState = visualState
                 activeSelectedWebView = nil
                 ensureSubview(fromWebView, in: containerView)
                 ensureSubview(toWebView, in: containerView)
@@ -211,44 +225,13 @@ struct PadWebStageView: UIViewRepresentable {
                 containerView.bringSubviewToFront(fromWebView)
                 containerView.bringSubviewToFront(dimView)
                 containerView.bringSubviewToFront(gapView)
-
-                let gap = gapView.bounds.width > 0 ? gapView.bounds.width : CGFloat(16)
-                fromWebView.frame = bounds.offsetBy(dx: visualState.fromX, dy: 0)
-                toWebView.frame = bounds.offsetBy(dx: visualState.toX, dy: 0)
-
-                dimView.isHidden = visualState.dimAlpha <= 0.001
-                dimView.frame = bounds
-                dimView.alpha = visualState.dimAlpha
-
-                let direction = visualState.toX >= 0 ? CGFloat(1) : CGFloat(-1)
-                let fromEdge = visualState.fromX + (direction > 0 ? bounds.width : 0)
-                let toEdge = visualState.toX + (direction > 0 ? 0 : bounds.width)
-                let gapX = ((fromEdge + toEdge) * 0.5) - (gap * 0.5)
-                gapView.isHidden = visualState.gapAlpha <= 0.001
-                gapView.alpha = visualState.gapAlpha
-                gapView.frame = CGRect(x: gapX, y: 0, width: gap, height: bounds.height)
-
-                fromWebView.alpha = visualState.fromAlpha
-                toWebView.alpha = visualState.toAlpha
-                toWebView.layer.shadowColor = UIColor.black.withAlphaComponent(0.14).cgColor
-                toWebView.layer.shadowRadius = 16
-                toWebView.layer.shadowOpacity = visualState.toShadowOpacity
-                toWebView.layer.shadowOffset = CGSize(width: 0, height: 4)
-                toWebView.layer.masksToBounds = false
-                toWebView.layer.cornerRadius = 18
-                toWebView.layer.cornerCurve = .continuous
-                toWebView.layer.borderWidth = 1.2
-                toWebView.layer.borderColor = UIColor.white.withAlphaComponent(0.26).cgColor
-                fromWebView.layer.cornerRadius = 18
-                fromWebView.layer.cornerCurve = .continuous
-                fromWebView.layer.masksToBounds = true
-                toWebView.layer.masksToBounds = false
-
                 activeFromWebView = fromWebView
                 activeToWebView = toWebView
+                applyTransitionLayout(in: bounds, visualState: visualState, fromWebView: fromWebView, toWebView: toWebView)
                 configureGestureRecognizer(for: fromWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [fromWebView, toWebView])
             } else if let selectedWebView {
+                currentVisualState = nil
                 activeFromWebView = nil
                 activeToWebView = nil
                 activeSelectedWebView = selectedWebView
@@ -265,6 +248,7 @@ struct PadWebStageView: UIViewRepresentable {
                 configureGestureRecognizer(for: selectedWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [selectedWebView])
             } else {
+                currentVisualState = nil
                 activeFromWebView = nil
                 activeToWebView = nil
                 activeSelectedWebView = nil
@@ -275,6 +259,56 @@ struct PadWebStageView: UIViewRepresentable {
                 dimView.alpha = 0
                 gapView.alpha = 0
             }
+        }
+
+        func containerDidLayout(bounds: CGRect) {
+            if let fromWebView = activeFromWebView,
+               let toWebView = activeToWebView,
+               let currentVisualState {
+                applyTransitionLayout(in: bounds, visualState: currentVisualState, fromWebView: fromWebView, toWebView: toWebView)
+            } else if let activeSelectedWebView {
+                activeSelectedWebView.frame = bounds
+                dimView.frame = bounds
+            }
+        }
+
+        private func applyTransitionLayout(
+            in bounds: CGRect,
+            visualState: PadTabTransitionVisualState,
+            fromWebView: WKWebView,
+            toWebView: WKWebView
+        ) {
+            let gap = gapView.bounds.width > 0 ? gapView.bounds.width : CGFloat(16)
+            fromWebView.frame = bounds.offsetBy(dx: visualState.fromX, dy: 0)
+            toWebView.frame = bounds.offsetBy(dx: visualState.toX, dy: 0)
+
+            dimView.isHidden = visualState.dimAlpha <= 0.001
+            dimView.frame = bounds
+            dimView.alpha = visualState.dimAlpha
+
+            let direction = visualState.toX >= 0 ? CGFloat(1) : CGFloat(-1)
+            let fromEdge = visualState.fromX + (direction > 0 ? bounds.width : 0)
+            let toEdge = visualState.toX + (direction > 0 ? 0 : bounds.width)
+            let gapX = ((fromEdge + toEdge) * 0.5) - (gap * 0.5)
+            gapView.isHidden = visualState.gapAlpha <= 0.001
+            gapView.alpha = visualState.gapAlpha
+            gapView.frame = CGRect(x: gapX, y: 0, width: gap, height: bounds.height)
+
+            fromWebView.alpha = visualState.fromAlpha
+            toWebView.alpha = visualState.toAlpha
+            toWebView.layer.shadowColor = UIColor.black.withAlphaComponent(0.14).cgColor
+            toWebView.layer.shadowRadius = 16
+            toWebView.layer.shadowOpacity = visualState.toShadowOpacity
+            toWebView.layer.shadowOffset = CGSize(width: 0, height: 4)
+            toWebView.layer.masksToBounds = false
+            toWebView.layer.cornerRadius = 18
+            toWebView.layer.cornerCurve = .continuous
+            toWebView.layer.borderWidth = 1.2
+            toWebView.layer.borderColor = UIColor.white.withAlphaComponent(0.26).cgColor
+            fromWebView.layer.cornerRadius = 18
+            fromWebView.layer.cornerCurve = .continuous
+            fromWebView.layer.masksToBounds = true
+            toWebView.layer.masksToBounds = false
         }
 
         private func ensureSubview(_ webView: WKWebView, in container: UIView) {

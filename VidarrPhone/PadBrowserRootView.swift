@@ -83,6 +83,7 @@ struct PadBrowserRootView: View {
     private var barCornerRadius: CGFloat { isPhoneLayout ? 16 : 20 }
     private var groupStripHeight: CGFloat { isPhoneLayout ? 52 : 52 }
     private var groupStripOffsetStep: CGFloat { isPhoneLayout ? 60 : 60 }
+    private var groupStripBaseGap: CGFloat { isPhoneLayout ? 4 : 14 }
     private var compactSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium] }
     private var settingsSheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
@@ -115,7 +116,7 @@ struct PadBrowserRootView: View {
             if showsGroupStripStack {
                 groupStripStackOverlay
                     .padding(.horizontal, bottomBarHorizontalPadding)
-                    .padding(.bottom, bottomBarBottomPadding + tabStripHeight + 14)
+                    .padding(.bottom, bottomBarBottomPadding + tabStripHeight + groupStripBaseGap)
                     .transition(.identity)
             }
             bottomBar
@@ -459,8 +460,10 @@ struct PadBrowserRootView: View {
                     }
                 }
                 .frame(minWidth: stripProxy.size.width, alignment: .center)
+                .frame(maxHeight: .infinity, alignment: .center)
                 .padding(.horizontal, 4)
             }
+            .frame(maxHeight: .infinity, alignment: .center)
             .background(
                 GeometryReader { proxy in
                     Color.clear
@@ -533,10 +536,12 @@ struct PadBrowserRootView: View {
                         }
                     }
                     .frame(minWidth: stripProxy.size.width, alignment: .center)
+                    .frame(maxHeight: .infinity, alignment: .center)
                     .padding(.horizontal, isPhoneLayout ? 2 : 4)
                     .padding(.vertical, isPhoneLayout ? 2 : 3)
                     .animation(.spring(response: isPhoneLayout ? 0.24 : 0.28, dampingFraction: 0.90), value: groupTabs.map(\.id))
                 }
+                .frame(maxHeight: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity)
 
@@ -1712,28 +1717,32 @@ private struct PadTabThumbnail: View {
     var body: some View {
         Button(action: onSelect) {
             ZStack {
-                RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous)
-                    .fill(backgroundFill)
-                Group {
-                    if let image = tab.thumbnail {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        ZStack {
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.18), Color.black.opacity(0.12)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            Image(systemName: "globe")
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundStyle(.secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous)
+                        .fill(backgroundFill)
+                    Group {
+                        if let image = tab.thumbnail {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            ZStack {
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.18), Color.black.opacity(0.12)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                Image(systemName: "globe")
+                                    .font(.system(size: 22, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: innerCornerRadius, style: .continuous))
+                    .padding(3)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: innerCornerRadius, style: .continuous))
-                .padding(3)
+                .scaleEffect(destructiveVisualProgress > 0 ? (1 - (0.08 * destructiveVisualProgress)) : 1)
+                .offset(y: previewOffsetY)
             }
             .frame(width: thumbnailWidth, height: thumbnailHeight)
             .clipShape(RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous))
@@ -1786,8 +1795,6 @@ private struct PadTabThumbnail: View {
                 }
             }
             .shadow(color: shadowColor, radius: 16, y: 6)
-            .scaleEffect(destructiveVisualProgress > 0 ? (1 - (0.08 * destructiveVisualProgress)) : 1)
-            .offset(y: previewOffsetY)
             .animation(.easeOut(duration: 0.14), value: showsDestructiveDismiss)
             .animation(.easeOut(duration: 0.10), value: destructivePreviewProgress)
         }

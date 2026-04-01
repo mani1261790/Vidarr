@@ -65,6 +65,10 @@ struct PadBrowserRootView: View {
 
     private let stackedStripLeadingWidth: CGFloat = 164
     private let stackedStripTrailingWidth: CGFloat = 82
+    private let bottomBarHeight: CGFloat = 52
+    private let stackedStripHeight: CGFloat = 52
+    private let stackedStripStep: CGFloat = 60
+    private let stackedStripBaseGap: CGFloat = 14
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -80,7 +84,7 @@ struct PadBrowserRootView: View {
             if showsGroupStripStack {
                 groupStripStackOverlay
                     .padding(.horizontal, 18)
-                    .padding(.bottom, 6 + 52 + 10)
+                    .padding(.bottom, 6 + bottomBarHeight + stackedStripBaseGap)
                     .transition(.identity)
             }
             bottomBar
@@ -299,17 +303,24 @@ struct PadBrowserRootView: View {
         let groups = stackedGroups
         return ZStack(alignment: .bottom) {
             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                compactGroupStrip(for: group)
-                    .offset(y: showsGroupStripStack ? CGFloat(-((index + 1) * 60)) : 0)
-                    .opacity(showsGroupStripStack ? 1 : 0)
-                    .scaleEffect(showsGroupStripStack ? 1 : 0.96, anchor: .bottom)
-                    .animation(
-                        .spring(response: 0.34, dampingFraction: 0.86).delay(Double(index) * 0.03),
-                        value: showsGroupStripStack
-                    )
+                groupStripStackRow(for: group, index: index)
             }
         }
         .allowsHitTesting(showsGroupStripStack)
+    }
+
+    private func groupStripStackRow(for group: PadBrowserTabGroup, index: Int) -> some View {
+        let yOffset = showsGroupStripStack ? -(CGFloat(index + 1) * stackedStripStep) : 0
+        let rowScale: CGFloat = showsGroupStripStack ? 1 : 0.96
+        let rowOpacity: CGFloat = showsGroupStripStack ? 1 : 0
+        let animation = Animation.spring(response: 0.34, dampingFraction: 0.86)
+            .delay(Double(index) * 0.03)
+
+        return compactGroupStrip(for: group)
+            .offset(y: yOffset)
+            .opacity(rowOpacity)
+            .scaleEffect(rowScale, anchor: .bottom)
+            .animation(animation, value: showsGroupStripStack)
     }
 
     private var bottomRevealZone: some View {
@@ -420,8 +431,10 @@ struct PadBrowserRootView: View {
                     }
                 }
                 .frame(minWidth: stripProxy.size.width, alignment: .center)
+                .frame(maxHeight: .infinity, alignment: .center)
                 .padding(.horizontal, 4)
             }
+            .frame(maxHeight: .infinity, alignment: .center)
             .background(
                 GeometryReader { proxy in
                     Color.clear
@@ -492,10 +505,12 @@ struct PadBrowserRootView: View {
                         }
                     }
                     .frame(minWidth: stripProxy.size.width, alignment: .center)
+                    .frame(maxHeight: .infinity, alignment: .center)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 3)
                     .animation(.spring(response: 0.28, dampingFraction: 0.90), value: groupTabs.map(\.id))
                 }
+                .frame(maxHeight: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity)
 
@@ -515,7 +530,7 @@ struct PadBrowserRootView: View {
             .padding(.trailing, 16)
             .frame(width: stackedStripTrailingWidth, alignment: .trailing)
         }
-        .frame(height: 52)
+        .frame(height: stackedStripHeight)
         .background(PadLiquidGlassBackground(cornerRadius: 18))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1603,29 +1618,33 @@ private struct PadTabThumbnail: View {
     var body: some View {
         Button(action: onSelect) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(backgroundFill)
-                Group {
-                    if let image = tab.thumbnail {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        ZStack {
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.18), Color.black.opacity(0.12)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            Image(systemName: "globe")
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundStyle(.secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(backgroundFill)
+                    Group {
+                        if let image = tab.thumbnail {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            ZStack {
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.18), Color.black.opacity(0.12)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                Image(systemName: "globe")
+                                    .font(.system(size: 22, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .padding(3)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .padding(3)
-            }
+                .scaleEffect(destructiveVisualProgress > 0 ? (1 - (0.08 * destructiveVisualProgress)) : 1)
+                .offset(y: previewOffsetY)
+                }
             .frame(width: 80, height: 46)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1676,8 +1695,6 @@ private struct PadTabThumbnail: View {
                 }
             }
             .shadow(color: shadowColor, radius: 16, y: 6)
-            .scaleEffect(destructiveVisualProgress > 0 ? (1 - (0.08 * destructiveVisualProgress)) : 1)
-            .offset(y: previewOffsetY)
             .animation(.easeOut(duration: 0.14), value: showsDestructiveDismiss)
             .animation(.easeOut(duration: 0.10), value: destructivePreviewProgress)
         }

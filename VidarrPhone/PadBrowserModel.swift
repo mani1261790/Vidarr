@@ -920,7 +920,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         <!doctype html>
         <html lang="ja">
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content">
         <title>Vidarr Start</title>
         <style>
         :root {
@@ -954,6 +954,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         html, body {
           min-height: 100%;
           margin: 0;
+          width: 100%;
+          overflow: hidden;
         }
         body {
           margin: 0;
@@ -1009,13 +1011,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
           display: flex;
           justify-content: center;
         }
-        .secondary {
-          width: auto;
+        button.secondary {
+          width: fit-content;
           min-width: 146px;
           height: 42px;
           padding: 0 16px;
           border-radius: 15px;
           font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif;
+          flex: 0 1 auto;
         }
         .search {
           flex: 1 1 auto;
@@ -1094,12 +1097,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
             border-radius: 999px;
             font-size: 17px;
           }
-          .secondary {
+          button.secondary {
             width: 100%;
             min-width: 0;
             height: 42px;
             border-radius: 15px;
             font-size: 14px;
+            flex: 1 1 auto;
           }
         }
         </style>
@@ -1120,12 +1124,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
             const template = \(String(reflecting: searchTemplate));
             const initialQuery = \(escapedQuery);
             const input = document.getElementById('query');
-            const shell = document.querySelector('.shell');
             input.value = initialQuery;
             function route(rawValue) {
               const raw = rawValue.trim();
               if (!raw) {
-                input.focus();
                 return;
               }
               const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
@@ -1140,14 +1142,6 @@ final class PadBrowserModel: NSObject, ObservableObject {
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
             }
-            function keepLayoutFixed() {
-              window.scrollTo(0, 0);
-              document.documentElement.scrollTop = 0;
-              document.body.scrollTop = 0;
-              if (window.visualViewport) {
-                shell.style.height = window.visualViewport.height + 'px';
-              }
-            }
             document.getElementById('searchForm').addEventListener('submit', function(event) {
               event.preventDefault();
               route(input.value);
@@ -1160,19 +1154,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
                   route(pasted);
                 }
               } catch (_) {
-                input.focus();
               }
             });
-            input.addEventListener('focus', function() {
-              keepLayoutFixed();
-              setTimeout(keepLayoutFixed, 16);
-              setTimeout(keepLayoutFixed, 120);
-            });
-            if (window.visualViewport) {
-              window.visualViewport.addEventListener('resize', keepLayoutFixed);
-              window.visualViewport.addEventListener('scroll', keepLayoutFixed);
-            }
-            window.addEventListener('scroll', keepLayoutFixed, { passive: true });
             if (initialQuery) {
               input.focus();
               requestAnimationFrame(() => input.setSelectionRange(0, input.value.length));

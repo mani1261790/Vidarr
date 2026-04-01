@@ -316,13 +316,13 @@ struct PadBrowserRootView: View {
         .padding(.horizontal, isPhoneLayout ? 12 : 10)
         .padding(.vertical, isPhoneLayout ? 6 : 6)
         .background(
-            PadLiquidGlassBackground(cornerRadius: barCornerRadius)
+            PadLiquidGlassCapsuleBackground()
         )
         .overlay(
-            RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous)
+            Capsule()
                 .strokeBorder(chromeForegroundColor.opacity(0.10), lineWidth: 0.75)
         )
-        .clipShape(RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous))
+        .clipShape(Capsule())
         .shadow(color: .black.opacity(0.11), radius: isPhoneLayout ? 12 : 14, y: isPhoneLayout ? 4 : 6)
         .frame(maxWidth: chromeBarMaxWidth)
     }
@@ -581,14 +581,14 @@ struct PadBrowserRootView: View {
             .frame(width: stackedStripTrailingWidth, alignment: .trailing)
         }
         .frame(height: groupStripHeight)
-        .background(PadLiquidGlassBackground(cornerRadius: isPhoneLayout ? 14 : 18))
+        .background(PadLiquidGlassCapsuleBackground())
         .overlay(
-            RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous)
-                .stroke(Color(uiColor: group.accentColor).opacity(0.20), lineWidth: 1)
+            Capsule()
+                .stroke(Color(uiColor: group.accentColor).opacity(0.18), lineWidth: 0.9)
         )
-        .clipShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
+        .clipShape(Capsule())
         .shadow(color: .black.opacity(isPhoneLayout ? 0.06 : 0.08), radius: isPhoneLayout ? 6 : 10, y: isPhoneLayout ? 3 : 4)
-        .contentShape(RoundedRectangle(cornerRadius: isPhoneLayout ? 14 : 18, style: .continuous))
+        .contentShape(Capsule())
         .frame(maxWidth: groupStackRowMaxWidth)
         .onTapGesture {
             if groupTabs.isEmpty {

@@ -1280,21 +1280,21 @@ struct PadGestureHUD: View {
             .frame(width: 138, height: 138)
             .background(hudBackground)
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
     }
 
     @ViewBuilder
     private var hudBackground: some View {
         if #available(iOS 26.0, *) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.white.opacity(0.001))
                 .glassEffect()
         } else {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.ultraThinMaterial)
         }
     }
@@ -1311,6 +1311,21 @@ struct PadLiquidGlassBackground: View {
                     .glassEffect()
             } else {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+        }
+    }
+}
+
+struct PadLiquidGlassCapsuleBackground: View {
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                Capsule()
+                    .fill(Color.white.opacity(0.001))
+                    .glassEffect()
+            } else {
+                Capsule()
                     .fill(.ultraThinMaterial)
             }
         }

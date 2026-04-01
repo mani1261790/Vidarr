@@ -288,13 +288,13 @@ struct PadBrowserRootView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            PadLiquidGlassBackground(cornerRadius: 20)
+            PadLiquidGlassCapsuleBackground()
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(chromeForegroundColor.opacity(0.16), lineWidth: 1)
+            Capsule()
+                .strokeBorder(chromeForegroundColor.opacity(0.14), lineWidth: 0.9)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(Capsule())
         .shadow(color: .black.opacity(0.11), radius: 14, y: 6)
     }
 
@@ -550,14 +550,14 @@ struct PadBrowserRootView: View {
             .frame(width: stackedStripTrailingWidth, alignment: .trailing)
         }
         .frame(height: stackedStripHeight)
-        .background(PadLiquidGlassBackground(cornerRadius: 18))
+        .background(PadLiquidGlassCapsuleBackground())
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(uiColor: group.accentColor).opacity(0.20), lineWidth: 1)
+            Capsule()
+                .stroke(Color(uiColor: group.accentColor).opacity(0.18), lineWidth: 0.9)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(Capsule())
         .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(Capsule())
         .onTapGesture {
             if groupTabs.isEmpty {
                 model.switchGroup(group)

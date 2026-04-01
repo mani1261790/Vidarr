@@ -779,6 +779,7 @@ struct PadBrowserRootView: View {
     private var gestureConfiguration: PadGestureConfiguration {
         PadGestureConfiguration(
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
+            enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
                 withAnimation(.easeOut(duration: 0.16)) {
                     gestureHUD = state
@@ -1265,6 +1266,7 @@ private struct PadSettingsSheet: View {
     @State private var searchTemplate = PadBrowserPreferences.shared.searchTemplate
     @State private var preferredContentLanguage = PadBrowserPreferences.shared.preferredContentLanguage
     @State private var gestureSensitivity = PadBrowserPreferences.shared.gestureSensitivity
+    @State private var enabledGestures = PadBrowserPreferences.shared.enabledGestureOptions
     @State private var reopenTabsOnLaunch = PadBrowserPreferences.shared.reopenTabsOnLaunch
     @State private var restoreClosedTabPageHistory = PadBrowserPreferences.shared.restoreClosedTabPageHistory
     @State private var autoHideBottomBar = PadBrowserPreferences.shared.autoHideBottomBar
@@ -1372,6 +1374,23 @@ private struct PadSettingsSheet: View {
                             }
                             .pickerStyle(.segmented)
                         }
+                        Section("ジェスチャーごとのオン / オフ") {
+                            ForEach(PadGestureOption.allCases, id: \.self) { option in
+                                PadGestureToggleRow(
+                                    option: option,
+                                    isOn: Binding(
+                                        get: { enabledGestures.contains(option) },
+                                        set: { enabled in
+                                            if enabled {
+                                                enabledGestures.insert(option)
+                                            } else {
+                                                enabledGestures.remove(option)
+                                            }
+                                        }
+                                    )
+                                )
+                            }
+                        }
 
                     case .privacy:
                         Section("プライバシー") {
@@ -1439,6 +1458,9 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.searchTemplate = searchTemplate
                         PadBrowserPreferences.shared.preferredContentLanguage = preferredContentLanguage
                         PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
+                        PadGestureOption.allCases.forEach { option in
+                            PadBrowserPreferences.shared.setGestureEnabled(enabledGestures.contains(option), for: option)
+                        }
                         PadBrowserPreferences.shared.reopenTabsOnLaunch = reopenTabsOnLaunch
                         PadBrowserPreferences.shared.autoHideBottomBar = autoHideBottomBar
                         PadBrowserPreferences.shared.bottomBarAutoHideDelay = bottomBarAutoHideDelay
@@ -1474,6 +1496,62 @@ private struct PadSettingsSheet: View {
 
     private var canSave: Bool {
         isSearchTemplateInputValid && isHomePageInputValid
+    }
+}
+
+private struct PadGestureToggleRow: View {
+    let option: PadGestureOption
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            PadGestureGlyphIcon(points: option.strokePoints)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(.thinMaterial)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(option.title)
+                        .font(.body.weight(.semibold))
+                    Text(option.gestureLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                Text(option.helpText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct PadGestureGlyphIcon: View {
+    let points: [CGPoint]
+
+    var body: some View {
+        Canvas { context, size in
+            guard points.count > 1 else { return }
+            var path = Path()
+            let converted = points.map { point in
+                CGPoint(x: point.x * size.width, y: point.y * size.height)
+            }
+            path.move(to: converted[0])
+            for point in converted.dropFirst() {
+                path.addLine(to: point)
+            }
+            context.stroke(
+                path,
+                with: .color(.primary.opacity(0.92)),
+                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+            )
+        }
     }
 }
 

@@ -5,6 +5,110 @@ public final class BrowserPreferences {
     public static var shared = BrowserPreferences()
     public static let didChangeNotification = Notification.Name("BrowserPreferencesDidChange")
 
+    public enum GestureOption: String, CaseIterable, Hashable {
+        case nextTab
+        case previousTab
+        case closeTab
+        case closeAllTabs
+        case restoreClosedTab
+        case reload
+        case reloadAll
+        case back
+        case forward
+        case search
+        case newTab
+
+        public var title: String {
+            switch self {
+            case .nextTab: return "次のタブ"
+            case .previousTab: return "前のタブ"
+            case .closeTab: return "現在のタブを閉じる"
+            case .closeAllTabs: return "すべてのタブを閉じる"
+            case .restoreClosedTab: return "閉じたタブを復元"
+            case .reload: return "現在のタブを再読み込み"
+            case .reloadAll: return "すべてのタブを再読み込み"
+            case .back: return "戻る"
+            case .forward: return "進む"
+            case .search: return "検索"
+            case .newTab: return "新規タブ"
+            }
+        }
+
+        public var gestureLabel: String {
+            switch self {
+            case .nextTab: return "→"
+            case .previousTab: return "←"
+            case .closeTab: return "L（↓→）"
+            case .closeAllTabs: return "LL（↓→↓→）"
+            case .restoreClosedTab: return "U（↓→↑）"
+            case .reload: return "O（↑→↓←）"
+            case .reloadAll: return "OO"
+            case .back: return "↑→"
+            case .forward: return "↑←"
+            case .search: return "S（←↓→↓←）"
+            case .newTab: return "↓←"
+            }
+        }
+
+        public var helpText: String {
+            switch self {
+            case .nextTab, .previousTab:
+                return "左右に払ってタブを切り替えます。"
+            case .closeTab:
+                return "L 字に書いて、開いているタブを閉じます。"
+            case .closeAllTabs:
+                return "L を 2 回続けて書いて、保護されていないタブをまとめて閉じます。"
+            case .restoreClosedTab:
+                return "U 字に書いて、最後に閉じたタブを戻します。"
+            case .reload:
+                return "O 字で、今のタブを再読み込みします。"
+            case .reloadAll:
+                return "O を 2 回続けて書いて、すべてのタブを再読み込みします。"
+            case .back:
+                return "上に払ってから右へ曲げて、ひとつ前のページへ戻ります。"
+            case .forward:
+                return "上に払ってから左へ曲げて、次のページへ進みます。"
+            case .search:
+                return "S 字に書いて、検索 UI を開きます。"
+            case .newTab:
+                return "左下へ曲げて、新しいタブを開きます。"
+            }
+        }
+
+        public var strokePoints: [CGPoint] {
+            switch self {
+            case .nextTab:
+                return [CGPoint(x: 0.18, y: 0.5), CGPoint(x: 0.82, y: 0.5)]
+            case .previousTab:
+                return [CGPoint(x: 0.82, y: 0.5), CGPoint(x: 0.18, y: 0.5)]
+            case .closeTab:
+                return [CGPoint(x: 0.3, y: 0.18), CGPoint(x: 0.3, y: 0.78), CGPoint(x: 0.78, y: 0.78)]
+            case .closeAllTabs:
+                return [
+                    CGPoint(x: 0.22, y: 0.18), CGPoint(x: 0.22, y: 0.62), CGPoint(x: 0.52, y: 0.62),
+                    CGPoint(x: 0.52, y: 0.78), CGPoint(x: 0.52, y: 0.28), CGPoint(x: 0.82, y: 0.28)
+                ]
+            case .restoreClosedTab:
+                return [CGPoint(x: 0.24, y: 0.18), CGPoint(x: 0.24, y: 0.72), CGPoint(x: 0.78, y: 0.72), CGPoint(x: 0.78, y: 0.18)]
+            case .reload:
+                return [CGPoint(x: 0.26, y: 0.28), CGPoint(x: 0.56, y: 0.28), CGPoint(x: 0.7, y: 0.52), CGPoint(x: 0.52, y: 0.76), CGPoint(x: 0.28, y: 0.76)]
+            case .reloadAll:
+                return [
+                    CGPoint(x: 0.28, y: 0.34), CGPoint(x: 0.56, y: 0.24), CGPoint(x: 0.72, y: 0.46), CGPoint(x: 0.58, y: 0.72), CGPoint(x: 0.34, y: 0.64),
+                    CGPoint(x: 0.44, y: 0.34), CGPoint(x: 0.68, y: 0.28), CGPoint(x: 0.78, y: 0.5), CGPoint(x: 0.64, y: 0.7), CGPoint(x: 0.44, y: 0.62)
+                ]
+            case .back:
+                return [CGPoint(x: 0.3, y: 0.78), CGPoint(x: 0.3, y: 0.24), CGPoint(x: 0.78, y: 0.24)]
+            case .forward:
+                return [CGPoint(x: 0.7, y: 0.78), CGPoint(x: 0.7, y: 0.24), CGPoint(x: 0.22, y: 0.24)]
+            case .search:
+                return [CGPoint(x: 0.76, y: 0.22), CGPoint(x: 0.34, y: 0.22), CGPoint(x: 0.24, y: 0.5), CGPoint(x: 0.7, y: 0.5), CGPoint(x: 0.6, y: 0.78), CGPoint(x: 0.22, y: 0.78)]
+            case .newTab:
+                return [CGPoint(x: 0.72, y: 0.22), CGPoint(x: 0.72, y: 0.74), CGPoint(x: 0.22, y: 0.74)]
+            }
+        }
+    }
+
     public enum PreferredContentLanguage: String, CaseIterable {
         case system
         case japanese
@@ -83,6 +187,7 @@ public final class BrowserPreferences {
         static let appleAccountUserID = "prefs.appleAccountUserID"
         static let appleAccountEmail = "prefs.appleAccountEmail"
         static let appleAccountDisplayName = "prefs.appleAccountDisplayName"
+        static let gestureEnabledPrefix = "prefs.gestureEnabled."
     }
 
     private let defaults: UserDefaults
@@ -208,6 +313,22 @@ public final class BrowserPreferences {
             defaults.set(newValue.rawValue, forKey: Key.gestureSensitivity)
             notifyChanged()
         }
+    }
+
+    public func isGestureEnabled(_ option: GestureOption) -> Bool {
+        if defaults.object(forKey: Key.gestureEnabledPrefix + option.rawValue) == nil {
+            return true
+        }
+        return defaults.bool(forKey: Key.gestureEnabledPrefix + option.rawValue)
+    }
+
+    public func setGestureEnabled(_ enabled: Bool, for option: GestureOption) {
+        defaults.set(enabled, forKey: Key.gestureEnabledPrefix + option.rawValue)
+        notifyChanged()
+    }
+
+    public var enabledGestureOptions: Set<GestureOption> {
+        Set(GestureOption.allCases.filter(isGestureEnabled(_:)))
     }
 
     public var antiTrackingEnabled: Bool {
@@ -373,6 +494,9 @@ public final class BrowserPreferences {
             defaults.set(true, forKey: Key.sendDoNotTrack)
             defaults.set(true, forKey: Key.restoreClosedTabPageHistory)
             defaults.set(true, forKey: Key.reopenTabsOnLaunch)
+            GestureOption.allCases.forEach { option in
+                defaults.set(true, forKey: Key.gestureEnabledPrefix + option.rawValue)
+            }
         }
     }
 

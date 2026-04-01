@@ -41,13 +41,25 @@ final class GestureOverlayView: NSView {
     private var latestEventTimestamp: TimeInterval = 0
     private var captureSuppressionUntil: TimeInterval = 0
     private var rightDragLastPointInWindow: NSPoint?
-    private let allowedGestureNames: Set<String> = [
-        "UpRight", "UpLeft", "DownRight", "DownLeft",
-        "O", "U", "S", "OO", "DownRightDownRight",
-        "Right", "Left"
-    ]
     private var sensitivityMultiplier: CGFloat {
         BrowserPreferences.shared.gestureSensitivity.multiplier
+    }
+
+    private var allowedGestureNames: Set<String> {
+        let prefs = BrowserPreferences.shared
+        var names: Set<String> = []
+        if prefs.isGestureEnabled(.back) { names.insert("UpRight") }
+        if prefs.isGestureEnabled(.forward) { names.insert("UpLeft") }
+        if prefs.isGestureEnabled(.closeTab) { names.insert("DownRight") }
+        if prefs.isGestureEnabled(.newTab) { names.insert("DownLeft") }
+        if prefs.isGestureEnabled(.reload) { names.insert("O") }
+        if prefs.isGestureEnabled(.restoreClosedTab) { names.insert("U") }
+        if prefs.isGestureEnabled(.search) { names.insert("S") }
+        if prefs.isGestureEnabled(.reloadAll) { names.insert("OO") }
+        if prefs.isGestureEnabled(.closeAllTabs) { names.insert("DownRightDownRight") }
+        if prefs.isGestureEnabled(.nextTab) { names.insert("Left") }
+        if prefs.isGestureEnabled(.previousTab) { names.insert("Right") }
+        return names
     }
 
     private lazy var recognizer = GestureRecognizer(
@@ -284,7 +296,7 @@ final class GestureOverlayView: NSView {
         }
 
         // OO は入力ばらつきが大きいため専用フォールバックを使う。
-        if isLikelyDoubleLoop(capturePoints) {
+        if isLikelyDoubleLoop(capturePoints), BrowserPreferences.shared.isGestureEnabled(.reloadAll) {
             if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.26, allowedNames: ["OO"]) {
                 performAction(for: oo.name)
                 hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint, duration: 0.55)
@@ -493,28 +505,39 @@ final class GestureOverlayView: NSView {
 
         switch name {
         case "Left":
+            guard BrowserPreferences.shared.isGestureEnabled(.nextTab) else { return }
             actions.gestureTabSwitchLeft()
         case "Right":
+            guard BrowserPreferences.shared.isGestureEnabled(.previousTab) else { return }
             actions.gestureTabSwitchRight()
         case "DownRight":
+            guard BrowserPreferences.shared.isGestureEnabled(.closeTab) else { return }
             actions.tabClose()
             captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
         case "DownRightDownRight":
+            guard BrowserPreferences.shared.isGestureEnabled(.closeAllTabs) else { return }
             actions.tabCloseAll()
             captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
         case "O":
+            guard BrowserPreferences.shared.isGestureEnabled(.reload) else { return }
             actions.reload()
         case "U":
+            guard BrowserPreferences.shared.isGestureEnabled(.restoreClosedTab) else { return }
             actions.tabReopenClosed()
         case "OO":
+            guard BrowserPreferences.shared.isGestureEnabled(.reloadAll) else { return }
             actions.reloadAll()
         case "UpRight":
+            guard BrowserPreferences.shared.isGestureEnabled(.back) else { return }
             actions.goBack()
         case "UpLeft":
+            guard BrowserPreferences.shared.isGestureEnabled(.forward) else { return }
             actions.goForward()
         case "S":
+            guard BrowserPreferences.shared.isGestureEnabled(.search) else { return }
             actions.search()
         case "DownLeft":
+            guard BrowserPreferences.shared.isGestureEnabled(.newTab) else { return }
             actions.newTab()
         default:
             break

@@ -27,6 +27,7 @@ struct PadGestureHUDState: Equatable {
 
 struct PadGestureConfiguration {
     let sensitivity: PadGestureSensitivity
+    let enabledOptions: Set<PadGestureOption>
     let onPreview: (PadGestureHUDState?) -> Void
     let onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
     let onHorizontalSwipeFinish: (PadGestureAction, CGFloat) -> Void
@@ -63,11 +64,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     }
 
     private let config = CaptureConfig()
-    private let allowedGestureNames: Set<String> = [
-        "UpRight", "UpLeft", "DownRight", "DownLeft",
-        "O", "U", "S", "OO", "DownRightDownRight",
-        "Right", "Left"
-    ]
+    private var enabledOptions: Set<PadGestureOption>
 
     var sensitivity: PadGestureSensitivity
     private var onPreview: (PadGestureHUDState?) -> Void
@@ -107,6 +104,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         onCancel: @escaping () -> Void
     ) {
         self.sensitivity = sensitivity
+        self.enabledOptions = Set(PadGestureOption.allCases)
         self.onPreview = onPreview
         self.onHorizontalSwipeDrag = onHorizontalSwipeDrag
         self.onHorizontalSwipeFinish = onHorizontalSwipeFinish
@@ -117,12 +115,29 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
     func update(configuration: PadGestureConfiguration) {
         sensitivity = configuration.sensitivity
+        enabledOptions = configuration.enabledOptions
         onPreview = configuration.onPreview
         onHorizontalSwipeDrag = configuration.onHorizontalSwipeDrag
         onHorizontalSwipeFinish = configuration.onHorizontalSwipeFinish
         onHorizontalSwipeCancel = configuration.onHorizontalSwipeCancel
         onCommit = configuration.onCommit
         onCancel = configuration.onCancel
+    }
+
+    private var allowedGestureNames: Set<String> {
+        var names: Set<String> = []
+        if enabledOptions.contains(.back) { names.insert("UpRight") }
+        if enabledOptions.contains(.forward) { names.insert("UpLeft") }
+        if enabledOptions.contains(.closeTab) { names.insert("DownRight") }
+        if enabledOptions.contains(.newTab) { names.insert("DownLeft") }
+        if enabledOptions.contains(.reload) { names.insert("O") }
+        if enabledOptions.contains(.restoreClosedTab) { names.insert("U") }
+        if enabledOptions.contains(.search) { names.insert("S") }
+        if enabledOptions.contains(.reloadAll) { names.insert("OO") }
+        if enabledOptions.contains(.closeAllTabs) { names.insert("DownRightDownRight") }
+        if enabledOptions.contains(.nextTab) { names.insert("Left") }
+        if enabledOptions.contains(.previousTab) { names.insert("Right") }
+        return names
     }
 
     @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
@@ -338,6 +353,10 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         }
 
         if isLikelyDoubleLoop(capturePoints) {
+            guard enabledOptions.contains(.reloadAll) else {
+                onCancel()
+                return
+            }
             onCommit(.reloadAll)
             return
         }
@@ -415,6 +434,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         guard verticalExcursion <= config.horizontalSwipeVerticalExcursion else { return false }
 
         let action: PadGestureAction = displacementX < 0 ? .nextTab : .previousTab
+        let requiredOption: PadGestureOption = displacementX < 0 ? .nextTab : .previousTab
+        guard enabledOptions.contains(requiredOption) else { return false }
         interactiveTabSwipeActive = true
         interactiveTabSwipeTotalX = displacementX
         activeHorizontalAction = action
@@ -489,7 +510,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     }
 
     private func hudState(for name: String, confidence: CGFloat, committed: Bool) -> PadGestureHUDState? {
-        guard let action = mapAction(name: name) else { return nil }
+        guard let action = mapAction(name: name),
+              let option = preferenceOption(for: action),
+              enabledOptions.contains(option) else { return nil }
         return PadGestureHUDState(
             action: action,
             title: "",
@@ -497,6 +520,22 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             confidence: confidence,
             isCommitted: committed
         )
+    }
+
+    private func preferenceOption(for action: PadGestureAction) -> PadGestureOption? {
+        switch action {
+        case .nextTab: return .nextTab
+        case .previousTab: return .previousTab
+        case .closeTab: return .closeTab
+        case .closeAllTabs: return .closeAllTabs
+        case .restoreClosedTab: return .restoreClosedTab
+        case .reload: return .reload
+        case .reloadAll: return .reloadAll
+        case .back: return .back
+        case .forward: return .forward
+        case .search: return .search
+        case .newTab: return .newTab
+        }
     }
 
     private func symbol(for name: String) -> String {

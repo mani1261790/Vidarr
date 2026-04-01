@@ -648,7 +648,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let syncSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let appleAccountLabel = NSTextField(wrappingLabelWithString: "")
     private let gestureSummaryLabel = NSTextField(wrappingLabelWithString: "")
-    private let gestureListLabel = NSTextField(wrappingLabelWithString: "")
+    private let gestureRowsStack = NSStackView()
     private let privacySummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let dataSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let updatesCheckbox = NSButton(checkboxWithTitle: "アップデート通知を有効化", target: nil, action: nil)
@@ -675,6 +675,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let chooseDownloadFolderButton = NSButton(title: "ダウンロード先フォルダを選ぶ", target: nil, action: nil)
     private let clearDownloadFolderButton = NSButton(title: "既定に戻す", target: nil, action: nil)
     private var observers: [NSObjectProtocol] = []
+    private var gestureToggleButtons: [BrowserPreferences.GestureOption: NSButton] = [:]
 
     init(
         openDownloads: @escaping () -> Void,
@@ -928,9 +929,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let gestureSection = makeSectionContentStack()
         let gestureStack = gestureSection
         gestureStack.addArrangedSubview(configureSummaryLabel(gestureSummaryLabel))
-        let gestureListTitle = makeFieldLabel("使えるジェスチャー")
+        let gestureListTitle = makeFieldLabel("ジェスチャーごとのオン / オフ")
         gestureStack.addArrangedSubview(gestureListTitle)
-        gestureStack.addArrangedSubview(configureSummaryLabel(gestureListLabel))
+        gestureRowsStack.translatesAutoresizingMaskIntoConstraints = false
+        gestureRowsStack.orientation = .vertical
+        gestureRowsStack.alignment = .leading
+        gestureRowsStack.spacing = 10
+        gestureStack.addArrangedSubview(gestureRowsStack)
+        buildGestureRows()
         let sensitivityRow = NSStackView()
         sensitivityRow.translatesAutoresizingMaskIntoConstraints = false
         sensitivityRow.orientation = .horizontal
@@ -999,7 +1005,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             signInRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
             syncControlsRow.widthAnchor.constraint(equalTo: generalSection.widthAnchor),
 
-            gestureListLabel.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
+            gestureRowsStack.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             sensitivityRow.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             gestureTestNote.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
             gestureTestContainer.widthAnchor.constraint(equalTo: gestureSection.widthAnchor),
@@ -1185,6 +1191,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             sensitivityPopup.selectItem(at: 1)
         }
+        BrowserPreferences.GestureOption.allCases.forEach { option in
+            gestureToggleButtons[option]?.state = prefs.isGestureEnabled(option) ? .on : .off
+        }
 
         let homeHost = URL(string: prefs.homePageURLString)?.host ?? prefs.homePageURLString
         let searchHost = URL(string: prefs.searchTemplate)?.host ?? prefs.searchTemplate
@@ -1218,19 +1227,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         signOutAppleButton.isHidden = (prefs.appleAccount == nil)
         syncNowButton.isEnabled = syncAvailable
 
-        gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
-        gestureListLabel.stringValue = [
-            "→ : 次のタブ",
-            "← : 前のタブ",
-            "L（↓→）: 現在のタブを閉じる",
-            "LL（↓→↓→）: すべてのタブを閉じる",
-            "U（↓→↑）: 閉じたタブを復元",
-            "O（↑→↓←）: 現在のタブを再読み込み",
-            "↑→ : 戻る",
-            "↑← : 進む",
-            "S（←↓→↓←）: 検索",
-            "↓← : 新規タブ"
-        ].joined(separator: "\n")
+        let enabledCount = prefs.enabledGestureOptions.count
+        gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\n有効なジェスチャー: \(enabledCount)/\(BrowserPreferences.GestureOption.allCases.count)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureTestView.sensitivityMultiplier = sensitivity.multiplier
 
         privacySummaryLabel.stringValue = [
@@ -1467,6 +1465,13 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         loadValues()
     }
 
+    @objc private func gestureToggleChanged(_ sender: NSButton) {
+        guard let raw = sender.identifier?.rawValue,
+              let option = BrowserPreferences.GestureOption(rawValue: raw) else { return }
+        prefs.setGestureEnabled(sender.state == .on, for: option)
+        loadValues()
+    }
+
     @objc private func beginAppleSignIn() {
         guard let window else { return }
         appleSignInCoordinator.begin(window: window) { [weak self] result in
@@ -1601,6 +1606,64 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         _ = try? prefs.setPreferredDownloadDirectory(nil)
         loadValues()
     }
+
+    private func buildGestureRows() {
+        gestureRowsStack.arrangedSubviews.forEach { view in
+            gestureRowsStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        gestureToggleButtons.removeAll()
+
+        for option in BrowserPreferences.GestureOption.allCases {
+            let row = NSStackView()
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.spacing = 12
+
+            let icon = GestureGlyphView(points: option.strokePoints)
+            icon.translatesAutoresizingMaskIntoConstraints = false
+
+            let labels = NSStackView()
+            labels.translatesAutoresizingMaskIntoConstraints = false
+            labels.orientation = .vertical
+            labels.alignment = .leading
+            labels.spacing = 2
+
+            let title = NSTextField(labelWithString: option.title)
+            title.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+            title.lineBreakMode = .byTruncatingTail
+
+            let subtitle = NSTextField(wrappingLabelWithString: "\(option.gestureLabel)  \(option.helpText)")
+            subtitle.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+            subtitle.textColor = .secondaryLabelColor
+            subtitle.maximumNumberOfLines = 2
+
+            labels.addArrangedSubview(title)
+            labels.addArrangedSubview(subtitle)
+
+            let toggle = NSButton(checkboxWithTitle: "", target: self, action: #selector(gestureToggleChanged(_:)))
+            toggle.translatesAutoresizingMaskIntoConstraints = false
+            toggle.identifier = NSUserInterfaceItemIdentifier(option.rawValue)
+            toggle.controlSize = .regular
+
+            row.addArrangedSubview(icon)
+            row.addArrangedSubview(labels)
+            row.addArrangedSubview(NSView())
+            row.addArrangedSubview(toggle)
+            row.setCustomSpacing(14, after: icon)
+
+            NSLayoutConstraint.activate([
+                icon.widthAnchor.constraint(equalToConstant: 42),
+                icon.heightAnchor.constraint(equalToConstant: 26),
+                row.widthAnchor.constraint(equalTo: gestureRowsStack.widthAnchor),
+                toggle.widthAnchor.constraint(equalToConstant: 18)
+            ])
+
+            gestureRowsStack.addArrangedSubview(row)
+            gestureToggleButtons[option] = toggle
+        }
+    }
 }
 
 private final class GesturePracticeView: NSView {
@@ -1608,11 +1671,6 @@ private final class GesturePracticeView: NSView {
         didSet { recognizer = makeRecognizer() }
     }
 
-    private let allowedGestureNames: Set<String> = [
-        "UpRight", "UpLeft", "DownRight", "DownLeft",
-        "O", "U", "S", "OO", "DownRightDownRight",
-        "Right", "Left"
-    ]
     private let livePreviewScoreThreshold: CGFloat = 0.52
     private let triggerDominanceRatio: CGFloat = 1.65
     private let triggerWindowMs: TimeInterval = 90
@@ -1648,6 +1706,23 @@ private final class GesturePracticeView: NSView {
     private let fillLayer = CALayer()
     private let outlineLayer = CALayer()
     private var glassBackgroundView: NSView?
+
+    private var allowedGestureNames: Set<String> {
+        var allowed = Set<String>()
+        let prefs = BrowserPreferences.shared
+        if prefs.isGestureEnabled(.back) { allowed.insert("UpRight") }
+        if prefs.isGestureEnabled(.forward) { allowed.insert("UpLeft") }
+        if prefs.isGestureEnabled(.closeTab) { allowed.insert("DownRight") }
+        if prefs.isGestureEnabled(.newTab) { allowed.insert("DownLeft") }
+        if prefs.isGestureEnabled(.reload) { allowed.insert("O") }
+        if prefs.isGestureEnabled(.restoreClosedTab) { allowed.insert("U") }
+        if prefs.isGestureEnabled(.search) { allowed.insert("S") }
+        if prefs.isGestureEnabled(.reloadAll) { allowed.insert("OO") }
+        if prefs.isGestureEnabled(.closeAllTabs) { allowed.insert("DownRightDownRight") }
+        if prefs.isGestureEnabled(.nextTab) { allowed.insert("Left") }
+        if prefs.isGestureEnabled(.previousTab) { allowed.insert("Right") }
+        return allowed
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1946,6 +2021,58 @@ private final class GesturePracticeView: NSView {
         case "S": return "S 検索"
         default: return gesture
         }
+    }
+}
+
+private final class GestureGlyphView: NSView {
+    private let points: [CGPoint]
+
+    init(points: [CGPoint]) {
+        self.points = points
+        super.init(frame: .zero)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 42, height: 26) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard points.count >= 2 else { return }
+
+        let insetRect = bounds.insetBy(dx: 2, dy: 2)
+        let normalized = points.map { point in
+            CGPoint(
+                x: insetRect.minX + point.x * insetRect.width,
+                y: insetRect.minY + point.y * insetRect.height
+            )
+        }
+
+        let path = NSBezierPath()
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.lineWidth = 2.4
+        path.move(to: normalized[0])
+
+        if normalized.count == 2 {
+            path.line(to: normalized[1])
+        } else {
+            for index in 1..<normalized.count {
+                let previous = normalized[index - 1]
+                let current = normalized[index]
+                let midpoint = CGPoint(x: (previous.x + current.x) * 0.5, y: (previous.y + current.y) * 0.5)
+                path.curve(to: midpoint, controlPoint1: previous, controlPoint2: midpoint)
+                if index == normalized.count - 1 {
+                    path.curve(to: current, controlPoint1: midpoint, controlPoint2: current)
+                }
+            }
+        }
+
+        NSColor.systemBlue.withAlphaComponent(0.88).setStroke()
+        path.stroke()
     }
 }
 

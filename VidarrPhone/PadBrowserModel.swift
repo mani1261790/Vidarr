@@ -972,9 +972,9 @@ final class PadBrowserModel: NSObject, ObservableObject {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
+          justify-content: flex-start;
           padding:
-            max(10px, calc(env(safe-area-inset-top) + 6px))
+            max(18px, calc(env(safe-area-inset-top) + 56px))
             16px
             max(22px, calc(env(safe-area-inset-bottom) + 10px))
             16px;
@@ -1003,6 +1003,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
           display: flex;
           align-items: center;
           gap: 10px;
+        }
+        .actions {
+          margin-top: 12px;
+          display: flex;
+          justify-content: center;
+        }
+        .secondary {
+          width: auto;
+          min-width: 146px;
+          height: 42px;
+          padding: 0 16px;
+          border-radius: 15px;
+          font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif;
         }
         .search {
           flex: 1 1 auto;
@@ -1050,7 +1063,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         @media (max-width: 640px) {
           .shell {
             padding:
-              max(8px, calc(env(safe-area-inset-top) + 4px))
+              max(16px, calc(env(safe-area-inset-top) + 48px))
               16px
               max(18px, calc(env(safe-area-inset-bottom) + 8px))
               16px;
@@ -1081,6 +1094,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
             border-radius: 999px;
             font-size: 17px;
           }
+          .secondary {
+            width: 100%;
+            min-width: 0;
+            height: 42px;
+            border-radius: 15px;
+            font-size: 14px;
+          }
         }
         </style>
         <body>
@@ -1091,16 +1111,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
                 <button type="submit" aria-label="Open">→</button>
               </form>
+              <div class="actions">
+                <button id="pasteSearch" class="secondary" type="button">ペーストして検索</button>
+              </div>
             </div>
           </div>
           <script>
             const template = \(String(reflecting: searchTemplate));
             const initialQuery = \(escapedQuery);
             const input = document.getElementById('query');
+            const shell = document.querySelector('.shell');
             input.value = initialQuery;
-            document.getElementById('searchForm').addEventListener('submit', function(event) {
-              event.preventDefault();
-              const raw = input.value.trim();
+            function route(rawValue) {
+              const raw = rawValue.trim();
               if (!raw) {
                 input.focus();
                 return;
@@ -1116,7 +1139,40 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return;
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
+            }
+            function keepLayoutFixed() {
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+              if (window.visualViewport) {
+                shell.style.height = window.visualViewport.height + 'px';
+              }
+            }
+            document.getElementById('searchForm').addEventListener('submit', function(event) {
+              event.preventDefault();
+              route(input.value);
             });
+            document.getElementById('pasteSearch').addEventListener('click', async function() {
+              try {
+                const pasted = await navigator.clipboard.readText();
+                if (pasted) {
+                  input.value = pasted;
+                  route(pasted);
+                }
+              } catch (_) {
+                input.focus();
+              }
+            });
+            input.addEventListener('focus', function() {
+              keepLayoutFixed();
+              setTimeout(keepLayoutFixed, 16);
+              setTimeout(keepLayoutFixed, 120);
+            });
+            if (window.visualViewport) {
+              window.visualViewport.addEventListener('resize', keepLayoutFixed);
+              window.visualViewport.addEventListener('scroll', keepLayoutFixed);
+            }
+            window.addEventListener('scroll', keepLayoutFixed, { passive: true });
             if (initialQuery) {
               input.focus();
               requestAnimationFrame(() => input.setSelectionRange(0, input.value.length));

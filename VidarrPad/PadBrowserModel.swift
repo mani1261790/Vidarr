@@ -949,9 +949,14 @@ final class PadBrowserModel: NSObject, ObservableObject {
           }
         }
         * { box-sizing: border-box; }
+        html, body {
+          margin: 0;
+          min-height: 100%;
+        }
         body {
           margin: 0;
-          min-height: 100vh;
+          min-height: 100dvh;
+          overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, sans-serif;
           color: var(--text);
           background:
@@ -960,14 +965,21 @@ final class PadBrowserModel: NSObject, ObservableObject {
             linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
         }
         .shell {
-          min-height: 100vh;
-          display: grid;
-          place-items: center;
-          padding: 26px;
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-start;
+          padding:
+            max(24px, calc(env(safe-area-inset-top) + 64px))
+            26px
+            max(28px, calc(env(safe-area-inset-bottom) + 16px))
+            26px;
         }
         .panel {
           width: min(700px, calc(100vw - 32px));
-          padding: 34px 28px 28px;
+          padding: 34px 28px 22px;
           border-radius: 32px;
           background: var(--glass);
           border: 1px solid var(--stroke);
@@ -988,6 +1000,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
           display: flex;
           align-items: center;
           gap: 12px;
+        }
+        .actions {
+          margin-top: 12px;
+          display: flex;
+          justify-content: center;
+        }
+        .secondary {
+          width: auto;
+          min-width: 148px;
+          height: 46px;
+          padding: 0 18px;
+          border-radius: 16px;
+          font: 600 15px -apple-system, BlinkMacSystemFont, sans-serif;
         }
         .search {
           flex: 1 1 auto;
@@ -1047,6 +1072,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
             border-radius: 999px;
             font-size: 20px;
           }
+          .secondary {
+            width: 100%;
+            min-width: 0;
+            height: 44px;
+            border-radius: 15px;
+            font-size: 15px;
+          }
         }
         </style>
         <body>
@@ -1057,16 +1089,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 <input id="query" class="search" type="search" placeholder="検索語または URL を入力" autocomplete="off" spellcheck="false" />
                 <button type="submit" aria-label="Open">→</button>
               </form>
+              <div class="actions">
+                <button id="pasteSearch" class="secondary" type="button">ペーストして検索</button>
+              </div>
             </div>
           </div>
           <script>
             const template = \(String(reflecting: searchTemplate));
             const initialQuery = \(escapedQuery);
             const input = document.getElementById('query');
+            const shell = document.querySelector('.shell');
             input.value = initialQuery;
-            document.getElementById('searchForm').addEventListener('submit', function(event) {
-              event.preventDefault();
-              const raw = input.value.trim();
+            function route(rawValue) {
+              const raw = rawValue.trim();
               if (!raw) {
                 input.focus();
                 return;
@@ -1082,9 +1117,42 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return;
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
+            }
+            function keepLayoutFixed() {
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+              if (window.visualViewport) {
+                shell.style.height = window.visualViewport.height + 'px';
+              }
+            }
+            document.getElementById('searchForm').addEventListener('submit', function(event) {
+              event.preventDefault();
+              route(input.value);
             });
-            input.focus();
+            document.getElementById('pasteSearch').addEventListener('click', async function() {
+              try {
+                const pasted = await navigator.clipboard.readText();
+                if (pasted) {
+                  input.value = pasted;
+                  route(pasted);
+                }
+              } catch (_) {
+                input.focus();
+              }
+            });
+            input.addEventListener('focus', function() {
+              keepLayoutFixed();
+              setTimeout(keepLayoutFixed, 16);
+              setTimeout(keepLayoutFixed, 120);
+            });
+            if (window.visualViewport) {
+              window.visualViewport.addEventListener('resize', keepLayoutFixed);
+              window.visualViewport.addEventListener('scroll', keepLayoutFixed);
+            }
+            window.addEventListener('scroll', keepLayoutFixed, { passive: true });
             if (initialQuery) {
+              input.focus();
               requestAnimationFrame(() => input.setSelectionRange(0, input.value.length));
             }
           </script>

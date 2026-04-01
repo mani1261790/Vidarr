@@ -2119,6 +2119,7 @@ private struct PadNativeStartPageView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .allowsHitTesting(false)
             .overlay(alignment: .topLeading) {
                 Circle()
                     .fill(Color.blue.opacity(colorScheme == .dark ? 0.16 : 0.14))
@@ -2133,50 +2134,59 @@ private struct PadNativeStartPageView: View {
                     .blur(radius: 30)
                     .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
             }
-
-            VStack(spacing: compact ? 14 : 18) {
-                Spacer(minLength: compact ? 70 : 110)
+        }
+        .allowsHitTesting(false)
+        .overlay {
+            VStack(spacing: compact ? 16 : 22) {
+                Spacer(minLength: compact ? 82 : 128)
                 Text("Vidarr")
-                    .font(.system(size: compact ? 34 : 48, weight: .semibold, design: .rounded))
-                    .italic()
-                    .foregroundStyle(colorScheme == .dark ? .white : Color(red: 0.10, green: 0.14, blue: 0.22))
+                    .font(.custom("Snell Roundhand", size: compact ? 42 : 60))
+                    .fontWeight(.semibold)
+                    .kerning(0.5)
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.98) : Color(red: 0.10, green: 0.14, blue: 0.22))
+                    .shadow(color: (colorScheme == .dark ? Color.white : Color.black).opacity(0.08), radius: 8, y: 2)
 
-                HStack(spacing: compact ? 10 : 12) {
-                    TextField("検索語または URL を入力", text: $query)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .focused($inputFocused)
-                        .onSubmit { onSubmit(query) }
-                        .padding(.horizontal, compact ? 16 : 18)
-                        .frame(height: compact ? 50 : 58)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous)
-                                .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
-                        )
+                VStack(spacing: compact ? 12 : 14) {
+                    HStack(spacing: compact ? 10 : 12) {
+                        TextField("検索語または URL を入力", text: $query)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.go)
+                            .focused($inputFocused)
+                            .onSubmit { onSubmit(query) }
+                            .padding(.horizontal, compact ? 16 : 18)
+                            .frame(height: compact ? 52 : 60)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
+                                    .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
+                            )
+                            .allowsHitTesting(true)
 
-                    Button {
-                        onSubmit(query)
-                    } label: {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: compact ? 17 : 20, weight: .semibold))
-                            .frame(width: compact ? 46 : 54, height: compact ? 46 : 54)
+                        Button {
+                            onSubmit(query)
+                        } label: {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: compact ? 17 : 20, weight: .semibold))
+                                .frame(width: compact ? 48 : 56, height: compact ? 48 : 56)
+                        }
+                        .buttonStyle(.plain)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                        .allowsHitTesting(true)
                     }
-                    .buttonStyle(.plain)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+
+                    Button("ペーストして検索") {
+                        onPasteAndSearch()
+                    }
+                    .font(.system(size: compact ? 14 : 16, weight: .semibold))
+                    .padding(.horizontal, compact ? 18 : 22)
+                    .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                    .allowsHitTesting(true)
                 }
                 .frame(maxWidth: compact ? 360 : 560)
-
-                Button("ペーストして検索") {
-                    onPasteAndSearch()
-                }
-                .font(.system(size: compact ? 14 : 16, weight: .semibold))
-                .padding(.horizontal, compact ? 18 : 22)
-                .frame(height: compact ? 42 : 46)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
 
                 Spacer()
             }

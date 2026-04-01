@@ -68,7 +68,7 @@ struct PadBrowserRootView: View {
     private let bottomBarHeight: CGFloat = 52
     private let stackedStripHeight: CGFloat = 52
     private let stackedStripStep: CGFloat = 60
-    private let stackedStripBaseGap: CGFloat = 14
+    private let stackedStripBaseGap: CGFloat = 8
 
     var body: some View {
         ZStack(alignment: .bottom) {

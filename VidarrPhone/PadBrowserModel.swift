@@ -958,6 +958,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         body {
           margin: 0;
           min-height: 100dvh;
+          overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, sans-serif;
           color: var(--text);
           background:
@@ -966,7 +967,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
             linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
         }
         .shell {
-          min-height: 100dvh;
+          position: fixed;
+          inset: 0;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1115,8 +1117,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
               }
               window.location.href = template.replace('{query}', encodeURIComponent(raw));
             });
-            input.focus();
             if (initialQuery) {
+              input.focus();
               requestAnimationFrame(() => input.setSelectionRange(0, input.value.length));
             }
           </script>

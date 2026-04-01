@@ -41,9 +41,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let triggerDominanceRatio: CGFloat = 1.52
         let triggerWindowMs: TimeInterval = 90
         let seedHistoryWindowMs: TimeInterval = 240
-        let minPathLength: CGFloat = 78
+        let minPathLength: CGFloat = 68
         let matchScoreThreshold: CGFloat = 0.66
-        let livePreviewScoreThreshold: CGFloat = 0.48
+        let livePreviewScoreThreshold: CGFloat = 0.40
         let upStrokeDominanceRatio: CGFloat = 2.0
         let horizontalSwipeStartDistance: CGFloat = 24
         let horizontalSwipeConfirmDistance: CGFloat = 30

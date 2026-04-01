@@ -680,6 +680,10 @@ struct PadBrowserRootView: View {
     }
 
     private func performGesture(_ action: PadGestureAction) {
+        guard isGestureEnabled(for: action) else {
+            hideGestureHUD()
+            return
+        }
         switch action {
         case .previousTab:
             if let currentID = model.selectedTab?.id,
@@ -725,6 +729,10 @@ struct PadBrowserRootView: View {
     }
 
     private func showCommittedGestureHUD(for action: PadGestureAction) {
+        guard isGestureEnabled(for: action) else {
+            hideGestureHUD()
+            return
+        }
         let committedState = PadGestureHUDState(
             action: action,
             title: "",
@@ -806,7 +814,11 @@ struct PadBrowserRootView: View {
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
                 withAnimation(.easeOut(duration: 0.16)) {
-                    gestureHUD = state
+                    if let state, isGestureEnabled(for: state.action) {
+                        gestureHUD = state
+                    } else {
+                        gestureHUD = nil
+                    }
                 }
             },
             onHorizontalSwipeDrag: { action, totalX in
@@ -826,6 +838,27 @@ struct PadBrowserRootView: View {
                 hideGestureHUD()
             }
         )
+    }
+
+    private func isGestureEnabled(for action: PadGestureAction) -> Bool {
+        guard let option = preferenceOption(for: action) else { return true }
+        return PadBrowserPreferences.shared.enabledGestureOptions.contains(option)
+    }
+
+    private func preferenceOption(for action: PadGestureAction) -> PadGestureOption? {
+        switch action {
+        case .previousTab: return .previousTab
+        case .nextTab: return .nextTab
+        case .closeTab: return .closeTab
+        case .closeAllTabs: return .closeAllTabs
+        case .restoreClosedTab: return .restoreClosedTab
+        case .reload: return .reload
+        case .reloadAll: return .reloadAll
+        case .back: return .back
+        case .forward: return .forward
+        case .search: return .search
+        case .newTab: return .newTab
+        }
     }
 
     private func animateTabSelection(to id: UUID) {
@@ -1322,9 +1355,12 @@ private struct PadSettingsSheet: View {
                 .padding(.top, isPhoneLayout ? 10 : 14)
                 .padding(.bottom, isPhoneLayout ? 6 : 10)
 
-                Form {
-                    switch selectedTab {
-                    case .general:
+                if selectedTab == .gestures {
+                    gestureSettingsContent
+                } else {
+                    Form {
+                        switch selectedTab {
+                        case .general:
                         Section("スタートページ") {
                             TextField("", text: $homePageURLString, prompt: Text("Vidarr Start"))
                                 .textInputAutocapitalization(.never)
@@ -1389,34 +1425,10 @@ private struct PadSettingsSheet: View {
                             }
                         }
 
-                    case .gestures:
-                        Section("ジェスチャーの反応") {
-                            Picker("感度", selection: $gestureSensitivity) {
-                                ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
-                                    Text(sensitivity.displayName).tag(sensitivity)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                        Section("ジェスチャーごとのオン / オフ") {
-                            ForEach(PadGestureOption.allCases, id: \.self) { option in
-                                PadGestureToggleRow(
-                                    option: option,
-                                    isOn: Binding(
-                                        get: { enabledGestures.contains(option) },
-                                        set: { enabled in
-                                            if enabled {
-                                                enabledGestures.insert(option)
-                                            } else {
-                                                enabledGestures.remove(option)
-                                            }
-                                        }
-                                    )
-                                )
-                            }
-                        }
+                        case .gestures:
+                            EmptyView()
 
-                    case .privacy:
+                        case .privacy:
                         Section("プライバシー") {
                             Picker("Cookie の扱い", selection: $cookiePolicy) {
                                 ForEach(PadCookiePolicy.allCases, id: \.self) { policy in
@@ -1465,9 +1477,10 @@ private struct PadSettingsSheet: View {
                                 }
                             }
                         }
+                        }
                     }
+                    .listStyle(.insetGrouped)
                 }
-                .listStyle(.insetGrouped)
             }
             .navigationTitle("設定")
             .toolbar {
@@ -1521,6 +1534,85 @@ private struct PadSettingsSheet: View {
     private var canSave: Bool {
         isSearchTemplateInputValid && isHomePageInputValid
     }
+
+    private var gestureGroups: [[PadGestureOption]] {
+        [
+            [.back, .forward],
+            [.closeTab, .closeAllTabs, .reload, .reloadAll, .newTab, .restoreClosedTab, .search],
+            [.nextTab, .previousTab]
+        ]
+    }
+
+    private var gestureSettingsContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ジェスチャーの反応")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Picker("感度", selection: $gestureSensitivity) {
+                        ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
+                            Text(sensitivity.displayName).tag(sensitivity)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .padding(.horizontal, 16)
+
+                VStack(spacing: 12) {
+                    ForEach(Array(gestureGroups.enumerated()), id: \.offset) { _, group in
+                        PadGestureToggleCard(
+                            options: group,
+                            enabledGestures: $enabledGestures
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .padding(.top, 8)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+}
+
+private struct PadGestureToggleCard: View {
+    let options: [PadGestureOption]
+    @Binding var enabledGestures: Set<PadGestureOption>
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.element) { index, option in
+                PadGestureToggleRow(
+                    option: option,
+                    isOn: Binding(
+                        get: { enabledGestures.contains(option) },
+                        set: { enabled in
+                            if enabled {
+                                enabledGestures.insert(option)
+                            } else {
+                                enabledGestures.remove(option)
+                            }
+                        }
+                    )
+                )
+                if index < options.count - 1 {
+                    Divider()
+                        .padding(.leading, 68)
+                        .overlay(Color.white.opacity(0.06))
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.04), lineWidth: 1)
+        )
+    }
 }
 
 private struct PadGestureToggleRow: View {
@@ -1528,36 +1620,24 @@ private struct PadGestureToggleRow: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            PadGestureGlyphIcon(points: option.strokePoints)
+        HStack(alignment: .center, spacing: 14) {
+            PadGestureGlyphIcon(points: option.strokePoints, color: option.tintColor)
                 .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(.thinMaterial)
-                )
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(option.title)
-                        .font(.body.weight(.semibold))
-                    Text(option.gestureLabel)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                Text(option.helpText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(option.displayTitle)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
             Spacer(minLength: 8)
             Toggle("", isOn: $isOn)
                 .labelsHidden()
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 }
 
 private struct PadGestureGlyphIcon: View {
     let points: [CGPoint]
+    let color: Color
 
     var body: some View {
         Canvas { context, size in
@@ -1572,9 +1652,53 @@ private struct PadGestureGlyphIcon: View {
             }
             context.stroke(
                 path,
-                with: .color(.primary.opacity(0.92)),
+                with: .color(color),
                 style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
             )
+        }
+    }
+}
+
+private extension PadGestureOption {
+    var displayTitle: String {
+        switch self {
+        case .back, .forward:
+            return "戻る／進む"
+        case .closeTab:
+            return "タブを閉じる"
+        case .closeAllTabs:
+            return "すべてのタブを閉じる"
+        case .restoreClosedTab:
+            return "閉じたタブを復元"
+        case .reload:
+            return "タブを更新"
+        case .reloadAll:
+            return "すべてのタブを更新"
+        case .search:
+            return "検索"
+        case .newTab:
+            return "新規タブ"
+        case .nextTab:
+            return "次のタブ"
+        case .previousTab:
+            return "前のタブ"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .back, .forward:
+            return Color(red: 0.32, green: 0.60, blue: 0.98)
+        case .closeTab, .closeAllTabs:
+            return Color(red: 0.96, green: 0.39, blue: 0.39)
+        case .reload, .reloadAll:
+            return Color(red: 0.42, green: 0.82, blue: 1.0)
+        case .newTab, .restoreClosedTab:
+            return Color(red: 0.78, green: 0.36, blue: 1.0)
+        case .search:
+            return Color(red: 1.0, green: 0.68, blue: 0.28)
+        case .nextTab, .previousTab:
+            return Color(red: 0.57, green: 0.84, blue: 1.0)
         }
     }
 }

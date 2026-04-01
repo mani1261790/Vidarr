@@ -264,6 +264,25 @@ struct PadBrowserRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
+            if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
+                PadNativeStartPageView(
+                    initialQuery: tab.startPageQuery,
+                    compact: true,
+                    onSubmit: { input in
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: input)
+                    },
+                    onPasteAndSearch: {
+                        guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !pasted.isEmpty else { return }
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: pasted)
+                    }
+                )
+                .transition(.opacity)
+                .ignoresSafeArea(.keyboard)
+            }
+
             if let gestureHUD {
                 PadGestureHUD(state: gestureHUD)
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
@@ -633,7 +652,7 @@ struct PadBrowserRootView: View {
     private var topSafeAreaBaseColor: Color {
         if let selectedTab = model.selectedTab {
             let urlString = selectedTab.urlString
-            if urlString.isEmpty || urlString.contains("vidarr.local/start") {
+            if selectedTab.showsNativeStartPage || urlString.isEmpty {
                 return colorScheme == .dark
                     ? Color(red: 0.06, green: 0.10, blue: 0.16)
                     : Color(red: 0.88, green: 0.92, blue: 0.98)
@@ -2079,6 +2098,98 @@ private struct PadQuickSearchSheet: View {
             }
         }
         .presentationBackground(.regularMaterial)
+    }
+}
+
+private struct PadNativeStartPageView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var inputFocused: Bool
+    let initialQuery: String
+    let compact: Bool
+    let onSubmit: (String) -> Void
+    let onPasteAndSearch: () -> Void
+    @State private var query: String = ""
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: colorScheme == .dark
+                    ? [Color(red: 0.07, green: 0.11, blue: 0.18), Color(red: 0.04, green: 0.07, blue: 0.12)]
+                    : [Color(red: 0.93, green: 0.95, blue: 0.99), Color(red: 0.87, green: 0.91, blue: 0.97)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(Color.blue.opacity(colorScheme == .dark ? 0.16 : 0.14))
+                    .frame(width: compact ? 180 : 260)
+                    .blur(radius: 34)
+                    .offset(x: compact ? -30 : -40, y: compact ? -20 : -10)
+            }
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(Color.cyan.opacity(colorScheme == .dark ? 0.10 : 0.08))
+                    .frame(width: compact ? 140 : 220)
+                    .blur(radius: 30)
+                    .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
+            }
+
+            VStack(spacing: compact ? 14 : 18) {
+                Spacer(minLength: compact ? 70 : 110)
+                Text("Vidarr")
+                    .font(.system(size: compact ? 34 : 48, weight: .semibold, design: .rounded))
+                    .italic()
+                    .foregroundStyle(colorScheme == .dark ? .white : Color(red: 0.10, green: 0.14, blue: 0.22))
+
+                HStack(spacing: compact ? 10 : 12) {
+                    TextField("検索語または URL を入力", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.go)
+                        .focused($inputFocused)
+                        .onSubmit { onSubmit(query) }
+                        .padding(.horizontal, compact ? 16 : 18)
+                        .frame(height: compact ? 50 : 58)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous)
+                                .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
+                        )
+
+                    Button {
+                        onSubmit(query)
+                    } label: {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: compact ? 17 : 20, weight: .semibold))
+                            .frame(width: compact ? 46 : 54, height: compact ? 46 : 54)
+                    }
+                    .buttonStyle(.plain)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                }
+                .frame(maxWidth: compact ? 360 : 560)
+
+                Button("ペーストして検索") {
+                    onPasteAndSearch()
+                }
+                .font(.system(size: compact ? 14 : 16, weight: .semibold))
+                .padding(.horizontal, compact ? 18 : 22)
+                .frame(height: compact ? 42 : 46)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+
+                Spacer()
+            }
+            .padding(.horizontal, compact ? 18 : 28)
+        }
+        .onAppear {
+            query = initialQuery
+            if !initialQuery.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    inputFocused = true
+                }
+            }
+        }
     }
 }
 

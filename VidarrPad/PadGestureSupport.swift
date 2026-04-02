@@ -44,7 +44,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let seedHistoryWindowMs: TimeInterval = 240
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
-        let livePreviewScoreThreshold: CGFloat = 0.52
+        let livePreviewScoreThreshold: CGFloat = 0.44
         let upStrokeDominanceRatio: CGFloat = 2.0
     }
 
@@ -300,7 +300,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if let early = recognizer.bestPassingMatch(
             points: capturePoints,
-            minimumScore: 0.28,
+            minimumScore: 0.22,
             allowedNames: allowedGestureNames.subtracting(["O", "OO"])
         ) {
             if early.name == "Left" || early.name == "Right" {
@@ -1356,25 +1356,16 @@ struct PadGestureHUD: View {
             .font(.system(size: 40, weight: .bold))
             .foregroundStyle(Color.primary)
             .frame(width: 138, height: 138)
-            .background(hudBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            .background(
+                PadLiquidGlassBackground(cornerRadius: 22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
+                    )
             )
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
-    }
-
-    @ViewBuilder
-    private var hudBackground: some View {
-        if #available(iOS 26.0, *) {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white.opacity(0.001))
-                .glassEffect()
-        } else {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.ultraThinMaterial)
-        }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.14), radius: 20, y: 8)
     }
 }
 

@@ -293,13 +293,10 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         cancelHorizontalSwipePreviewIfNeeded()
 
+        var pendingDirectional: PadGestureResult?
         switch directionalPreviewDecision(points: capturePoints) {
         case .candidate(let directional):
-            if let state = pendingHUDState(confidence: directional.score) {
-                lastLiveCandidate = directional
-                onPreview(state)
-                return
-            }
+            pendingDirectional = directional
         case .invalid:
             lastLiveCandidate = nil
             onPreview(nil)
@@ -348,6 +345,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if enabledOptions.contains(.reload),
            let result = recognizeSingleLoopGesture(points: capturePoints, allowLooseClosure: true),
            let state = hudState(for: result.name, confidence: result.score, committed: false) {
+            onPreview(state)
+            return
+        }
+
+        if let directional = pendingDirectional,
+           let state = pendingHUDState(for: directional.name, confidence: directional.score) {
+            lastLiveCandidate = directional
             onPreview(state)
             return
         }
@@ -579,9 +583,12 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         )
     }
 
-    private func pendingHUDState(confidence: CGFloat) -> PadGestureHUDState? {
-        PadGestureHUDState(
-            action: .reload,
+    private func pendingHUDState(for name: String, confidence: CGFloat) -> PadGestureHUDState? {
+        guard let action = mapAction(name: name),
+              let option = preferenceOption(for: action),
+              enabledOptions.contains(option) else { return nil }
+        return PadGestureHUDState(
+            action: action,
             title: "",
             systemImageName: nil,
             confidence: confidence,

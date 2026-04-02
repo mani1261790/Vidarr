@@ -919,6 +919,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             tab.showsNativeStartPage = false
             tab.startPageQuery = ""
         }
+        refreshPublishedStartPageState(for: webView)
         webView.load(URLRequest(url: normalized))
     }
 
@@ -929,6 +930,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             tab.title = "Vidarr Start"
             tab.urlString = ""
         }
+        refreshPublishedStartPageState(for: webView)
         webView.loadHTMLString("", baseURL: nil)
     }
 
@@ -1275,6 +1277,15 @@ extension PadBrowserModel {
         selectedIndex = min(max(0, state.selectedIndex), max(state.tabs.count - 1, 0))
         selectedSidebarTabID = selectedTab?.id
         syncAddressBar()
+    }
+
+    private func refreshPublishedStartPageState(for webView: WKWebView) {
+        navigationStateToken = UUID()
+        if group(for: webView) == currentGroup {
+            syncPublishedState()
+        } else {
+            groupStateRevision = UUID()
+        }
     }
 
     private func group(for webView: WKWebView) -> PadBrowserTabGroup? {

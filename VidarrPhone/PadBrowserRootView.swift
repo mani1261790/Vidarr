@@ -929,7 +929,7 @@ struct PadBrowserRootView: View {
         let travel = width + 16
         let remaining = abs(tabSwitchVisualState.fromX)
         let normalized = min(1.0, max(0.0, remaining / max(travel, 1)))
-        let duration = 0.16 + (0.08 * normalized)
+        let duration = isPhoneLayout ? (0.08 + (0.04 * normalized)) : (0.11 + (0.06 * normalized))
 
         withAnimation(.easeInOut(duration: duration)) {
             tabSwitchVisualState = .identity
@@ -972,7 +972,7 @@ struct PadBrowserRootView: View {
         let fromTargetX: CGFloat = shouldCommit ? (-transition.direction * fullTravel) : 0
         let remaining = abs(fromTargetX - currentFromX)
         let normalized = min(1.0, max(0.0, remaining / max(fullTravel, 1)))
-        let duration = 0.16 + (0.08 * normalized)
+        let duration = isPhoneLayout ? (0.08 + (0.04 * normalized)) : (0.11 + (0.06 * normalized))
         let token = UUID()
         tabSwitchToken = token
 
@@ -1133,11 +1133,11 @@ struct PadBrowserRootView: View {
         return PadTabTransitionVisualState(
             fromX: clampedFromX,
             toX: toX,
-            fromAlpha: 1.0 - (progress * (isPhoneLayout ? 0.10 : 0.18)),
-            toAlpha: 0.92 + (progress * 0.08),
-            dimAlpha: progress * (isPhoneLayout ? 0.04 : 0.10),
+            fromAlpha: 1.0 - (progress * (isPhoneLayout ? 0.07 : 0.14)),
+            toAlpha: isPhoneLayout ? (0.95 + (progress * 0.05)) : (0.93 + (progress * 0.07)),
+            dimAlpha: progress * (isPhoneLayout ? 0.025 : 0.07),
             gapAlpha: 0.9,
-            toShadowOpacity: Float((isPhoneLayout ? 0.06 : 0.12) + (progress * (isPhoneLayout ? 0.04 : 0.10)))
+            toShadowOpacity: Float((isPhoneLayout ? 0.05 : 0.10) + (progress * (isPhoneLayout ? 0.03 : 0.08)))
         )
     }
 
@@ -1183,26 +1183,26 @@ struct PadBrowserRootView: View {
             tabSwitchVisualState = initialVisualState(for: transition.direction, emphasizeBirth: emphasizeBirth)
         }
 
-        let phase1Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.06 : 0.09) : (isChained ? 0.055 : 0.08)) : (emphasizeBirth ? (isChained ? 0.10 : 0.14) : (isChained ? 0.09 : 0.12))
-        let phase2Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.07 : 0.10)) : (emphasizeBirth ? (isChained ? 0.12 : 0.18) : (isChained ? 0.11 : 0.16))
-        let phase3Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.06 : 0.08) : (isChained ? 0.055 : 0.075)) : (emphasizeBirth ? (isChained ? 0.10 : 0.13) : (isChained ? 0.09 : 0.12))
+        let phase1Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.045 : 0.065) : (isChained ? 0.04 : 0.055)) : (emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.07 : 0.10))
+        let phase2Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.06 : 0.08) : (isChained ? 0.05 : 0.07)) : (emphasizeBirth ? (isChained ? 0.10 : 0.15) : (isChained ? 0.09 : 0.13))
+        let phase3Duration = isPhoneLayout ? (emphasizeBirth ? (isChained ? 0.045 : 0.060) : (isChained ? 0.04 : 0.05)) : (emphasizeBirth ? (isChained ? 0.08 : 0.10) : (isChained ? 0.07 : 0.09))
         let phase1State = PadTabTransitionVisualState(
             fromX: fromMidX,
             toX: toMidX,
-            fromAlpha: isChained ? 0.86 : 0.82,
+            fromAlpha: isChained ? 0.90 : 0.86,
             toAlpha: 1.0,
-            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.06 : 0.10) : (isChained ? 0.14 : 0.20)) : (isPhoneLayout ? (isChained ? 0.03 : 0.07) : (isChained ? 0.10 : 0.16)),
+            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.04 : 0.07) : (isChained ? 0.10 : 0.15)) : (isPhoneLayout ? (isChained ? 0.02 : 0.045) : (isChained ? 0.07 : 0.11)),
             gapAlpha: 0.90,
-            toShadowOpacity: isPhoneLayout ? 0.11 : 0.22
+            toShadowOpacity: isPhoneLayout ? 0.08 : 0.18
         )
         let phase2State = PadTabTransitionVisualState(
             fromX: fromOvershootX,
             toX: toOvershootX,
-            fromAlpha: isChained ? 0.80 : 0.72,
+            fromAlpha: isChained ? 0.84 : 0.78,
             toAlpha: 1.0,
-            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.06 : 0.10) : (isChained ? 0.14 : 0.20)) : (isPhoneLayout ? (isChained ? 0.03 : 0.07) : (isChained ? 0.10 : 0.16)),
+            dimAlpha: emphasizeBirth ? (isPhoneLayout ? (isChained ? 0.04 : 0.07) : (isChained ? 0.10 : 0.15)) : (isPhoneLayout ? (isChained ? 0.02 : 0.045) : (isChained ? 0.07 : 0.11)),
             gapAlpha: 0.90,
-            toShadowOpacity: isPhoneLayout ? (isChained ? 0.12 : 0.18) : (isChained ? 0.24 : 0.32)
+            toShadowOpacity: isPhoneLayout ? (isChained ? 0.09 : 0.13) : (isChained ? 0.20 : 0.26)
         )
         let phase3State = PadTabTransitionVisualState(
             fromX: fromFinalX,
@@ -1210,8 +1210,8 @@ struct PadBrowserRootView: View {
             fromAlpha: 1.0,
             toAlpha: 1.0,
             dimAlpha: 0,
-            gapAlpha: isPhoneLayout ? 0.10 : 0.16,
-            toShadowOpacity: isPhoneLayout ? 0.05 : 0.12
+            gapAlpha: isPhoneLayout ? 0.08 : 0.12,
+            toShadowOpacity: isPhoneLayout ? 0.04 : 0.10
         )
 
         withAnimation(.easeOut(duration: phase1Duration)) {

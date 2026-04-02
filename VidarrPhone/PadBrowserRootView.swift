@@ -63,6 +63,7 @@ struct PadBrowserRootView: View {
     @State private var stripBirthScale: CGFloat = 0.7
     @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     @State private var gestureTutorialStep: PadGestureTutorialStep? = PadBrowserPreferences.shared.completedGestureTutorial ? nil : .firstSearch
+    @State private var lastObservedSelectedTabID: UUID?
     @FocusState private var editingURLFocused: Bool
 
     private var isPhoneLayout: Bool {
@@ -259,6 +260,12 @@ struct PadBrowserRootView: View {
                 scheduleBottomBarAutoHide()
             }
         }
+        .onChange(of: model.selectedTab?.id) { oldID, newID in
+            lastObservedSelectedTabID = newID
+            guard gestureTutorialStep == .switchTab else { return }
+            guard let oldID, let newID, oldID != newID else { return }
+            handleGestureTutorialEvent(.tabSwitched)
+        }
     }
 
     private var webLayer: some View {
@@ -311,7 +318,7 @@ struct PadBrowserRootView: View {
                     )
                     Spacer()
                 }
-                .padding(.top, 14)
+                .padding(.top, 42)
                 .padding(.horizontal, 12)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -731,12 +738,14 @@ struct PadBrowserRootView: View {
         }
         switch action {
         case .previousTab:
+            hideGestureHUD()
             if let currentID = model.selectedTab?.id,
                let currentIndex = model.tabIndex(for: currentID),
                currentIndex > 0 {
                 animateTabSelection(to: model.tabs[currentIndex - 1].id)
             }
         case .nextTab:
+            hideGestureHUD()
             if let currentID = model.selectedTab?.id,
                let currentIndex = model.tabIndex(for: currentID),
                currentIndex < model.tabs.count - 1 {
@@ -771,9 +780,6 @@ struct PadBrowserRootView: View {
         case .newTab:
             animateNewTabCreation()
             handleGestureTutorialEvent(.newTabCreated)
-        }
-        if action == .previousTab || action == .nextTab {
-            handleGestureTutorialEvent(.tabSwitched)
         }
         showBottomBar()
         if action != .previousTab && action != .nextTab {

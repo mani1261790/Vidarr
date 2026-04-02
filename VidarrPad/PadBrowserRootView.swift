@@ -405,66 +405,78 @@ struct PadBrowserRootView: View {
         selectedTabID: UUID?
     ) -> some View {
         GeometryReader { stripProxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(tabs) { tab in
-                        PadTabThumbnail(
-                            tab: tab,
-                            isSelected: selectedTabID == tab.id,
-                            isBookmarked: model.isBookmarked(tab),
-                            groupAccentColor: Color(uiColor: group.accentColor),
-                            showsBirthPulse: stripBirthTabID == tab.id,
-                            showsDestructiveDismiss: destructiveDismissTabID == tab.id,
-                            onSelect: {
-                                animateTabSelection(to: tab.id)
-                            },
-                            onLongPress: {
-                                animateTabSelection(to: tab.id)
-                                editingURL = tab.urlString
-                                editingTabID = tab.id
-                            },
-                            onDoubleTap: {
-                                animateTabSelection(to: tab.id)
-                                model.toggleProtectionForSelectedTab()
-                                showBottomBar()
-                            },
-                            onSwipeDown: {
-                                animateTabSelection(to: tab.id)
-                                if tab.isProtected {
-                                    protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
-                                } else {
-                                    animateDestructiveClose(for: tab.id)
+            ScrollViewReader { scrollProxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(tabs) { tab in
+                            PadTabThumbnail(
+                                tab: tab,
+                                isSelected: selectedTabID == tab.id,
+                                isBookmarked: model.isBookmarked(tab),
+                                groupAccentColor: Color(uiColor: group.accentColor),
+                                showsBirthPulse: stripBirthTabID == tab.id,
+                                showsDestructiveDismiss: destructiveDismissTabID == tab.id,
+                                onSelect: {
+                                    animateTabSelection(to: tab.id)
+                                },
+                                onLongPress: {
+                                    animateTabSelection(to: tab.id)
+                                    editingURL = tab.urlString
+                                    editingTabID = tab.id
+                                },
+                                onDoubleTap: {
+                                    animateTabSelection(to: tab.id)
+                                    model.toggleProtectionForSelectedTab()
+                                    showBottomBar()
+                                },
+                                onSwipeDown: {
+                                    animateTabSelection(to: tab.id)
+                                    if tab.isProtected {
+                                        protectedClosePrompt = ProtectedClosePrompt(tabID: tab.id, title: tab.title)
+                                    } else {
+                                        animateDestructiveClose(for: tab.id)
+                                    }
+                                    showBottomBar()
                                 }
-                                showBottomBar()
+                            )
+                            .id(tab.id)
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear
+                                        .preference(
+                                            key: PadTabFramePreferenceKey.self,
+                                            value: [tab.id: proxy.frame(in: .named("PadTabStripSpace"))]
+                                        )
+                                }
+                            )
+                        }
+                    }
+                    .frame(minWidth: stripProxy.size.width, alignment: .center)
+                    .frame(maxHeight: .infinity, alignment: .center)
+                    .padding(.horizontal, 4)
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear {
+                                tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
                             }
-                        )
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear
-                                    .preference(
-                                        key: PadTabFramePreferenceKey.self,
-                                        value: [tab.id: proxy.frame(in: .named("PadTabStripSpace"))]
-                                    )
+                            .onChange(of: proxy.size) { _, _ in
+                                tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
                             }
-                        )
+                    }
+                )
+                .onAppear {
+                    if let selectedTabID {
+                        scrollTabStrip(to: selectedTabID, with: scrollProxy, animated: false)
                     }
                 }
-                .frame(minWidth: stripProxy.size.width, alignment: .center)
-                .frame(maxHeight: .infinity, alignment: .center)
-                .padding(.horizontal, 4)
-            }
-            .frame(maxHeight: .infinity, alignment: .center)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear {
-                            tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
-                        }
-                        .onChange(of: proxy.size) { _, _ in
-                            tabStripBounds = proxy.frame(in: .named("PadTabStripSpace"))
-                        }
+                .onChange(of: selectedTabID) { _, newID in
+                    guard let newID else { return }
+                    scrollTabStrip(to: newID, with: scrollProxy, animated: true)
                 }
-            )
+            }
         }
     }
 
@@ -756,6 +768,7 @@ struct PadBrowserRootView: View {
                 }
             },
             onHorizontalSwipeDrag: { action, totalX in
+                showBottomBar(persist: true)
                 updateInteractiveTabSwitch(for: action, totalX: totalX)
             },
             onHorizontalSwipeFinish: { action, totalX in
@@ -857,6 +870,7 @@ struct PadBrowserRootView: View {
 
     private func cancelInteractiveTabSwitch() {
         guard tabSwitchTransition != nil, interactiveTargetID != nil else { return }
+        showBottomBar(persist: true)
         let token = UUID()
         tabSwitchToken = token
         let width = max(webViewportWidth, 1)
@@ -878,6 +892,7 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = nil
             tabSwitchVisualState = .identity
             interactiveTargetID = nil
+            scheduleBottomBarAutoHide()
         }
     }
 
@@ -886,6 +901,7 @@ struct PadBrowserRootView: View {
             performGesture(action)
             return
         }
+        showBottomBar(persist: true)
 
         let width = max(webViewportWidth, 1)
         let gap: CGFloat = 16
@@ -932,6 +948,7 @@ struct PadBrowserRootView: View {
                 tabSwitchTransition = nil
                 tabSwitchVisualState = .identity
                 interactiveTargetID = nil
+                scheduleBottomBarAutoHide()
             }
         }
     }
@@ -1175,6 +1192,18 @@ struct PadBrowserRootView: View {
             tabSwitchTransition = nil
             tabSwitchVisualState = .identity
             interactiveTargetID = nil
+            scheduleBottomBarAutoHide()
+        }
+    }
+
+    private func scrollTabStrip(to id: UUID, with proxy: ScrollViewProxy, animated: Bool) {
+        let work = {
+            proxy.scrollTo(id, anchor: .center)
+        }
+        if animated {
+            withAnimation(.easeOut(duration: 0.18)) { work() }
+        } else {
+            work()
         }
     }
 

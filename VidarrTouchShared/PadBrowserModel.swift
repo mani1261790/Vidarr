@@ -128,6 +128,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if tabs.isEmpty {
             ensureAtLeastOneTab(in: currentGroup)
         }
+        repairBlankTabsIfNeeded()
         selectedSidebarTabID = selectedTab?.id
     }
 
@@ -649,6 +650,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
         currentGroup = snapshot.currentGroup == .privateMode ? .regular : snapshot.currentGroup
         ensureAtLeastOneTab(in: currentGroup)
+        repairBlankTabsIfNeeded()
         syncPublishedState()
     }
 
@@ -1239,6 +1241,32 @@ extension PadBrowserModel {
         newTab(initialURL: resolvedInitialURL(from: nil))
         currentGroup = group
         syncPublishedState()
+    }
+
+    private func repairBlankTabsIfNeeded() {
+        for group in PadBrowserTabGroup.allCases {
+            var state = state(for: group)
+            var changed = false
+            for tab in state.tabs where shouldRepairBlankTab(tab) {
+                if let url = resolvedInitialURL(from: nil) {
+                    load(url, in: tab.webView)
+                } else {
+                    showNativeStartPage(in: tab.webView)
+                }
+                changed = true
+            }
+            if changed {
+                setState(state, for: group)
+            }
+        }
+    }
+
+    private func shouldRepairBlankTab(_ tab: Tab) -> Bool {
+        if tab.showsNativeStartPage { return false }
+        if let url = tab.webView.url, url.absoluteString != "about:blank" { return false }
+        if !tab.urlString.isEmpty, tab.urlString != "about:blank" { return false }
+        if !tab.historyURLs.isEmpty { return false }
+        return true
     }
 
     private func syncPublishedState() {

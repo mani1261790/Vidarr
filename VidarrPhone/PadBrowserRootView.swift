@@ -736,6 +736,7 @@ struct PadBrowserRootView: View {
             hideGestureHUD()
             return
         }
+        triggerGestureHaptic()
         switch action {
         case .previousTab:
             hideGestureHUD()
@@ -785,6 +786,12 @@ struct PadBrowserRootView: View {
         if action != .previousTab && action != .nextTab {
             showCommittedGestureHUD(for: action)
         }
+    }
+
+    private func triggerGestureHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        generator.impactOccurred(intensity: 0.9)
     }
 
     private func handleGestureTutorialEvent(_ event: PadGestureTutorialEvent) {

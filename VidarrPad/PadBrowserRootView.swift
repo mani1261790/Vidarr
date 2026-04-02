@@ -61,6 +61,7 @@ struct PadBrowserRootView: View {
     @State private var stripBirthOpacity: CGFloat = 0
     @State private var stripBirthScale: CGFloat = 0.7
     @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
+    @State private var gestureTutorialStep: PadGestureTutorialStep? = PadBrowserPreferences.shared.completedGestureTutorial ? nil : .firstSearch
     @FocusState private var editingURLFocused: Bool
 
     private let stackedStripLeadingWidth: CGFloat = 164
@@ -143,6 +144,7 @@ struct PadBrowserRootView: View {
                 query: $quickSearchQuery,
                 onSubmit: { input in
                     model.openQuickSearch(input)
+                    handleGestureTutorialEvent(.searchPerformed)
                     showingQuickSearch = false
                     showBottomBar()
                 }
@@ -155,6 +157,10 @@ struct PadBrowserRootView: View {
                 onOpenHistory: { activeLibraryPanel = .history },
                 onOpenBookmarks: { activeLibraryPanel = .bookmarks },
                 onOpenDownloads: { activeLibraryPanel = .downloads },
+                onRunGestureTutorial: {
+                    showingSettings = false
+                    restartGestureTutorial()
+                },
                 onDone: {
                     model.refreshPreferences()
                     showingSettings = false
@@ -195,6 +201,9 @@ struct PadBrowserRootView: View {
         }
         .onAppear {
             scheduleBottomBarAutoHide()
+            if gestureTutorialStep != nil {
+                showBottomBar(persist: true)
+            }
         }
         .onChange(of: showingSettings) { _, isShowing in
             if isShowing {
@@ -205,6 +214,13 @@ struct PadBrowserRootView: View {
         }
         .onChange(of: editingTabID) { _, editingID in
             if editingID != nil {
+                showBottomBar(persist: true)
+            } else {
+                scheduleBottomBarAutoHide()
+            }
+        }
+        .onChange(of: gestureTutorialStep) { _, step in
+            if step != nil {
                 showBottomBar(persist: true)
             } else {
                 scheduleBottomBarAutoHide()
@@ -238,16 +254,31 @@ struct PadBrowserRootView: View {
                         onSubmit: { input in
                             model.selectTab(id: tab.id)
                             model.loadSelectedTab(with: input)
+                            handleGestureTutorialEvent(.searchPerformed)
                         },
                         onPasteAndSearch: {
                             guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                                   !pasted.isEmpty else { return }
                             model.selectTab(id: tab.id)
                             model.loadSelectedTab(with: pasted)
+                            handleGestureTutorialEvent(.searchPerformed)
                         }
                     )
                     .transition(.opacity)
                     .ignoresSafeArea(.keyboard)
+                }
+
+                if let gestureTutorialStep {
+                    VStack {
+                        PadGestureTutorialCoachmark(
+                            step: gestureTutorialStep,
+                            onSkip: skipGestureTutorial
+                        )
+                        Spacer()
+                    }
+                    .padding(.top, 20)
+                    .padding(.horizontal, 18)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 if let gestureHUD {
@@ -649,14 +680,18 @@ struct PadBrowserRootView: View {
                     protectedClosePrompt = ProtectedClosePrompt(tabID: id, title: tab.title)
                 } else {
                     model.closeTab(id: id)
+                    handleGestureTutorialEvent(.closeTabPerformed)
                 }
             }
         case .closeAllTabs:
             model.closeAllTabs()
+            handleGestureTutorialEvent(.closeAllTabsPerformed)
         case .restoreClosedTab:
             model.restoreClosedTab()
+            handleGestureTutorialEvent(.restoreTabPerformed)
         case .reload:
             model.reload()
+            handleGestureTutorialEvent(.reloadPerformed)
         case .reloadAll:
             model.reloadAllTabs()
         case .back:
@@ -667,10 +702,41 @@ struct PadBrowserRootView: View {
             model.openSearchPageInNewTab()
         case .newTab:
             animateNewTabCreation()
+            handleGestureTutorialEvent(.newTabCreated)
+        }
+        if action == .previousTab || action == .nextTab {
+            handleGestureTutorialEvent(.tabSwitched)
         }
         showBottomBar()
         if action != .previousTab && action != .nextTab {
             showCommittedGestureHUD(for: action)
+        }
+    }
+
+    private func handleGestureTutorialEvent(_ event: PadGestureTutorialEvent) {
+        guard let current = gestureTutorialStep else { return }
+        let next = PadGestureTutorialProgress.nextStep(after: current, event: event)
+        guard next != current else { return }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            gestureTutorialStep = next
+        }
+        if next == nil {
+            PadBrowserPreferences.shared.completedGestureTutorial = true
+        }
+    }
+
+    private func restartGestureTutorial() {
+        PadBrowserPreferences.shared.completedGestureTutorial = false
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            gestureTutorialStep = .firstSearch
+        }
+        showBottomBar(persist: true)
+    }
+
+    private func skipGestureTutorial() {
+        PadBrowserPreferences.shared.completedGestureTutorial = true
+        withAnimation(.easeOut(duration: 0.18)) {
+            gestureTutorialStep = nil
         }
     }
 
@@ -1279,6 +1345,7 @@ private struct PadSettingsSheet: View {
     let onOpenHistory: () -> Void
     let onOpenBookmarks: () -> Void
     let onOpenDownloads: () -> Void
+    let onRunGestureTutorial: () -> Void
     let onDone: () -> Void
 
     var body: some View {
@@ -1512,6 +1579,21 @@ private struct PadSettingsSheet: View {
                             enabledGestures: $enabledGestures
                         )
                     }
+
+                    Button {
+                        PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
+                        visibleGestureOptions.forEach { option in
+                            PadBrowserPreferences.shared.setGestureEnabled(enabledGestures.contains(option), for: option)
+                        }
+                        dismiss()
+                        onRunGestureTutorial()
+                    } label: {
+                        Label("ジェスチャーチュートリアルをもう一度", systemImage: "sparkles.rectangle.stack")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
@@ -1558,6 +1640,52 @@ private struct PadGestureToggleCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color.white.opacity(0.04), lineWidth: 1)
         )
+    }
+}
+
+private struct PadGestureTutorialCoachmark: View {
+    let step: PadGestureTutorialStep
+    let onSkip: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            if let option = step.accentOption {
+                PadGestureGlyphIcon(points: option.strokePoints, color: option.tintColor)
+                    .frame(width: 34, height: 34)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                    )
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("ジェスチャーガイド")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(step.progressText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Text(step.title)
+                    .font(.headline.weight(.semibold))
+                Text(step.message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Button("スキップ", action: onSkip)
+                .font(.caption.weight(.semibold))
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
     }
 }
 

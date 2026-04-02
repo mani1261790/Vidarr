@@ -195,6 +195,111 @@ enum PadBottomBarAutoHideDelay: String, CaseIterable {
     }
 }
 
+enum PadGestureTutorialStep: Int, CaseIterable, Codable, Identifiable {
+    case firstSearch
+    case reload
+    case newTab
+    case secondSearch
+    case switchTab
+    case closeTab
+    case restoreTab
+    case closeAllTabs
+
+    var id: Int { rawValue }
+
+    var progressText: String {
+        "\(rawValue + 1) / \(Self.allCases.count)"
+    }
+
+    var title: String {
+        switch self {
+        case .firstSearch: return "まず検索してみる"
+        case .reload: return "更新してみる"
+        case .newTab: return "新しいタブを作る"
+        case .secondSearch: return "次のタブでも検索する"
+        case .switchTab: return "前に作ったタブへ戻る"
+        case .closeTab: return "今のタブを閉じる"
+        case .restoreTab: return "閉じたタブを戻す"
+        case .closeAllTabs: return "最後にまとめて閉じる"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .firstSearch:
+            return "何かひとつ検索してみてください。"
+        case .reload:
+            return "O で今のタブを再読み込みします。"
+        case .newTab:
+            return "↓← で新しいタブを開きます。"
+        case .secondSearch:
+            return "新しいタブでもう一度検索してみてください。"
+        case .switchTab:
+            return "← か → で前に作ったタブへ切り替えます。"
+        case .closeTab:
+            return "L（↓→）で今のタブを閉じます。"
+        case .restoreTab:
+            return "U（↓→↑）で閉じたタブを戻します。"
+        case .closeAllTabs:
+            return "LL（↓→↓→）で残りのタブを閉じます。"
+        }
+    }
+
+    var accentOption: PadGestureOption? {
+        switch self {
+        case .firstSearch, .secondSearch:
+            return nil
+        case .reload:
+            return .reload
+        case .newTab:
+            return .newTab
+        case .switchTab:
+            return .previousTab
+        case .closeTab:
+            return .closeTab
+        case .restoreTab:
+            return .restoreClosedTab
+        case .closeAllTabs:
+            return .closeAllTabs
+        }
+    }
+}
+
+enum PadGestureTutorialEvent {
+    case searchPerformed
+    case reloadPerformed
+    case newTabCreated
+    case tabSwitched
+    case closeTabPerformed
+    case restoreTabPerformed
+    case closeAllTabsPerformed
+}
+
+enum PadGestureTutorialProgress {
+    static func nextStep(after current: PadGestureTutorialStep, event: PadGestureTutorialEvent) -> PadGestureTutorialStep? {
+        switch (current, event) {
+        case (.firstSearch, .searchPerformed):
+            return .reload
+        case (.reload, .reloadPerformed):
+            return .newTab
+        case (.newTab, .newTabCreated):
+            return .secondSearch
+        case (.secondSearch, .searchPerformed):
+            return .switchTab
+        case (.switchTab, .tabSwitched):
+            return .closeTab
+        case (.closeTab, .closeTabPerformed):
+            return .restoreTab
+        case (.restoreTab, .restoreTabPerformed):
+            return .closeAllTabs
+        case (.closeAllTabs, .closeAllTabsPerformed):
+            return nil
+        default:
+            return current
+        }
+    }
+}
+
 final class PadBrowserPreferences {
     static let shared = PadBrowserPreferences()
 
@@ -216,6 +321,7 @@ final class PadBrowserPreferences {
         static let cookiePolicy = "prefs.cookiePolicy"
         static let harmfulSiteAllowedHosts = "prefs.harmfulSiteAllowedHosts"
         static let gestureEnabledPrefix = "prefs.gestureEnabled."
+        static let completedGestureTutorial = "prefs.completedGestureTutorial"
     }
 
     private var defaults: UserDefaults {
@@ -313,6 +419,18 @@ final class PadBrowserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Key.reopenTabsOnLaunch)
+        }
+    }
+
+    var completedGestureTutorial: Bool {
+        get {
+            if defaults.object(forKey: Key.completedGestureTutorial) == nil {
+                return false
+            }
+            return defaults.bool(forKey: Key.completedGestureTutorial)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.completedGestureTutorial)
         }
     }
 

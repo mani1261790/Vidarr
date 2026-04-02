@@ -1408,7 +1408,7 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.searchTemplate = searchTemplate
                         PadBrowserPreferences.shared.preferredContentLanguage = preferredContentLanguage
                         PadBrowserPreferences.shared.gestureSensitivity = gestureSensitivity
-                        PadGestureOption.allCases.forEach { option in
+                        visibleGestureOptions.forEach { option in
                             PadBrowserPreferences.shared.setGestureEnabled(enabledGestures.contains(option), for: option)
                         }
                         PadBrowserPreferences.shared.reopenTabsOnLaunch = reopenTabsOnLaunch
@@ -1451,9 +1451,13 @@ private struct PadSettingsSheet: View {
     private var gestureGroups: [[PadGestureOption]] {
         [
             [.back, .forward],
-            [.closeTab, .closeAllTabs, .reload, .reloadAll, .newTab, .restoreClosedTab, .search],
+            [.closeTab, .closeAllTabs, .reload, .newTab, .restoreClosedTab],
             [.nextTab, .previousTab]
         ]
+    }
+
+    private var visibleGestureOptions: [PadGestureOption] {
+        gestureGroups.flatMap { $0 }
     }
 
     private var gestureSettingsContent: some View {

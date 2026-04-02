@@ -54,7 +54,6 @@ final class GestureOverlayView: NSView {
         if prefs.isGestureEnabled(.newTab) { names.insert("DownLeft") }
         if prefs.isGestureEnabled(.reload) { names.insert("O") }
         if prefs.isGestureEnabled(.restoreClosedTab) { names.insert("U") }
-        if prefs.isGestureEnabled(.search) { names.insert("S") }
         if prefs.isGestureEnabled(.reloadAll) { names.insert("OO") }
         if prefs.isGestureEnabled(.closeAllTabs) { names.insert("DownRightDownRight") }
         if prefs.isGestureEnabled(.nextTab) { names.insert("Left") }
@@ -533,9 +532,6 @@ final class GestureOverlayView: NSView {
         case "UpLeft":
             guard BrowserPreferences.shared.isGestureEnabled(.forward) else { return }
             actions.goForward()
-        case "S":
-            guard BrowserPreferences.shared.isGestureEnabled(.search) else { return }
-            actions.search()
         case "DownLeft":
             guard BrowserPreferences.shared.isGestureEnabled(.newTab) else { return }
             actions.newTab()

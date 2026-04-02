@@ -1191,7 +1191,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         } else {
             sensitivityPopup.selectItem(at: 1)
         }
-        BrowserPreferences.GestureOption.allCases.forEach { option in
+        visibleGestureOptions.forEach { option in
             gestureToggleButtons[option]?.state = prefs.isGestureEnabled(option) ? .on : .off
         }
 
@@ -1227,8 +1227,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         signOutAppleButton.isHidden = (prefs.appleAccount == nil)
         syncNowButton.isEnabled = syncAvailable
 
-        let enabledCount = prefs.enabledGestureOptions.count
-        gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\n有効なジェスチャー: \(enabledCount)/\(BrowserPreferences.GestureOption.allCases.count)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
+        let enabledCount = visibleGestureOptions.filter(prefs.isGestureEnabled).count
+        gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\n有効なジェスチャー: \(enabledCount)/\(visibleGestureOptions.count)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
         gestureTestView.sensitivityMultiplier = sensitivity.multiplier
 
         privacySummaryLabel.stringValue = [
@@ -1614,7 +1614,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         }
         gestureToggleButtons.removeAll()
 
-        for option in BrowserPreferences.GestureOption.allCases {
+        for option in visibleGestureOptions {
             let row = NSStackView()
             row.translatesAutoresizingMaskIntoConstraints = false
             row.orientation = .horizontal
@@ -1716,7 +1716,6 @@ private final class GesturePracticeView: NSView {
         if prefs.isGestureEnabled(.newTab) { allowed.insert("DownLeft") }
         if prefs.isGestureEnabled(.reload) { allowed.insert("O") }
         if prefs.isGestureEnabled(.restoreClosedTab) { allowed.insert("U") }
-        if prefs.isGestureEnabled(.search) { allowed.insert("S") }
         if prefs.isGestureEnabled(.reloadAll) { allowed.insert("OO") }
         if prefs.isGestureEnabled(.closeAllTabs) { allowed.insert("DownRightDownRight") }
         if prefs.isGestureEnabled(.nextTab) { allowed.insert("Left") }
@@ -2018,9 +2017,24 @@ private final class GesturePracticeView: NSView {
         case "UpRight": return "↑→ 戻る"
         case "UpLeft": return "↑← 進む"
         case "DownLeft": return "↓← 新規タブ"
-        case "S": return "S 検索"
         default: return gesture
         }
+    }
+}
+
+private extension PreferencesWindowController {
+    var visibleGestureOptions: [BrowserPreferences.GestureOption] {
+        [
+            .back,
+            .forward,
+            .closeTab,
+            .closeAllTabs,
+            .reload,
+            .newTab,
+            .restoreClosedTab,
+            .nextTab,
+            .previousTab
+        ]
     }
 }
 

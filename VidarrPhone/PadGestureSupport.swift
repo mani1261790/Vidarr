@@ -132,7 +132,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if enabledOptions.contains(.newTab) { names.insert("DownLeft") }
         if enabledOptions.contains(.reload) { names.insert("O") }
         if enabledOptions.contains(.restoreClosedTab) { names.insert("U") }
-        if enabledOptions.contains(.search) { names.insert("S") }
         if enabledOptions.contains(.reloadAll) { names.insert("OO") }
         if enabledOptions.contains(.closeAllTabs) { names.insert("DownRightDownRight") }
         if enabledOptions.contains(.nextTab) { names.insert("Left") }
@@ -303,6 +302,28 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
+        if let early = recognizer.bestPassingMatch(
+            points: capturePoints,
+            minimumScore: 0.28,
+            allowedNames: allowedGestureNames.subtracting(["O", "OO"])
+        ) {
+            if early.name == "Left" || early.name == "Right" {
+                lastLiveCandidate = nil
+                onPreview(nil)
+            } else if let state = hudState(for: early.name, confidence: early.score, committed: false) {
+                lastLiveCandidate = early
+                onPreview(state)
+                return
+            }
+        }
+
+        if enabledOptions.contains(.restoreClosedTab),
+           let result = recognizeUGesture(points: capturePoints),
+           let state = hudState(for: result.name, confidence: result.score, committed: false) {
+            onPreview(state)
+            return
+        }
+
         if lastLiveCandidate != nil {
             captureInvalidated = true
             lastLiveCandidate = nil
@@ -341,7 +362,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             )
         }()
 
-        if let result = strict ?? relaxed,
+        let uFallback: PadGestureResult? = {
+            guard strict == nil, relaxed == nil else { return nil }
+            guard enabledOptions.contains(.restoreClosedTab) else { return nil }
+            return recognizeUGesture(points: capturePoints)
+        }()
+
+        if let result = strict ?? relaxed ?? uFallback,
            let action = mapAction(name: result.name)
         {
             if action == .previousTab || action == .nextTab {
@@ -500,8 +527,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return .back
         case "UpLeft":
             return .forward
-        case "S":
-            return .search
         case "DownLeft":
             return .newTab
         default:
@@ -533,7 +558,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case .reloadAll: return .reloadAll
         case .back: return .back
         case .forward: return .forward
-        case .search: return .search
+        case .search: return nil
         case .newTab: return .newTab
         }
     }
@@ -558,13 +583,70 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return "chevron.backward.circle.fill"
         case "UpLeft":
             return "chevron.forward.circle.fill"
-        case "S":
-            return "magnifyingglass.circle.fill"
         case "DownLeft":
             return "plus.square.on.square"
         default:
             return "questionmark.circle"
         }
+    }
+
+    private func recognizeUGesture(points: [CGPoint]) -> PadGestureResult? {
+        guard points.count >= 6 else { return nil }
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 3 else { return nil }
+        for index in 0...(compact.count - 3) {
+            let slice = Array(compact[index..<(index + 3)])
+            guard slice[0].axis == .vertical, slice[0].signed > 0 else { continue }
+            guard slice[1].axis == .horizontal, slice[1].signed > 0 else { continue }
+            guard slice[2].axis == .vertical, slice[2].signed < 0 else { continue }
+            let verticalA = abs(slice[0].primary)
+            let horizontal = abs(slice[1].primary)
+            let verticalB = abs(slice[2].primary)
+            guard verticalA >= 18, horizontal >= 14, verticalB >= 14 else { continue }
+            let score = min(1.0, 0.64 + min(verticalA + horizontal + verticalB, 180) / 500)
+            return PadGestureResult(name: "U", score: score)
+        }
+        return nil
+    }
+
+    private enum GestureAxis { case horizontal, vertical }
+    private struct DirectionSegment {
+        let axis: GestureAxis
+        let signed: CGFloat
+        let primary: CGFloat
+    }
+
+    private func simplifyDirections(_ points: [CGPoint]) -> [DirectionSegment] {
+        guard points.count > 1 else { return [] }
+        return zip(points, points.dropFirst()).compactMap { a, b in
+            let dx = b.x - a.x
+            let dy = b.y - a.y
+            let absDX = abs(dx)
+            let absDY = abs(dy)
+            guard max(absDX, absDY) >= 3 else { return nil }
+            if absDY >= absDX * 0.9 {
+                return DirectionSegment(axis: .vertical, signed: dy, primary: absDY)
+            }
+            if absDX >= absDY * 0.9 {
+                return DirectionSegment(axis: .horizontal, signed: dx, primary: absDX)
+            }
+            return nil
+        }
+    }
+
+    private func collapseDirections(_ segments: [DirectionSegment]) -> [DirectionSegment] {
+        var collapsed: [DirectionSegment] = []
+        for segment in segments {
+            if let last = collapsed.last,
+               last.axis == segment.axis,
+               (last.signed >= 0) == (segment.signed >= 0) {
+                collapsed.removeLast()
+                collapsed.append(DirectionSegment(axis: last.axis, signed: last.signed + segment.signed, primary: last.primary + segment.primary))
+            } else {
+                collapsed.append(segment)
+            }
+        }
+        return collapsed
     }
 
     private func pathLength(_ points: [CGPoint]) -> CGFloat {

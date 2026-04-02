@@ -249,15 +249,19 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let sumY = recent.reduce(CGFloat.zero) { $0 + $1.dy }
         let path = recent.reduce(CGFloat.zero) { $0 + hypot($1.dx, $1.dy) }
 
-        if abs(sumX) >= (config.isPhoneLayout ? 1.25 : 1.75) {
+        if abs(sumX) >= (config.isPhoneLayout ? 2.4 : 3.2),
+           abs(sumX) >= abs(sumY) * (config.isPhoneLayout ? 0.92 : 1.02) {
             return pendingHUDState(for: nil, confidence: min(0.42 + path / 80, 0.72))
         }
 
-        if hasGestureLikeDirectionChange(recent) {
+        if hasGestureLikeDirectionChange(recent),
+           path >= (config.isPhoneLayout ? 8.5 : 10.5) {
             return pendingHUDState(for: nil, confidence: min(0.46 + path / 70, 0.76))
         }
 
-        if abs(sumY) >= (config.isPhoneLayout ? 2.0 : 2.6), path >= (config.isPhoneLayout ? 4.5 : 6.0) {
+        if abs(sumY) >= (config.isPhoneLayout ? 3.8 : 4.8),
+           path >= (config.isPhoneLayout ? 8.0 : 10.0),
+           abs(sumY) >= abs(sumX) * 1.08 {
             return pendingHUDState(for: nil, confidence: min(0.34 + path / 90, 0.64))
         }
 
@@ -300,10 +304,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         captureInvalidated = false
         captureHasStrongVerticalComponent = false
         resolvedPreviewAction = nil
-
-        if let initialPending = pendingHUDState(for: nil, confidence: 0.34) {
-            onPreview(initialPending)
-        }
 
         for sample in seed {
             appendCaptureDelta(dx: sample.dx, dy: sample.dy)

@@ -53,6 +53,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         var minPathLength: CGFloat { isPhoneLayout ? 46 : 68 }
         var matchScoreThreshold: CGFloat { isPhoneLayout ? 0.66 : 0.68 }
         var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.12 : 0.18 }
+        var eagerPreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.08 : 0.12 }
         let upStrokeDominanceRatio: CGFloat = 2.0
         var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 16 : 20 }
         var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 22 : 28 }
@@ -355,6 +356,18 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         case .none:
             break
+        }
+
+        if let eager = recognizer.bestMatch(
+            points: capturePoints,
+            allowedNames: allowedGestureNames.subtracting(["Left", "Right", "OO"])
+        ),
+           eager.score >= config.eagerPreviewScoreThreshold,
+           let state = hudState(for: eager.name, confidence: eager.score, committed: false) {
+            lastLiveCandidate = eager
+            notifyResolvedPreviewIfNeeded(name: eager.name)
+            onPreview(state)
+            return
         }
 
         if let best = recognizer.bestPassingMatch(
@@ -1130,6 +1143,27 @@ private final class PadGestureRecognizer {
         return PadGestureResult(name: passing.name, score: passing.score)
     }
 
+    func bestMatch(points raw: [CGPoint], allowedNames: Set<String>? = nil) -> PadGestureResult? {
+        guard raw.count >= 4 else { return nil }
+
+        let normalized = normalize(raw)
+        let ranked = rankedTemplateMatches(for: normalized)
+
+        if let passing = bestPassingCandidate(from: ranked, raw: raw, minimumScore: 0, allowedNames: allowedNames) {
+            return PadGestureResult(name: passing.name, score: passing.score)
+        }
+
+        let filteredRanked: [(name: String, score: CGFloat)]
+        if let allowedNames {
+            filteredRanked = ranked.filter { allowedNames.contains($0.name) }
+        } else {
+            filteredRanked = ranked
+        }
+
+        guard let first = filteredRanked.first else { return nil }
+        return PadGestureResult(name: first.name, score: first.score)
+    }
+
     func bestPassingMatch(points raw: [CGPoint], minimumScore: CGFloat, allowedNames: Set<String>? = nil) -> PadGestureResult? {
         guard raw.count >= 5 else { return nil }
 
@@ -1760,21 +1794,22 @@ struct PadGestureHUD: View {
     let state: PadGestureHUDState
 
     var body: some View {
-        Group {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.clear)
+                .frame(width: 138, height: 138)
+                .background(PadLiquidGlassBackground(cornerRadius: 22))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
             switch state.kind {
             case .pending:
                 Circle()
-                    .fill(Color.clear)
-                    .frame(width: 112, height: 112)
-                    .background(PadLiquidGlassCapsuleBackground())
-                    .clipShape(Circle())
+                    .stroke(Color.primary.opacity(0.9), lineWidth: 5)
+                    .frame(width: 44, height: 44)
             case .resolved:
                 Image(systemName: state.systemImageName ?? "circle.fill")
                     .font(.system(size: 40, weight: .bold))
                     .foregroundStyle(Color.primary)
-                    .frame(width: 138, height: 138)
-                    .background(PadLiquidGlassBackground(cornerRadius: 22))
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }
         .shadow(color: .black.opacity(0.14), radius: 20, y: 8)

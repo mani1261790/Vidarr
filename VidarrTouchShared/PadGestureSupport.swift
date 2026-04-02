@@ -724,6 +724,10 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let compact = collapseDirections(simplifyDirections(points))
         guard compact.count >= 2 else { return .none }
 
+        if hasDirectionalPreviewConflict(compact) {
+            return .invalid
+        }
+
         let recent = Array(compact.suffix(3))
         if recent.count >= 3,
            enabledOptions.contains(.restoreClosedTab),
@@ -777,6 +781,31 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             }
         }
         return .none
+    }
+
+    private func hasDirectionalPreviewConflict(_ segments: [DirectionSegment]) -> Bool {
+        let recent = Array(segments.suffix(4))
+        guard recent.count >= 3 else { return false }
+
+        let a = recent[recent.count - 3]
+        let b = recent[recent.count - 2]
+        let c = recent[recent.count - 1]
+
+        if a.axis == .vertical, b.axis == .horizontal, c.axis == .horizontal {
+            return (b.signed >= 0) != (c.signed >= 0)
+        }
+
+        if a.axis == .vertical, b.axis == .vertical, c.axis == .horizontal {
+            return (a.signed >= 0) != (b.signed >= 0)
+        }
+
+        if a.axis == .vertical, b.axis == .horizontal, c.axis == .vertical {
+            let isRestore = enabledOptions.contains(.restoreClosedTab) && a.signed < 0 && b.signed > 0 && c.signed > 0
+            let isCloseAll = enabledOptions.contains(.closeAllTabs) && a.signed < 0 && b.signed > 0 && c.signed < 0
+            return !(isRestore || isCloseAll)
+        }
+
+        return false
     }
 
     private enum GestureAxis { case horizontal, vertical }

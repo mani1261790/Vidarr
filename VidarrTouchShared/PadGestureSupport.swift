@@ -46,16 +46,16 @@ struct PadGestureConfiguration {
 final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate {
     private struct CaptureConfig {
         let isPhoneLayout = UIDevice.current.userInterfaceIdiom == .phone
-        var triggerHorizontalDelta: CGFloat { isPhoneLayout ? 2.6 : 3.6 }
-        var triggerDominanceRatio: CGFloat { isPhoneLayout ? 1.36 : 1.5 }
-        let triggerWindowMs: TimeInterval = 56
+        var triggerHorizontalDelta: CGFloat { isPhoneLayout ? 1.8 : 2.8 }
+        var triggerDominanceRatio: CGFloat { isPhoneLayout ? 1.2 : 1.35 }
+        let triggerWindowMs: TimeInterval = 36
         let seedHistoryWindowMs: TimeInterval = 240
-        var minPathLength: CGFloat { isPhoneLayout ? 56 : 78 }
+        var minPathLength: CGFloat { isPhoneLayout ? 46 : 68 }
         var matchScoreThreshold: CGFloat { isPhoneLayout ? 0.66 : 0.68 }
-        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.2 : 0.28 }
+        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.12 : 0.18 }
         let upStrokeDominanceRatio: CGFloat = 2.0
-        var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 20 : 24 }
-        var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 26 : 32 }
+        var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 16 : 20 }
+        var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 22 : 28 }
         var horizontalSwipeDominanceRatio: CGFloat { isPhoneLayout ? 2.1 : 2.35 }
         var horizontalSwipeVerticalExcursion: CGFloat { isPhoneLayout ? 18 : 20 }
     }
@@ -335,7 +335,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if let early = recognizer.bestPassingMatch(
             points: capturePoints,
-            minimumScore: config.isPhoneLayout ? 0.12 : 0.15,
+            minimumScore: config.isPhoneLayout ? 0.06 : 0.1,
             allowedNames: allowedGestureNames.subtracting(["O", "OO"])
         ) {
             if early.name == "Left" || early.name == "Right" {
@@ -624,40 +624,45 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     }
 
     private func genericPendingConfidence(points: [CGPoint]) -> CGFloat? {
+        let path = pathLength(points)
+        if points.count >= 3, path >= (config.isPhoneLayout ? 6 : 8) {
+            return min(0.26 + min(path, 24) / 120, 0.5)
+        }
+
         let compact = collapseDirections(simplifyDirections(points))
         if compact.count >= 2 {
             let recent = Array(compact.suffix(2))
             let first = recent[recent.count - 2]
             let second = recent[recent.count - 1]
             if first.axis != second.axis,
-               abs(first.primary) >= 10,
-               abs(second.primary) >= 8 {
-                return 0.38
+               abs(first.primary) >= 6,
+               abs(second.primary) >= 5 {
+                return 0.42
             }
         }
 
         if enabledOptions.contains(.reload),
-           points.count >= 6,
-           pathLength(points) >= 26,
-           absoluteTurningAngle(points) >= (.pi * 0.9) {
-            return 0.34
+           points.count >= 5,
+           path >= 18,
+           absoluteTurningAngle(points) >= (.pi * 0.6) {
+            return 0.38
         }
 
         return nil
     }
 
     private func immediatePendingConfidence(points: [CGPoint]) -> CGFloat? {
-        guard points.count >= 4 else { return nil }
+        guard points.count >= 3 else { return nil }
         let path = pathLength(points)
-        guard path >= (config.isPhoneLayout ? 12 : 14) else { return nil }
+        guard path >= (config.isPhoneLayout ? 5 : 7) else { return nil }
 
         let start = points[0]
         let end = points[points.count - 1]
         let absDX = abs(end.x - start.x)
         let absDY = abs(end.y - start.y)
 
-        if absDY >= 8 || absDX >= 8 || absoluteTurningAngle(points) >= (.pi * 0.22) {
-            return min(0.32 + min(path, 40) / 200, 0.52)
+        if absDY >= 3 || absDX >= 3 || absoluteTurningAngle(points) >= (.pi * 0.08) {
+            return min(0.36 + min(path, 32) / 120, 0.6)
         }
         return nil
     }

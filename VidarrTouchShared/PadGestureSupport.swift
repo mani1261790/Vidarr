@@ -836,8 +836,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             let b = abs(slice[1].primary)
             let c = abs(slice[2].primary)
             let d = abs(slice[3].primary)
-            guard a >= 12, b >= 10, c >= 10, d >= 9 else { continue }
-            let score = min(1.0, 0.72 + min(a + b + c + d, 220) / 500)
+            guard a >= 14, b >= 12, c >= 12, d >= 11 else { continue }
+            let score = min(1.0, 0.68 + min(a + b + c + d, 220) / 540)
             return PadGestureResult(name: "DownRightDownRight", score: score)
         }
         return nil
@@ -916,12 +916,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return .candidate(PadGestureResult(name: "U", score: 0.88))
         }
 
-        if recent.count >= 3,
+        if recent.count >= 4,
            enabledOptions.contains(.closeAllTabs),
-           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed < 0, abs(recent[recent.count - 3].primary) >= 10,
-           recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 8,
-           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 7 {
-            return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.82))
+           recent[recent.count - 4].axis == .vertical, recent[recent.count - 4].signed < 0, abs(recent[recent.count - 4].primary) >= 10,
+           recent[recent.count - 3].axis == .horizontal, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 8,
+           recent[recent.count - 2].axis == .vertical, recent[recent.count - 2].signed < 0, abs(recent[recent.count - 2].primary) >= 8,
+           recent[recent.count - 1].axis == .horizontal, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 8 {
+            return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.76))
         }
 
         let first = recent[recent.count - 2]

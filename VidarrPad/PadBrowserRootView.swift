@@ -686,19 +686,19 @@ struct PadBrowserRootView: View {
             confidence: 1,
             isCommitted: true
         )
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
+        withAnimation(.easeOut(duration: 0.10)) {
             gestureHUD = committedState
         }
         gestureHUDTask?.cancel()
         gestureHUDTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(650))
+            try? await Task.sleep(for: .milliseconds(420))
             hideGestureHUD()
         }
     }
 
     private func hideGestureHUD() {
         gestureHUDTask?.cancel()
-        withAnimation(.easeOut(duration: 0.16)) {
+        withAnimation(.easeOut(duration: 0.10)) {
             gestureHUD = nil
         }
     }
@@ -759,7 +759,7 @@ struct PadBrowserRootView: View {
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
-                withAnimation(.easeOut(duration: 0.16)) {
+                withAnimation(.easeOut(duration: 0.08)) {
                     if let state, isGestureEnabled(for: state.action) {
                         gestureHUD = state
                     } else {
@@ -877,7 +877,7 @@ struct PadBrowserRootView: View {
         let travel = width + 16
         let remaining = abs(tabSwitchVisualState.fromX)
         let normalized = min(1.0, max(0.0, remaining / max(travel, 1)))
-        let duration = 0.11 + (0.06 * normalized)
+        let duration = 0.08 + (0.04 * normalized)
 
         withAnimation(.easeInOut(duration: duration)) {
             tabSwitchVisualState = .identity
@@ -1050,16 +1050,16 @@ struct PadBrowserRootView: View {
                     stripBirthPosition = start
                     stripBirthScale = 0.85
                     stripBirthOpacity = 0
-                    withAnimation(.easeOut(duration: 0.10)) {
+                    withAnimation(.easeOut(duration: 0.08)) {
                         stripBirthOpacity = 1
                         stripBirthScale = 1.05
                     }
-                    withAnimation(.easeInOut(duration: 0.24)) {
+                    withAnimation(.easeInOut(duration: 0.16)) {
                         stripBirthPosition = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
                         stripBirthScale = 0.92
                     }
-                    try? await Task.sleep(for: .milliseconds(250))
-                    withAnimation(.easeOut(duration: 0.14)) {
+                    try? await Task.sleep(for: .milliseconds(170))
+                    withAnimation(.easeOut(duration: 0.10)) {
                         stripBirthOpacity = 0
                         stripBirthScale = 0.74
                     }
@@ -1067,7 +1067,7 @@ struct PadBrowserRootView: View {
                     stripBirthOpacity = 0
                 }
             }
-            try? await Task.sleep(for: .milliseconds(520))
+            try? await Task.sleep(for: .milliseconds(360))
             if stripBirthTabID == tabID {
                 stripBirthTabID = nil
             }
@@ -1134,9 +1134,9 @@ struct PadBrowserRootView: View {
             tabSwitchVisualState = initialVisualState(for: transition.direction, emphasizeBirth: emphasizeBirth)
         }
 
-        let phase1Duration = emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.07 : 0.10)
-        let phase2Duration = emphasizeBirth ? (isChained ? 0.10 : 0.15) : (isChained ? 0.09 : 0.13)
-        let phase3Duration = emphasizeBirth ? (isChained ? 0.08 : 0.10) : (isChained ? 0.07 : 0.09)
+        let phase1Duration = emphasizeBirth ? (isChained ? 0.06 : 0.08) : (isChained ? 0.05 : 0.07)
+        let phase2Duration = emphasizeBirth ? (isChained ? 0.08 : 0.11) : (isChained ? 0.07 : 0.09)
+        let phase3Duration = emphasizeBirth ? (isChained ? 0.05 : 0.07) : (isChained ? 0.045 : 0.06)
         let phase1State = PadTabTransitionVisualState(
             fromX: fromMidX,
             toX: toMidX,
@@ -1170,19 +1170,19 @@ struct PadBrowserRootView: View {
         }
 
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(Int((phase1Duration * 1000).rounded(.up)) + 4))
+            try? await Task.sleep(for: .milliseconds(Int((phase1Duration * 1000).rounded(.up)) + 2))
             guard tabSwitchToken == token else { return }
             withAnimation(.easeInOut(duration: phase2Duration)) {
                 tabSwitchVisualState = phase2State
             }
 
-            try? await Task.sleep(for: .milliseconds(Int((phase2Duration * 1000).rounded(.up)) + 4))
+            try? await Task.sleep(for: .milliseconds(Int((phase2Duration * 1000).rounded(.up)) + 2))
             guard tabSwitchToken == token else { return }
             withAnimation(.easeOut(duration: phase3Duration)) {
                 tabSwitchVisualState = phase3State
             }
 
-            try? await Task.sleep(for: .milliseconds(Int((phase3Duration * 1000).rounded(.up)) + 10))
+            try? await Task.sleep(for: .milliseconds(Int((phase3Duration * 1000).rounded(.up)) + 6))
             guard tabSwitchToken == token else { return }
             lastCommittedTabTransitionAt = CACurrentMediaTime()
             if shouldSelectTarget {

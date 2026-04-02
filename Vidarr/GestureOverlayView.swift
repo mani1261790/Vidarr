@@ -9,7 +9,7 @@ final class GestureOverlayView: NSView {
         let seedHistoryWindowMs: TimeInterval = 240
         let minPathLength: CGFloat = 90
         let matchScoreThreshold: CGFloat = 0.68
-        let livePreviewScoreThreshold: CGFloat = 0.52
+        let livePreviewScoreThreshold: CGFloat = 0.48
         let upStrokeDominanceRatio: CGFloat = 2.0
         let closeActionSuppressionSeconds: TimeInterval = 0.55
     }
@@ -287,7 +287,7 @@ final class GestureOverlayView: NSView {
             if result.name == "Left" || result.name == "Right" {
                 hudView.hideImmediately()
             } else {
-                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint, duration: 0.3)
+                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint, duration: 0.22)
             }
             return
         }

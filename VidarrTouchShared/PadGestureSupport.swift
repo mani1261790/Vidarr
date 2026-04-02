@@ -45,7 +45,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let seedHistoryWindowMs: TimeInterval = 240
         var minPathLength: CGFloat { isPhoneLayout ? 68 : 90 }
         var matchScoreThreshold: CGFloat { isPhoneLayout ? 0.66 : 0.68 }
-        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.34 : 0.44 }
+        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.28 : 0.36 }
         let upStrokeDominanceRatio: CGFloat = 2.0
         var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 24 : 28 }
         var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 30 : 36 }
@@ -319,7 +319,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if let early = recognizer.bestPassingMatch(
             points: capturePoints,
-            minimumScore: config.isPhoneLayout ? 0.20 : 0.22,
+            minimumScore: config.isPhoneLayout ? 0.16 : 0.18,
             allowedNames: allowedGestureNames.subtracting(["O", "OO"])
         ) {
             if early.name == "Left" || early.name == "Right" {

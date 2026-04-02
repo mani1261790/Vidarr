@@ -1890,8 +1890,8 @@ final class MainWindowController: NSWindowController {
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = emphasizeBirth
-                ? (isChainedTransition ? 0.10 : 0.14)
-                : (isChainedTransition ? 0.09 : 0.12)
+                ? (isChainedTransition ? 0.08 : 0.11)
+                : (isChainedTransition ? 0.07 : 0.10)
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             dimView.animator().alphaValue = 1.0
             state.fromWebView.animator().frame.origin.x = pixelAligned(fromMidX)
@@ -1907,8 +1907,8 @@ final class MainWindowController: NSWindowController {
             }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = emphasizeBirth
-                    ? (isChainedTransition ? 0.12 : 0.18)
-                    : (isChainedTransition ? 0.11 : 0.16)
+                    ? (isChainedTransition ? 0.09 : 0.14)
+                    : (isChainedTransition ? 0.08 : 0.12)
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromOvershootX)
                 state.fromWebView.animator().alphaValue = isChainedTransition ? 0.72 : 0.62
@@ -1922,8 +1922,8 @@ final class MainWindowController: NSWindowController {
                 }
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = emphasizeBirth
-                        ? (isChainedTransition ? 0.10 : 0.13)
-                        : (isChainedTransition ? 0.09 : 0.12)
+                        ? (isChainedTransition ? 0.08 : 0.11)
+                        : (isChainedTransition ? 0.07 : 0.10)
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     dimView.animator().alphaValue = 0
                     state.fromWebView.animator().frame.origin.x = self.pixelAligned(fromFinalX)

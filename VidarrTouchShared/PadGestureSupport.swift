@@ -252,8 +252,12 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }
         let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
 
-        return abs(sumX) > abs(sumY) * config.triggerDominanceRatio
-            && abs(sumX) > triggerHorizontalDelta
+        if abs(sumX) > abs(sumY) * config.triggerDominanceRatio
+            && abs(sumX) > triggerHorizontalDelta {
+            return true
+        }
+
+        return hasGestureLikeDirectionChange(triggerSamples)
     }
 
     private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
@@ -677,9 +681,38 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     }
 
     private func notifyResolvedPreviewIfNeeded(action: PadGestureAction) {
-        guard resolvedPreviewAction == nil else { return }
+        guard resolvedPreviewAction != action else { return }
         resolvedPreviewAction = action
         onResolved(action)
+    }
+
+    private func hasGestureLikeDirectionChange(_ samples: [DeltaSample]) -> Bool {
+        guard samples.count >= 2 else { return false }
+
+        let path = samples.reduce(CGFloat.zero) { $0 + hypot($1.dx, $1.dy) }
+        guard path >= (config.isPhoneLayout ? 6 : 8) else { return false }
+
+        let segments = collapseSampleDirections(samples)
+        if segments.count >= 2 {
+            let first = segments[segments.count - 2]
+            let second = segments[segments.count - 1]
+            if first.axis != second.axis,
+               abs(first.primary) >= (config.isPhoneLayout ? 3 : 4),
+               abs(second.primary) >= (config.isPhoneLayout ? 2.5 : 3.5) {
+                return true
+            }
+        }
+
+        let significant = samples.filter { hypot($0.dx, $0.dy) >= 1.5 }
+        guard significant.count >= 2 else { return false }
+        let previous = significant[significant.count - 2]
+        let latest = significant[significant.count - 1]
+        let angleA = atan2(previous.dy, previous.dx)
+        let angleB = atan2(latest.dy, latest.dx)
+        var delta = angleB - angleA
+        while delta > .pi { delta -= 2 * .pi }
+        while delta < -.pi { delta += 2 * .pi }
+        return abs(delta) >= (config.isPhoneLayout ? 0.42 : 0.5)
     }
 
     private func preferenceOption(for action: PadGestureAction) -> PadGestureOption? {
@@ -932,6 +965,22 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             }
             return nil
         }
+    }
+
+    private func collapseSampleDirections(_ samples: [DeltaSample]) -> [DirectionSegment] {
+        let segments = samples.compactMap { sample -> DirectionSegment? in
+            let absDX = abs(sample.dx)
+            let absDY = abs(sample.dy)
+            guard max(absDX, absDY) >= 1.25 else { return nil }
+            if absDY >= absDX * 0.85 {
+                return DirectionSegment(axis: .vertical, signed: sample.dy, primary: absDY)
+            }
+            if absDX >= absDY * 0.85 {
+                return DirectionSegment(axis: .horizontal, signed: sample.dx, primary: absDX)
+            }
+            return nil
+        }
+        return collapseDirections(segments)
     }
 
     private func collapseDirections(_ segments: [DirectionSegment]) -> [DirectionSegment] {

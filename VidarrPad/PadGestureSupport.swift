@@ -613,9 +613,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         guard compact.count >= 3 else { return nil }
         for index in 0...(compact.count - 3) {
             let slice = Array(compact[index..<(index + 3)])
-            guard slice[0].axis == .vertical, slice[0].signed > 0 else { continue }
+            guard slice[0].axis == .vertical, slice[0].signed < 0 else { continue }
             guard slice[1].axis == .horizontal, slice[1].signed > 0 else { continue }
-            guard slice[2].axis == .vertical, slice[2].signed < 0 else { continue }
+            guard slice[2].axis == .vertical, slice[2].signed > 0 else { continue }
             let verticalA = abs(slice[0].primary)
             let horizontal = abs(slice[1].primary)
             let verticalB = abs(slice[2].primary)
@@ -631,9 +631,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         guard compact.count >= 4 else { return nil }
         for index in 0...(compact.count - 4) {
             let slice = Array(compact[index..<(index + 4)])
-            guard slice[0].axis == .vertical, slice[0].signed > 0 else { continue }
+            guard slice[0].axis == .vertical, slice[0].signed < 0 else { continue }
             guard slice[1].axis == .horizontal, slice[1].signed > 0 else { continue }
-            guard slice[2].axis == .vertical, slice[2].signed > 0 else { continue }
+            guard slice[2].axis == .vertical, slice[2].signed < 0 else { continue }
             guard slice[3].axis == .horizontal, slice[3].signed > 0 else { continue }
             let a = abs(slice[0].primary)
             let b = abs(slice[1].primary)
@@ -659,17 +659,17 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let recent = Array(compact.suffix(3))
         if recent.count >= 3,
            enabledOptions.contains(.restoreClosedTab),
-           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
+           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed < 0, abs(recent[recent.count - 3].primary) >= 14,
            recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
-           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 10 {
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 10 {
             return .candidate(PadGestureResult(name: "U", score: 0.8))
         }
 
         if recent.count >= 3,
            enabledOptions.contains(.closeAllTabs),
-           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
+           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed < 0, abs(recent[recent.count - 3].primary) >= 14,
            recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
-           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 10 {
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 10 {
             return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.74))
         }
 
@@ -677,28 +677,28 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let second = recent[recent.count - 1]
         guard abs(first.primary) >= 14, abs(second.primary) >= 10 else { return .none }
 
-        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed > 0,
+        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed > 0,
            enabledOptions.contains(.closeTab) {
             return .candidate(PadGestureResult(name: "DownRight", score: 0.66))
         }
-        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed < 0,
+        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed < 0,
            enabledOptions.contains(.newTab) {
             return .candidate(PadGestureResult(name: "DownLeft", score: 0.66))
         }
-        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed > 0,
+        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed > 0,
            enabledOptions.contains(.back) {
             return .candidate(PadGestureResult(name: "UpRight", score: 0.66))
         }
-        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed < 0,
+        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed < 0,
            enabledOptions.contains(.forward) {
             return .candidate(PadGestureResult(name: "UpLeft", score: 0.66))
         }
 
         if captureHasStrongVerticalComponent {
-            if first.axis == .vertical, first.signed > 0, second.axis == .horizontal {
+            if first.axis == .vertical, first.signed < 0, second.axis == .horizontal {
                 return .invalid
             }
-            if first.axis == .vertical, first.signed < 0, second.axis == .horizontal {
+            if first.axis == .vertical, first.signed > 0, second.axis == .horizontal {
                 return .invalid
             }
             if recent.count >= 3,

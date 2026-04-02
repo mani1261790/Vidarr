@@ -335,6 +335,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
+        if enabledOptions.contains(.reload),
+           let result = recognizeSingleLoopGesture(points: capturePoints, allowLooseClosure: true),
+           let state = hudState(for: result.name, confidence: result.score, committed: false) {
+            onPreview(state)
+            return
+        }
+
         if lastLiveCandidate != nil {
             captureInvalidated = true
             lastLiveCandidate = nil
@@ -385,7 +392,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return recognizeCloseAllTabsGesture(points: capturePoints)
         }()
 
-        if let result = strict ?? relaxed ?? uFallback ?? llFallback,
+        let oFallback: PadGestureResult? = {
+            guard strict == nil, relaxed == nil, uFallback == nil, llFallback == nil else { return nil }
+            guard enabledOptions.contains(.reload) else { return nil }
+            return recognizeSingleLoopGesture(points: capturePoints, allowLooseClosure: false)
+        }()
+
+        if let result = strict ?? relaxed ?? uFallback ?? llFallback ?? oFallback,
            let action = mapAction(name: result.name)
         {
             if action == .previousTab || action == .nextTab {
@@ -646,6 +659,56 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         return nil
     }
 
+    private func recognizeSingleLoopGesture(points: [CGPoint], allowLooseClosure: Bool) -> PadGestureResult? {
+        guard points.count >= 10 else { return nil }
+
+        var minX = points[0].x
+        var maxX = points[0].x
+        var minY = points[0].y
+        var maxY = points[0].y
+        for point in points {
+            minX = min(minX, point.x)
+            maxX = max(maxX, point.x)
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+
+        let width = maxX - minX
+        let height = maxY - minY
+        guard width >= 18, height >= 18 else { return nil }
+
+        let aspect = max(width, height) / max(min(width, height), 1)
+        guard aspect <= 1.9 else { return nil }
+
+        let diagonal = hypot(width, height)
+        guard diagonal > 1 else { return nil }
+
+        let start = points[0]
+        let end = points[points.count - 1]
+        let closeRatio = hypot(end.x - start.x, end.y - start.y) / diagonal
+        let closeLimit: CGFloat = allowLooseClosure ? 0.82 : 0.52
+        guard closeRatio <= closeLimit else { return nil }
+
+        let a = max(width * 0.5, 1)
+        let b = max(height * 0.5, 1)
+        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
+        guard ellipseCircumference > 1 else { return nil }
+
+        let loops = pathLength(points) / ellipseCircumference
+        let loopRange: ClosedRange<CGFloat> = allowLooseClosure ? 0.58...1.18 : 0.74...1.16
+        guard loopRange.contains(loops) else { return nil }
+
+        let turn = absoluteTurningAngle(points)
+        let turnRange: ClosedRange<CGFloat> = allowLooseClosure ? 3.9...(2.95 * .pi) : 4.6...(2.75 * .pi)
+        guard turnRange.contains(turn) else { return nil }
+
+        let scoreBase = allowLooseClosure ? 0.54 : 0.68
+        let closureBonus = max(0, (closeLimit - closeRatio) / max(closeLimit, 0.001)) * 0.18
+        let loopBonus = max(0, 1 - abs(loops - 1)) * 0.16
+        let turnBonus = max(0, 1 - abs(turn - (2 * .pi)) / (1.3 * .pi)) * 0.12
+        return PadGestureResult(name: "O", score: min(0.98, scoreBase + closureBonus + loopBonus + turnBonus))
+    }
+
     private enum DirectionalPreviewDecision {
         case none
         case invalid
@@ -756,6 +819,28 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         return zip(points, points.dropFirst()).reduce(0) { partial, pair in
             partial + hypot(pair.1.x - pair.0.x, pair.1.y - pair.0.y)
         }
+    }
+
+    private func absoluteTurningAngle(_ points: [CGPoint]) -> CGFloat {
+        guard points.count >= 3 else { return 0 }
+        var total: CGFloat = 0
+        for index in 2..<points.count {
+            let a = points[index - 2]
+            let b = points[index - 1]
+            let c = points[index]
+            let v1 = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+            let v2 = CGVector(dx: c.x - b.x, dy: c.y - b.y)
+            let l1 = hypot(v1.dx, v1.dy)
+            let l2 = hypot(v2.dx, v2.dy)
+            guard l1 >= 1.5, l2 >= 1.5 else { continue }
+            let angle1 = atan2(v1.dy, v1.dx)
+            let angle2 = atan2(v2.dy, v2.dx)
+            var delta = angle2 - angle1
+            while delta > .pi { delta -= 2 * .pi }
+            while delta < -.pi { delta += 2 * .pi }
+            total += abs(delta)
+        }
+        return total
     }
 
     private func reset() {

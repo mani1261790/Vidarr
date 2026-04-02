@@ -133,7 +133,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if enabledOptions.contains(.newTab) { names.insert("DownLeft") }
         if enabledOptions.contains(.reload) { names.insert("O") }
         if enabledOptions.contains(.restoreClosedTab) { names.insert("U") }
-        if enabledOptions.contains(.reloadAll) { names.insert("OO") }
         if enabledOptions.contains(.closeAllTabs) { names.insert("DownRightDownRight") }
         if enabledOptions.contains(.nextTab) { names.insert("Left") }
         if enabledOptions.contains(.previousTab) { names.insert("Right") }
@@ -411,15 +410,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
                 activeHorizontalAction = nil
             }
             onCommit(action)
-            return
-        }
-
-        if isLikelyDoubleLoop(capturePoints) {
-            guard enabledOptions.contains(.reloadAll) else {
-                onCancel()
-                return
-            }
-            onCommit(.reloadAll)
             return
         }
 

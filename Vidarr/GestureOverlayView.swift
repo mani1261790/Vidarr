@@ -54,7 +54,6 @@ final class GestureOverlayView: NSView {
         if prefs.isGestureEnabled(.newTab) { names.insert("DownLeft") }
         if prefs.isGestureEnabled(.reload) { names.insert("O") }
         if prefs.isGestureEnabled(.restoreClosedTab) { names.insert("U") }
-        if prefs.isGestureEnabled(.reloadAll) { names.insert("OO") }
         if prefs.isGestureEnabled(.closeAllTabs) { names.insert("DownRightDownRight") }
         if prefs.isGestureEnabled(.nextTab) { names.insert("Left") }
         if prefs.isGestureEnabled(.previousTab) { names.insert("Right") }
@@ -288,21 +287,8 @@ final class GestureOverlayView: NSView {
             if result.name == "Left" || result.name == "Right" {
                 hudView.hideImmediately()
             } else {
-                let duration = (result.name == "OO") ? 0.55 : 0.3
-                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint, duration: duration)
+                hudView.showCommittedAction(name: result.name, score: result.score, at: hudAnchorPoint, duration: 0.3)
             }
-            return
-        }
-
-        // OO は入力ばらつきが大きいため専用フォールバックを使う。
-        if isLikelyDoubleLoop(capturePoints), BrowserPreferences.shared.isGestureEnabled(.reloadAll) {
-            if let oo = recognizer.bestPassingMatch(points: capturePoints, minimumScore: 0.26, allowedNames: ["OO"]) {
-                performAction(for: oo.name)
-                hudView.showCommittedAction(name: oo.name, score: oo.score, at: hudAnchorPoint, duration: 0.55)
-                return
-            }
-            performAction(for: "OO")
-            hudView.showCommittedAction(name: "OO", score: 0.30, at: hudAnchorPoint, duration: 0.55)
             return
         }
 

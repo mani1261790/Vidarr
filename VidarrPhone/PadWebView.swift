@@ -5,6 +5,21 @@ import WebKit
 final class PadWebStageContainerView: UIView {
     var onLayout: ((CGRect) -> Void)?
 
+    var contentFrame: CGRect {
+        let topInset: CGFloat
+        if traitCollection.userInterfaceIdiom == .phone {
+            topInset = safeAreaInsets.top
+        } else {
+            topInset = 0
+        }
+        return CGRect(
+            x: bounds.minX,
+            y: bounds.minY + topInset,
+            width: bounds.width,
+            height: max(1, bounds.height - topInset)
+        )
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         onLayout?(bounds)
@@ -211,6 +226,7 @@ struct PadWebStageView: UIViewRepresentable {
         ) {
             guard let containerView else { return }
             let bounds = containerView.bounds
+            let contentFrame = resolvedContentFrame(in: containerView, bounds: bounds)
             guard bounds.width > 0, bounds.height > 0 else { return }
 
             if let fromWebView = transitionFromWebView,
@@ -227,7 +243,7 @@ struct PadWebStageView: UIViewRepresentable {
                 containerView.bringSubviewToFront(gapView)
                 activeFromWebView = fromWebView
                 activeToWebView = toWebView
-                applyTransitionLayout(in: bounds, visualState: visualState, fromWebView: fromWebView, toWebView: toWebView)
+                applyTransitionLayout(in: contentFrame, visualState: visualState, fromWebView: fromWebView, toWebView: toWebView)
                 configureGestureRecognizer(for: fromWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [fromWebView, toWebView])
             } else if let selectedWebView {
@@ -236,7 +252,7 @@ struct PadWebStageView: UIViewRepresentable {
                 activeToWebView = nil
                 activeSelectedWebView = selectedWebView
                 ensureSubview(selectedWebView, in: containerView)
-                selectedWebView.frame = bounds
+                selectedWebView.frame = contentFrame
                 selectedWebView.layer.shadowOpacity = 0
                 selectedWebView.alpha = 1
                 selectedWebView.layer.cornerRadius = 0
@@ -245,6 +261,7 @@ struct PadWebStageView: UIViewRepresentable {
                 gapView.isHidden = true
                 dimView.alpha = 0
                 gapView.alpha = 0
+                dimView.frame = contentFrame
                 configureGestureRecognizer(for: selectedWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [selectedWebView])
             } else {
@@ -267,13 +284,15 @@ struct PadWebStageView: UIViewRepresentable {
                 print("[VidarrPhone] stage container bounds:", bounds, "super:", containerView.superview?.bounds ?? .zero)
             }
             #endif
+            guard let containerView else { return }
+            let contentFrame = resolvedContentFrame(in: containerView, bounds: bounds)
             if let fromWebView = activeFromWebView,
                let toWebView = activeToWebView,
                let currentVisualState {
-                applyTransitionLayout(in: bounds, visualState: currentVisualState, fromWebView: fromWebView, toWebView: toWebView)
+                applyTransitionLayout(in: contentFrame, visualState: currentVisualState, fromWebView: fromWebView, toWebView: toWebView)
             } else if let activeSelectedWebView {
-                activeSelectedWebView.frame = bounds
-                dimView.frame = bounds
+                activeSelectedWebView.frame = contentFrame
+                dimView.frame = contentFrame
             }
         }
 
@@ -319,9 +338,20 @@ struct PadWebStageView: UIViewRepresentable {
         private func ensureSubview(_ webView: WKWebView, in container: UIView) {
             if webView.superview !== container {
                 webView.removeFromSuperview()
-                webView.frame = container.bounds
+                if let stageContainer = container as? PadWebStageContainerView {
+                    webView.frame = stageContainer.contentFrame
+                } else {
+                    webView.frame = container.bounds
+                }
                 container.addSubview(webView)
             }
+        }
+
+        private func resolvedContentFrame(in container: UIView, bounds: CGRect) -> CGRect {
+            if let stageContainer = container as? PadWebStageContainerView {
+                return stageContainer.contentFrame
+            }
+            return bounds
         }
 
         private func cleanupDetachedViews(keeping webViews: [WKWebView]) {

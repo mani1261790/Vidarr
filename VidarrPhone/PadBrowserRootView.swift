@@ -89,6 +89,7 @@ struct PadBrowserRootView: View {
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
     private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
+    private var activeWindowSafeAreaInsets: UIEdgeInsets { UIApplication.shared.activeWindowSafeAreaInsets }
     private var chromeBarMaxWidth: CGFloat? {
         guard isPhoneLayout else { return nil }
         let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
@@ -264,10 +265,10 @@ struct PadBrowserRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
-                PadNativeStartPageView(
-                    initialQuery: tab.startPageQuery,
-                    compact: true,
+                if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
+                    PadNativeStartPageView(
+                        initialQuery: tab.startPageQuery,
+                        compact: true,
                     onSubmit: { input in
                         model.selectTab(id: tab.id)
                         model.loadSelectedTab(with: input)
@@ -275,13 +276,14 @@ struct PadBrowserRootView: View {
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: pasted)
-                    }
-                )
-                .transition(.opacity)
-                .ignoresSafeArea(.keyboard)
-            }
+                            model.selectTab(id: tab.id)
+                            model.loadSelectedTab(with: pasted)
+                        }
+                    )
+                    .padding(.top, isPhoneLayout ? activeWindowSafeAreaInsets.top : 0)
+                    .transition(.opacity)
+                    .ignoresSafeArea(.keyboard)
+                }
 
             if let gestureHUD {
                 PadGestureHUD(state: gestureHUD)
@@ -2229,6 +2231,14 @@ private extension UIApplication {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .bounds ?? UIScreen.main.bounds
+    }
+
+    var activeWindowSafeAreaInsets: UIEdgeInsets {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
     }
 
 }

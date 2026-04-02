@@ -832,7 +832,7 @@ struct PadBrowserRootView: View {
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
-                withAnimation(.easeOut(duration: 0.08)) {
+                withAnimation(.easeOut(duration: 0.05)) {
                     if let state, (state.kind == .pending || isGestureEnabled(for: state.action)) {
                         gestureHUD = state
                     } else {
@@ -840,6 +840,7 @@ struct PadBrowserRootView: View {
                     }
                 }
             },
+            onResolved: { _ in },
             onHorizontalSwipeDrag: { action, totalX in
                 showBottomBar(persist: true)
                 updateInteractiveTabSwitch(for: action, totalX: totalX)

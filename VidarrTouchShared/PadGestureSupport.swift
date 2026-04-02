@@ -35,6 +35,7 @@ struct PadGestureConfiguration {
     let sensitivity: PadGestureSensitivity
     let enabledOptions: Set<PadGestureOption>
     let onPreview: (PadGestureHUDState?) -> Void
+    let onResolved: (PadGestureAction) -> Void
     let onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
     let onHorizontalSwipeFinish: (PadGestureAction, CGFloat) -> Void
     let onHorizontalSwipeCancel: () -> Void
@@ -45,16 +46,16 @@ struct PadGestureConfiguration {
 final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate {
     private struct CaptureConfig {
         let isPhoneLayout = UIDevice.current.userInterfaceIdiom == .phone
-        var triggerHorizontalDelta: CGFloat { isPhoneLayout ? 3.8 : 4.5 }
-        var triggerDominanceRatio: CGFloat { isPhoneLayout ? 1.52 : 1.65 }
-        let triggerWindowMs: TimeInterval = 90
+        var triggerHorizontalDelta: CGFloat { isPhoneLayout ? 2.6 : 3.6 }
+        var triggerDominanceRatio: CGFloat { isPhoneLayout ? 1.36 : 1.5 }
+        let triggerWindowMs: TimeInterval = 56
         let seedHistoryWindowMs: TimeInterval = 240
-        var minPathLength: CGFloat { isPhoneLayout ? 68 : 90 }
+        var minPathLength: CGFloat { isPhoneLayout ? 56 : 78 }
         var matchScoreThreshold: CGFloat { isPhoneLayout ? 0.66 : 0.68 }
-        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.28 : 0.36 }
+        var livePreviewScoreThreshold: CGFloat { isPhoneLayout ? 0.2 : 0.28 }
         let upStrokeDominanceRatio: CGFloat = 2.0
-        var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 24 : 28 }
-        var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 30 : 36 }
+        var horizontalSwipeStartDistance: CGFloat { isPhoneLayout ? 20 : 24 }
+        var horizontalSwipeConfirmDistance: CGFloat { isPhoneLayout ? 26 : 32 }
         var horizontalSwipeDominanceRatio: CGFloat { isPhoneLayout ? 2.1 : 2.35 }
         var horizontalSwipeVerticalExcursion: CGFloat { isPhoneLayout ? 18 : 20 }
     }
@@ -75,6 +76,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
     var sensitivity: PadGestureSensitivity
     private var onPreview: (PadGestureHUDState?) -> Void
+    private var onResolved: (PadGestureAction) -> Void
     private var onHorizontalSwipeDrag: (PadGestureAction, CGFloat) -> Void
     private var onHorizontalSwipeFinish: (PadGestureAction, CGFloat) -> Void
     private var onHorizontalSwipeCancel: () -> Void
@@ -94,6 +96,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private var interactiveTabSwipeActive = false
     private var interactiveTabSwipeTotalX: CGFloat = 0
     private var suppressHorizontalCancelOnReset = false
+    private var resolvedPreviewAction: PadGestureAction?
 
     private lazy var recognizer = PadGestureRecognizer(
         matchScoreThreshold: config.matchScoreThreshold,
@@ -104,6 +107,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     init(
         sensitivity: PadGestureSensitivity,
         onPreview: @escaping (PadGestureHUDState?) -> Void,
+        onResolved: @escaping (PadGestureAction) -> Void,
         onHorizontalSwipeDrag: @escaping (PadGestureAction, CGFloat) -> Void,
         onHorizontalSwipeFinish: @escaping (PadGestureAction, CGFloat) -> Void,
         onHorizontalSwipeCancel: @escaping () -> Void,
@@ -113,6 +117,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         self.sensitivity = sensitivity
         self.enabledOptions = Set(PadGestureOption.allCases)
         self.onPreview = onPreview
+        self.onResolved = onResolved
         self.onHorizontalSwipeDrag = onHorizontalSwipeDrag
         self.onHorizontalSwipeFinish = onHorizontalSwipeFinish
         self.onHorizontalSwipeCancel = onHorizontalSwipeCancel
@@ -124,6 +129,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         sensitivity = configuration.sensitivity
         enabledOptions = configuration.enabledOptions
         onPreview = configuration.onPreview
+        onResolved = configuration.onResolved
         onHorizontalSwipeDrag = configuration.onHorizontalSwipeDrag
         onHorizontalSwipeFinish = configuration.onHorizontalSwipeFinish
         onHorizontalSwipeCancel = configuration.onHorizontalSwipeCancel
@@ -256,6 +262,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         lastLiveCandidate = nil
         captureInvalidated = false
         captureHasStrongVerticalComponent = false
+        resolvedPreviewAction = nil
 
         for sample in seed {
             appendCaptureDelta(dx: sample.dx, dy: sample.dy)
@@ -320,6 +327,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
                 onPreview(nil)
             } else if let state = hudState(for: best.name, confidence: best.score, committed: false) {
                 lastLiveCandidate = best
+                notifyResolvedPreviewIfNeeded(name: best.name)
                 onPreview(state)
             }
             return
@@ -327,7 +335,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if let early = recognizer.bestPassingMatch(
             points: capturePoints,
-            minimumScore: config.isPhoneLayout ? 0.16 : 0.18,
+            minimumScore: config.isPhoneLayout ? 0.12 : 0.15,
             allowedNames: allowedGestureNames.subtracting(["O", "OO"])
         ) {
             if early.name == "Left" || early.name == "Right" {
@@ -335,6 +343,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
                 onPreview(nil)
             } else if let state = hudState(for: early.name, confidence: early.score, committed: false) {
                 lastLiveCandidate = early
+                notifyResolvedPreviewIfNeeded(name: early.name)
                 onPreview(state)
                 return
             }
@@ -343,6 +352,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if enabledOptions.contains(.restoreClosedTab),
            let result = recognizeUGesture(points: capturePoints),
            let state = hudState(for: result.name, confidence: result.score, committed: false) {
+            notifyResolvedPreviewIfNeeded(name: result.name)
             onPreview(state)
             return
         }
@@ -350,6 +360,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         if enabledOptions.contains(.reload),
            let result = recognizeSingleLoopGesture(points: capturePoints, allowLooseClosure: true),
            let state = hudState(for: result.name, confidence: result.score, committed: false) {
+            notifyResolvedPreviewIfNeeded(name: result.name)
             onPreview(state)
             return
         }
@@ -512,6 +523,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         interactiveTabSwipeActive = true
         interactiveTabSwipeTotalX = displacementX
         activeHorizontalAction = action
+        notifyResolvedPreviewIfNeeded(action: action)
         onHorizontalSwipeDrag(action, interactiveTabSwipeTotalX)
         onPreview(nil)
         return true
@@ -648,6 +660,17 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return min(0.32 + min(path, 40) / 200, 0.52)
         }
         return nil
+    }
+
+    private func notifyResolvedPreviewIfNeeded(name: String) {
+        guard let action = mapAction(name: name) else { return }
+        notifyResolvedPreviewIfNeeded(action: action)
+    }
+
+    private func notifyResolvedPreviewIfNeeded(action: PadGestureAction) {
+        guard resolvedPreviewAction == nil else { return }
+        resolvedPreviewAction = action
+        onResolved(action)
     }
 
     private func preferenceOption(for action: PadGestureAction) -> PadGestureOption? {
@@ -954,6 +977,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         captureHasStrongVerticalComponent = false
         interactiveTabSwipeActive = false
         interactiveTabSwipeTotalX = 0
+        resolvedPreviewAction = nil
         if suppressHorizontalCancelOnReset {
             suppressHorizontalCancelOnReset = false
         } else {

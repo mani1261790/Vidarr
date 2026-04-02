@@ -385,6 +385,7 @@ struct PadWebStageView: UIViewRepresentable {
                 coordinator = PadGestureCaptureCoordinator(
                     sensitivity: configuration.sensitivity,
                     onPreview: configuration.onPreview,
+                    onResolved: configuration.onResolved,
                     onHorizontalSwipeDrag: configuration.onHorizontalSwipeDrag,
                     onHorizontalSwipeFinish: configuration.onHorizontalSwipeFinish,
                     onHorizontalSwipeCancel: configuration.onHorizontalSwipeCancel,

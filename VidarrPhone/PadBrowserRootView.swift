@@ -736,7 +736,6 @@ struct PadBrowserRootView: View {
             hideGestureHUD()
             return
         }
-        triggerGestureHaptic()
         switch action {
         case .previousTab:
             hideGestureHUD()
@@ -907,12 +906,17 @@ struct PadBrowserRootView: View {
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
-                withAnimation(.easeOut(duration: 0.07)) {
+                withAnimation(.easeOut(duration: 0.04)) {
                     if let state, (state.kind == .pending || isGestureEnabled(for: state.action)) {
                         gestureHUD = state
                     } else {
                         gestureHUD = nil
                     }
+                }
+            },
+            onResolved: { action in
+                if isGestureEnabled(for: action) {
+                    triggerGestureHaptic()
                 }
             },
             onHorizontalSwipeDrag: { action, totalX in

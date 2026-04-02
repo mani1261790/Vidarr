@@ -750,7 +750,8 @@ struct PadBrowserRootView: View {
             title: "",
             systemImageName: symbol(for: action),
             confidence: 1,
-            isCommitted: true
+            isCommitted: true,
+            kind: .resolved
         )
         withAnimation(.easeOut(duration: 0.10)) {
             gestureHUD = committedState

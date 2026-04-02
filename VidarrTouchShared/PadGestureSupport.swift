@@ -18,11 +18,17 @@ enum PadGestureAction: String {
 }
 
 struct PadGestureHUDState: Equatable {
+    enum Kind: Equatable {
+        case pending
+        case resolved
+    }
+
     let action: PadGestureAction
     let title: String
-    let systemImageName: String
+    let systemImageName: String?
     let confidence: CGFloat
     let isCommitted: Bool
+    let kind: Kind
 }
 
 struct PadGestureConfiguration {
@@ -289,7 +295,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         switch directionalPreviewDecision(points: capturePoints) {
         case .candidate(let directional):
-            if let state = hudState(for: directional.name, confidence: directional.score, committed: false) {
+            if let state = pendingHUDState(confidence: directional.score) {
                 lastLiveCandidate = directional
                 onPreview(state)
                 return
@@ -568,7 +574,19 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             title: "",
             systemImageName: symbol(for: name),
             confidence: confidence,
-            isCommitted: committed
+            isCommitted: committed,
+            kind: .resolved
+        )
+    }
+
+    private func pendingHUDState(confidence: CGFloat) -> PadGestureHUDState? {
+        PadGestureHUDState(
+            action: .reload,
+            title: "",
+            systemImageName: nil,
+            confidence: confidence,
+            isCommitted: false,
+            kind: .pending
         )
     }
 
@@ -1567,16 +1585,24 @@ struct PadGestureHUD: View {
     let state: PadGestureHUDState
 
     var body: some View {
-        Image(systemName: state.systemImageName)
-            .font(.system(size: 40, weight: .bold))
-            .foregroundStyle(Color.primary)
-            .frame(width: 138, height: 138)
-            .background(PadLiquidGlassBackground(cornerRadius: 22))
-            .mask(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+        Group {
+            switch state.kind {
+            case .pending:
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 112, height: 112)
+                    .background(PadLiquidGlassCapsuleBackground())
+                    .clipShape(Circle())
+            case .resolved:
+                Image(systemName: state.systemImageName ?? "circle.fill")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundStyle(Color.primary)
                     .frame(width: 138, height: 138)
-            )
-            .shadow(color: .black.opacity(0.14), radius: 20, y: 8)
+                    .background(PadLiquidGlassBackground(cornerRadius: 22))
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+        .shadow(color: .black.opacity(0.14), radius: 20, y: 8)
     }
 }
 

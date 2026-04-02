@@ -283,11 +283,19 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         cancelHorizontalSwipePreviewIfNeeded()
 
-        if let directional = recognizeDirectionalPreview(points: capturePoints),
-           let state = hudState(for: directional.name, confidence: directional.score, committed: false) {
-            lastLiveCandidate = directional
-            onPreview(state)
+        switch directionalPreviewDecision(points: capturePoints) {
+        case .candidate(let directional):
+            if let state = hudState(for: directional.name, confidence: directional.score, committed: false) {
+                lastLiveCandidate = directional
+                onPreview(state)
+                return
+            }
+        case .invalid:
+            lastLiveCandidate = nil
+            onPreview(nil)
             return
+        case .none:
+            break
         }
 
         if let best = recognizer.bestPassingMatch(
@@ -371,7 +379,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return recognizeUGesture(points: capturePoints)
         }()
 
-        if let result = strict ?? relaxed ?? uFallback,
+        let llFallback: PadGestureResult? = {
+            guard strict == nil, relaxed == nil, uFallback == nil else { return nil }
+            guard enabledOptions.contains(.closeAllTabs) else { return nil }
+            return recognizeCloseAllTabsGesture(points: capturePoints)
+        }()
+
+        if let result = strict ?? relaxed ?? uFallback ?? llFallback,
            let action = mapAction(name: result.name)
         {
             if action == .previousTab || action == .nextTab {
@@ -612,48 +626,89 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         return nil
     }
 
-    private func recognizeDirectionalPreview(points: [CGPoint]) -> PadGestureResult? {
+    private func recognizeCloseAllTabsGesture(points: [CGPoint]) -> PadGestureResult? {
         let compact = collapseDirections(simplifyDirections(points))
-        guard compact.count >= 2 else { return nil }
+        guard compact.count >= 4 else { return nil }
+        for index in 0...(compact.count - 4) {
+            let slice = Array(compact[index..<(index + 4)])
+            guard slice[0].axis == .vertical, slice[0].signed > 0 else { continue }
+            guard slice[1].axis == .horizontal, slice[1].signed > 0 else { continue }
+            guard slice[2].axis == .vertical, slice[2].signed > 0 else { continue }
+            guard slice[3].axis == .horizontal, slice[3].signed > 0 else { continue }
+            let a = abs(slice[0].primary)
+            let b = abs(slice[1].primary)
+            let c = abs(slice[2].primary)
+            let d = abs(slice[3].primary)
+            guard a >= 18, b >= 14, c >= 14, d >= 12 else { continue }
+            let score = min(1.0, 0.66 + min(a + b + c + d, 220) / 560)
+            return PadGestureResult(name: "DownRightDownRight", score: score)
+        }
+        return nil
+    }
+
+    private enum DirectionalPreviewDecision {
+        case none
+        case invalid
+        case candidate(PadGestureResult)
+    }
+
+    private func directionalPreviewDecision(points: [CGPoint]) -> DirectionalPreviewDecision {
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 2 else { return .none }
 
         let recent = Array(compact.suffix(3))
         if recent.count >= 3,
            enabledOptions.contains(.restoreClosedTab),
            recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
            recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
-           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 12 {
-            return PadGestureResult(name: "U", score: 0.72)
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 10 {
+            return .candidate(PadGestureResult(name: "U", score: 0.8))
         }
 
         if recent.count >= 3,
            enabledOptions.contains(.closeAllTabs),
            recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
            recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
-           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 12 {
-            return PadGestureResult(name: "DownRightDownRight", score: 0.68)
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 10 {
+            return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.74))
         }
 
         let first = recent[recent.count - 2]
         let second = recent[recent.count - 1]
-        guard abs(first.primary) >= 14, abs(second.primary) >= 12 else { return nil }
+        guard abs(first.primary) >= 14, abs(second.primary) >= 10 else { return .none }
 
         if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed > 0,
            enabledOptions.contains(.closeTab) {
-            return PadGestureResult(name: "DownRight", score: 0.62)
+            return .candidate(PadGestureResult(name: "DownRight", score: 0.66))
         }
         if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed < 0,
            enabledOptions.contains(.newTab) {
-            return PadGestureResult(name: "DownLeft", score: 0.62)
+            return .candidate(PadGestureResult(name: "DownLeft", score: 0.66))
         }
         if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed > 0,
            enabledOptions.contains(.back) {
-            return PadGestureResult(name: "UpRight", score: 0.62)
+            return .candidate(PadGestureResult(name: "UpRight", score: 0.66))
         }
         if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed < 0,
            enabledOptions.contains(.forward) {
-            return PadGestureResult(name: "UpLeft", score: 0.62)
+            return .candidate(PadGestureResult(name: "UpLeft", score: 0.66))
         }
-        return nil
+
+        if captureHasStrongVerticalComponent {
+            if first.axis == .vertical, first.signed > 0, second.axis == .horizontal {
+                return .invalid
+            }
+            if first.axis == .vertical, first.signed < 0, second.axis == .horizontal {
+                return .invalid
+            }
+            if recent.count >= 3,
+               recent[recent.count - 3].axis == .vertical,
+               recent[recent.count - 2].axis == .horizontal,
+               recent[recent.count - 1].axis == .vertical {
+                return .invalid
+            }
+        }
+        return .none
     }
 
     private enum GestureAxis { case horizontal, vertical }
@@ -1408,6 +1463,10 @@ struct PadGestureHUD: View {
             .foregroundStyle(Color.primary)
             .frame(width: 138, height: 138)
             .background(PadLiquidGlassBackground(cornerRadius: 22))
+            .mask(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .frame(width: 138, height: 138)
+            )
             .shadow(color: .black.opacity(0.14), radius: 20, y: 8)
     }
 }

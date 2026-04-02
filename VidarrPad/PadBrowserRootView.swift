@@ -237,6 +237,7 @@ struct PadBrowserRootView: View {
 
     private var webLayer: some View {
         GeometryReader { proxy in
+            let _ = model.navigationStateToken
             ZStack {
                 PadWebStageView(
                     selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,

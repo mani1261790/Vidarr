@@ -210,6 +210,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         switch state {
         case .idle:
             trackRecent(dx: dx, dy: dy, timestamp: timestamp)
+            updateIdlePreviewIfNeeded()
             if shouldStartCapture() {
                 startCapture(at: anchor, withSeed: recentSamples)
                 return
@@ -229,6 +230,37 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         let maxAge = config.seedHistoryWindowMs / 1000
         let threshold = timestamp - maxAge
         recentSamples.removeAll { $0.timestamp < threshold }
+    }
+
+    private func updateIdlePreviewIfNeeded() {
+        guard state == .idle else { return }
+        if let state = idlePendingHUDState() {
+            onPreview(state)
+        } else {
+            onPreview(nil)
+        }
+    }
+
+    private func idlePendingHUDState() -> PadGestureHUDState? {
+        guard !recentSamples.isEmpty else { return nil }
+        let recent = Array(recentSamples.suffix(5))
+        let sumX = recent.reduce(CGFloat.zero) { $0 + $1.dx }
+        let sumY = recent.reduce(CGFloat.zero) { $0 + $1.dy }
+        let path = recent.reduce(CGFloat.zero) { $0 + hypot($1.dx, $1.dy) }
+
+        if abs(sumX) >= (config.isPhoneLayout ? 1.25 : 1.75) {
+            return pendingHUDState(for: nil, confidence: min(0.42 + path / 80, 0.72))
+        }
+
+        if hasGestureLikeDirectionChange(recent) {
+            return pendingHUDState(for: nil, confidence: min(0.46 + path / 70, 0.76))
+        }
+
+        if abs(sumY) >= (config.isPhoneLayout ? 2.0 : 2.6), path >= (config.isPhoneLayout ? 4.5 : 6.0) {
+            return pendingHUDState(for: nil, confidence: min(0.34 + path / 90, 0.64))
+        }
+
+        return nil
     }
 
     private func shouldStartCapture() -> Bool {

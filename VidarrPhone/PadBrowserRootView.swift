@@ -269,6 +269,7 @@ struct PadBrowserRootView: View {
     }
 
     private var webLayer: some View {
+        let _ = model.navigationStateToken
         let stageBounds = resolvedStageBounds
         return ZStack {
             PadWebStageView(

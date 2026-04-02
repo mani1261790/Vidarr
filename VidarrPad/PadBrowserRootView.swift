@@ -833,7 +833,7 @@ struct PadBrowserRootView: View {
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
                 withAnimation(.easeOut(duration: 0.08)) {
-                    if let state, isGestureEnabled(for: state.action) {
+                    if let state, (state.kind == .pending || isGestureEnabled(for: state.action)) {
                         gestureHUD = state
                     } else {
                         gestureHUD = nil

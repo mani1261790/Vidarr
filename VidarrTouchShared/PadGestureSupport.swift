@@ -356,6 +356,12 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
+        if let confidence = genericPendingConfidence(points: capturePoints),
+           let state = pendingHUDState(for: nil, confidence: confidence) {
+            onPreview(state)
+            return
+        }
+
         if lastLiveCandidate != nil {
             captureInvalidated = true
             lastLiveCandidate = nil
@@ -583,18 +589,44 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         )
     }
 
-    private func pendingHUDState(for name: String, confidence: CGFloat) -> PadGestureHUDState? {
-        guard let action = mapAction(name: name),
-              let option = preferenceOption(for: action),
-              enabledOptions.contains(option) else { return nil }
+    private func pendingHUDState(for name: String?, confidence: CGFloat) -> PadGestureHUDState? {
+        if let name,
+           let action = mapAction(name: name),
+           let option = preferenceOption(for: action),
+           !enabledOptions.contains(option) {
+            return nil
+        }
         return PadGestureHUDState(
-            action: action,
+            action: mapAction(name: name ?? "O") ?? .reload,
             title: "",
             systemImageName: nil,
             confidence: confidence,
             isCommitted: false,
             kind: .pending
         )
+    }
+
+    private func genericPendingConfidence(points: [CGPoint]) -> CGFloat? {
+        let compact = collapseDirections(simplifyDirections(points))
+        if compact.count >= 2 {
+            let recent = Array(compact.suffix(2))
+            let first = recent[recent.count - 2]
+            let second = recent[recent.count - 1]
+            if first.axis != second.axis,
+               abs(first.primary) >= 10,
+               abs(second.primary) >= 8 {
+                return 0.38
+            }
+        }
+
+        if enabledOptions.contains(.reload),
+           points.count >= 6,
+           pathLength(points) >= 26,
+           absoluteTurningAngle(points) >= (.pi * 0.9) {
+            return 0.34
+        }
+
+        return nil
     }
 
     private func preferenceOption(for action: PadGestureAction) -> PadGestureOption? {

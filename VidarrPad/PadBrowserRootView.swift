@@ -1563,16 +1563,35 @@ private struct PadGestureGlyphIcon: View {
             let converted = points.enumerated().map { index, point -> CGPoint in
                 CGPoint(x: point.x * size.width, y: point.y * size.height)
             }
-            path.move(to: converted[0])
-            for point in converted.dropFirst() {
-                path.addLine(to: point)
-            }
+            path = smoothPath(for: converted)
             context.stroke(
                 path,
                 with: .color(color),
                 style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
             )
         }
+    }
+
+    private func smoothPath(for points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+
+        if points.count == 2 {
+            path.addLine(to: points[1])
+            return path
+        }
+
+        for index in 1..<points.count {
+            let previous = points[index - 1]
+            let current = points[index]
+            let midpoint = CGPoint(x: (previous.x + current.x) * 0.5, y: (previous.y + current.y) * 0.5)
+            path.addQuadCurve(to: midpoint, control: previous)
+            if index == points.count - 1 {
+                path.addQuadCurve(to: current, control: midpoint)
+            }
+        }
+        return path
     }
 }
 

@@ -110,13 +110,26 @@ enum PadGestureOption: String, CaseIterable, Hashable {
             return [CGPoint(x: 0.3, y: 0.18), CGPoint(x: 0.3, y: 0.78), CGPoint(x: 0.78, y: 0.78)]
         case .closeAllTabs:
             return [
-                CGPoint(x: 0.22, y: 0.18), CGPoint(x: 0.22, y: 0.62), CGPoint(x: 0.52, y: 0.62),
-                CGPoint(x: 0.52, y: 0.78), CGPoint(x: 0.52, y: 0.28), CGPoint(x: 0.82, y: 0.28)
+                CGPoint(x: 0.24, y: 0.16),
+                CGPoint(x: 0.24, y: 0.54),
+                CGPoint(x: 0.5, y: 0.54),
+                CGPoint(x: 0.5, y: 0.84),
+                CGPoint(x: 0.76, y: 0.84)
             ]
         case .restoreClosedTab:
             return [CGPoint(x: 0.24, y: 0.18), CGPoint(x: 0.24, y: 0.72), CGPoint(x: 0.78, y: 0.72), CGPoint(x: 0.78, y: 0.18)]
         case .reload:
-            return [CGPoint(x: 0.26, y: 0.28), CGPoint(x: 0.56, y: 0.28), CGPoint(x: 0.7, y: 0.52), CGPoint(x: 0.52, y: 0.76), CGPoint(x: 0.28, y: 0.76)]
+            return [
+                CGPoint(x: 0.5, y: 0.16),
+                CGPoint(x: 0.72, y: 0.22),
+                CGPoint(x: 0.84, y: 0.5),
+                CGPoint(x: 0.72, y: 0.78),
+                CGPoint(x: 0.5, y: 0.84),
+                CGPoint(x: 0.28, y: 0.78),
+                CGPoint(x: 0.16, y: 0.5),
+                CGPoint(x: 0.28, y: 0.22),
+                CGPoint(x: 0.5, y: 0.16)
+            ]
         case .reloadAll:
             return [
                 CGPoint(x: 0.28, y: 0.34), CGPoint(x: 0.56, y: 0.24), CGPoint(x: 0.72, y: 0.46), CGPoint(x: 0.58, y: 0.72), CGPoint(x: 0.34, y: 0.64),

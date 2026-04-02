@@ -287,6 +287,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         cancelHorizontalSwipePreviewIfNeeded()
 
+        if let directional = recognizeDirectionalPreview(points: capturePoints),
+           let state = hudState(for: directional.name, confidence: directional.score, committed: false) {
+            lastLiveCandidate = directional
+            onPreview(state)
+            return
+        }
+
         if let best = recognizer.bestPassingMatch(
             points: capturePoints,
             minimumScore: config.livePreviewScoreThreshold,
@@ -605,6 +612,50 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             guard verticalA >= 18, horizontal >= 14, verticalB >= 14 else { continue }
             let score = min(1.0, 0.64 + min(verticalA + horizontal + verticalB, 180) / 500)
             return PadGestureResult(name: "U", score: score)
+        }
+        return nil
+    }
+
+    private func recognizeDirectionalPreview(points: [CGPoint]) -> PadGestureResult? {
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 2 else { return nil }
+
+        let recent = Array(compact.suffix(3))
+        if recent.count >= 3,
+           enabledOptions.contains(.restoreClosedTab),
+           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
+           recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed < 0, abs(recent[recent.count - 1].primary) >= 12 {
+            return PadGestureResult(name: "U", score: 0.72)
+        }
+
+        if recent.count >= 3,
+           enabledOptions.contains(.closeAllTabs),
+           recent[recent.count - 3].axis == .vertical, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 14,
+           recent[recent.count - 2].axis == .horizontal, recent[recent.count - 2].signed > 0, abs(recent[recent.count - 2].primary) >= 12,
+           recent[recent.count - 1].axis == .vertical, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 12 {
+            return PadGestureResult(name: "DownRightDownRight", score: 0.68)
+        }
+
+        let first = recent[recent.count - 2]
+        let second = recent[recent.count - 1]
+        guard abs(first.primary) >= 14, abs(second.primary) >= 12 else { return nil }
+
+        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed > 0,
+           enabledOptions.contains(.closeTab) {
+            return PadGestureResult(name: "DownRight", score: 0.62)
+        }
+        if first.axis == .vertical, first.signed > 0, second.axis == .horizontal, second.signed < 0,
+           enabledOptions.contains(.newTab) {
+            return PadGestureResult(name: "DownLeft", score: 0.62)
+        }
+        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed > 0,
+           enabledOptions.contains(.back) {
+            return PadGestureResult(name: "UpRight", score: 0.62)
+        }
+        if first.axis == .vertical, first.signed < 0, second.axis == .horizontal, second.signed < 0,
+           enabledOptions.contains(.forward) {
+            return PadGestureResult(name: "UpLeft", score: 0.62)
         }
         return nil
     }
@@ -1360,15 +1411,7 @@ struct PadGestureHUD: View {
             .font(.system(size: 40, weight: .bold))
             .foregroundStyle(Color.primary)
             .frame(width: 138, height: 138)
-            .background(
-                PadLiquidGlassBackground(cornerRadius: 22)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .compositingGroup()
+            .background(PadLiquidGlassBackground(cornerRadius: 22))
             .shadow(color: .black.opacity(0.14), radius: 20, y: 8)
     }
 }

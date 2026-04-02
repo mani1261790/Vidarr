@@ -293,6 +293,11 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         cancelHorizontalSwipePreviewIfNeeded()
 
+        if let confidence = immediatePendingConfidence(points: capturePoints),
+           let state = pendingHUDState(for: nil, confidence: confidence) {
+            onPreview(state)
+        }
+
         var pendingDirectional: PadGestureResult?
         switch directionalPreviewDecision(points: capturePoints) {
         case .candidate(let directional):
@@ -626,6 +631,22 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return 0.34
         }
 
+        return nil
+    }
+
+    private func immediatePendingConfidence(points: [CGPoint]) -> CGFloat? {
+        guard points.count >= 4 else { return nil }
+        let path = pathLength(points)
+        guard path >= (config.isPhoneLayout ? 12 : 14) else { return nil }
+
+        let start = points[0]
+        let end = points[points.count - 1]
+        let absDX = abs(end.x - start.x)
+        let absDY = abs(end.y - start.y)
+
+        if absDY >= 8 || absDX >= 8 || absoluteTurningAngle(points) >= (.pi * 0.22) {
+            return min(0.32 + min(path, 40) / 200, 0.52)
+        }
         return nil
     }
 

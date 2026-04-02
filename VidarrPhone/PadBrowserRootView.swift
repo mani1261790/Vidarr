@@ -89,7 +89,6 @@ struct PadBrowserRootView: View {
     private var librarySheetDetents: Set<PresentationDetent> { isPhoneLayout ? [.large] : [.medium, .large] }
     private var quickSearchDetents: Set<PresentationDetent> { isPhoneLayout ? [.fraction(0.34)] : [.fraction(0.26)] }
     private var activeWindowBounds: CGRect { UIApplication.shared.activeWindowBounds }
-    private var activeWindowTopSafeInset: CGFloat { UIApplication.shared.activeWindowTopSafeInset }
     private var chromeBarMaxWidth: CGFloat? {
         guard isPhoneLayout else { return nil }
         let available = activeWindowBounds.width - (bottomBarHorizontalPadding * 2)
@@ -247,54 +246,42 @@ struct PadBrowserRootView: View {
 
     private var webLayer: some View {
         let stageBounds = resolvedStageBounds
-        let topInset = isPhoneLayout ? activeWindowTopSafeInset : 0
         return ZStack {
-            VStack(spacing: 0) {
-                if topInset > 0 {
-                    Color.clear
-                        .frame(height: topInset)
-                        .allowsHitTesting(false)
-                }
+            PadWebStageView(
+                selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
+                transitionFromWebView: tabSwitchTransition?.fromTab.webView,
+                transitionToWebView: tabSwitchTransition?.toTab.webView,
+                transitionVisualState: tabSwitchTransition == nil ? nil : tabSwitchVisualState,
+                gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
+                    ? gestureConfiguration
+                    : nil
+            )
+            .frame(width: stageBounds.width, height: stageBounds.height)
+            .ignoresSafeArea()
 
-                ZStack {
-                    PadWebStageView(
-                        selectedWebView: tabSwitchTransition == nil ? model.selectedTab?.webView : nil,
-                        transitionFromWebView: tabSwitchTransition?.fromTab.webView,
-                        transitionToWebView: tabSwitchTransition?.toTab.webView,
-                        transitionVisualState: tabSwitchTransition == nil ? nil : tabSwitchVisualState,
-                        gestureConfiguration: (tabSwitchTransition != nil && interactiveTargetID != nil) || (tabSwitchTransition == nil)
-                            ? gestureConfiguration
-                            : nil
-                    )
-                    .frame(width: stageBounds.width, height: stageBounds.height)
-
-                    if tabSwitchTransition == nil, model.selectedTab == nil {
-                        ContentUnavailableView("No Tab", systemImage: "square.on.square")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-
-                    if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
-                        PadNativeStartPageView(
-                            initialQuery: tab.startPageQuery,
-                            compact: true,
-                            onSubmit: { input in
-                                model.selectTab(id: tab.id)
-                                model.loadSelectedTab(with: input)
-                            },
-                            onPasteAndSearch: {
-                                guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                      !pasted.isEmpty else { return }
-                                model.selectTab(id: tab.id)
-                                model.loadSelectedTab(with: pasted)
-                            }
-                        )
-                        .transition(.opacity)
-                        .ignoresSafeArea(.keyboard)
-                    }
-                }
-                .frame(width: stageBounds.width, height: stageBounds.height)
+            if tabSwitchTransition == nil, model.selectedTab == nil {
+                ContentUnavailableView("No Tab", systemImage: "square.on.square")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
+                PadNativeStartPageView(
+                    initialQuery: tab.startPageQuery,
+                    compact: true,
+                    onSubmit: { input in
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: input)
+                    },
+                    onPasteAndSearch: {
+                        guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !pasted.isEmpty else { return }
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: pasted)
+                    }
+                )
+                .transition(.opacity)
+                .ignoresSafeArea(.keyboard)
+            }
 
             if let gestureHUD {
                 PadGestureHUD(state: gestureHUD)
@@ -669,12 +656,7 @@ struct PadBrowserRootView: View {
     private var resolvedStageBounds: CGRect {
         let windowBounds = activeWindowBounds
         if windowBounds.width > 1, windowBounds.height > 1 {
-            return CGRect(
-                x: 0,
-                y: 0,
-                width: windowBounds.width,
-                height: max(1, windowBounds.height - (isPhoneLayout ? activeWindowTopSafeInset : 0))
-            )
+            return windowBounds
         }
         return UIScreen.main.bounds
     }
@@ -2247,14 +2229,6 @@ private extension UIApplication {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .bounds ?? UIScreen.main.bounds
-    }
-
-    var activeWindowTopSafeInset: CGFloat {
-        connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .safeAreaInsets.top ?? 0
     }
 
 }

@@ -738,6 +738,8 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return hasEarlyDownLeftSignature(points)
         case "DownRight":
             return hasEarlyDownRightSignature(points)
+        case "DownRightDownRight":
+            return hasEarlyLLSignature(points)
         case "U":
             return hasEarlyUSignature(points)
         default:
@@ -789,6 +791,28 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             && c.axis == .vertical
             && c.signed > 0
             && abs(c.primary) >= 9
+    }
+
+    private func hasEarlyLLSignature(_ points: [CGPoint]) -> Bool {
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 4 else { return false }
+        let recent = Array(compact.suffix(4))
+        let a = recent[recent.count - 4]
+        let b = recent[recent.count - 3]
+        let c = recent[recent.count - 2]
+        let d = recent[recent.count - 1]
+        return a.axis == .vertical
+            && a.signed < 0
+            && abs(a.primary) >= 12
+            && b.axis == .horizontal
+            && b.signed > 0
+            && abs(b.primary) >= 10
+            && c.axis == .vertical
+            && c.signed < 0
+            && abs(c.primary) >= 10
+            && d.axis == .horizontal
+            && d.signed > 0
+            && abs(d.primary) >= 10
     }
 
     private func hasGestureLikeDirectionChange(_ samples: [DeltaSample]) -> Bool {
@@ -978,11 +1002,11 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if recent.count >= 4,
            enabledOptions.contains(.closeAllTabs),
-           recent[recent.count - 4].axis == .vertical, recent[recent.count - 4].signed < 0, abs(recent[recent.count - 4].primary) >= 10,
-           recent[recent.count - 3].axis == .horizontal, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 8,
-           recent[recent.count - 2].axis == .vertical, recent[recent.count - 2].signed < 0, abs(recent[recent.count - 2].primary) >= 8,
-           recent[recent.count - 1].axis == .horizontal, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 8 {
-            return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.76))
+           recent[recent.count - 4].axis == .vertical, recent[recent.count - 4].signed < 0, abs(recent[recent.count - 4].primary) >= 12,
+           recent[recent.count - 3].axis == .horizontal, recent[recent.count - 3].signed > 0, abs(recent[recent.count - 3].primary) >= 10,
+           recent[recent.count - 2].axis == .vertical, recent[recent.count - 2].signed < 0, abs(recent[recent.count - 2].primary) >= 10,
+           recent[recent.count - 1].axis == .horizontal, recent[recent.count - 1].signed > 0, abs(recent[recent.count - 1].primary) >= 10 {
+            return .candidate(PadGestureResult(name: "DownRightDownRight", score: 0.72))
         }
 
         let first = recent[recent.count - 2]

@@ -552,6 +552,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         }
 
         guard capturePoints.count >= 4 else { return false }
+        guard !blocksHorizontalTabSwipe(points: capturePoints) else { return false }
 
         let start = capturePoints[0]
         let end = capturePoints[capturePoints.count - 1]
@@ -581,6 +582,39 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         onHorizontalSwipeDrag(action, interactiveTabSwipeTotalX)
         onPreview(nil)
         return true
+    }
+
+    private func blocksHorizontalTabSwipe(points: [CGPoint]) -> Bool {
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 2 else { return false }
+
+        let recent = Array(compact.suffix(3))
+        if recent.count >= 2 {
+            let a = recent[recent.count - 2]
+            let b = recent[recent.count - 1]
+            if a.axis == .vertical,
+               abs(a.primary) >= 8,
+               b.axis == .horizontal,
+               abs(b.primary) >= 6 {
+                return true
+            }
+        }
+
+        if recent.count >= 3 {
+            let a = recent[recent.count - 3]
+            let b = recent[recent.count - 2]
+            let c = recent[recent.count - 1]
+            if a.axis == .vertical,
+               b.axis == .horizontal,
+               c.axis == .vertical,
+               abs(a.primary) >= 8,
+               abs(b.primary) >= 6,
+               abs(c.primary) >= 6 {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {

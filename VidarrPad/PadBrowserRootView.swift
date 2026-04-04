@@ -277,6 +277,15 @@ struct PadBrowserRootView: View {
                 PadNativeStartPageView(
                     initialQuery: tab.startPageQuery,
                     compact: false,
+                    isPrivateMode: model.currentGroup == .privateMode,
+                    historyItems: model.allHistory(),
+                    bookmarkItems: model.allBookmarks(),
+                    onOpenHistoryItem: { item in model.openHistoryItem(item) },
+                    onOpenBookmarkItem: { item in model.openBookmarkItem(item) },
+                    onDeleteHistoryItem: { item in model.removeHistoryItems([item.id]) },
+                    onDeleteBookmarkItem: { item in model.removeBookmarkItems([item.id]) },
+                    onClearHistory: { model.removeHistoryItems(Set(model.allHistory().map(\.id))) },
+                    onClearBookmarks: { model.removeBookmarkItems(Set(model.allBookmarks().map(\.id))) },
                     onSubmit: { input in
                         nativeStartDismissalTabID = tab.id
                         model.submitNativeStartPage(for: tab.id, input: input)
@@ -2372,6 +2381,15 @@ private struct PadNativeStartPageView: View {
     @FocusState private var inputFocused: Bool
     let initialQuery: String
     let compact: Bool
+    let isPrivateMode: Bool
+    let historyItems: [PadBrowsingItem]
+    let bookmarkItems: [PadBrowsingItem]
+    let onOpenHistoryItem: (PadBrowsingItem) -> Void
+    let onOpenBookmarkItem: (PadBrowsingItem) -> Void
+    let onDeleteHistoryItem: (PadBrowsingItem) -> Void
+    let onDeleteBookmarkItem: (PadBrowsingItem) -> Void
+    let onClearHistory: () -> Void
+    let onClearBookmarks: () -> Void
     let onSubmit: (String) -> Void
     let onPasteAndSearch: () -> Void
     @State private var query: String = ""
@@ -2380,27 +2398,33 @@ private struct PadNativeStartPageView: View {
         onSubmit(query)
     }
 
-    private var topOffset: CGFloat { compact ? 82 : 128 }
+    private var topOffset: CGFloat { compact ? 28 : 46 }
+    private var bottomSearchInset: CGFloat { compact ? 104 : 120 }
+    private var listMaxWidth: CGFloat { compact ? 420 : 620 }
 
     @ViewBuilder
     private var decorativeBackground: some View {
         LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.07, green: 0.11, blue: 0.18), Color(red: 0.04, green: 0.07, blue: 0.12)]
-                : [Color(red: 0.93, green: 0.95, blue: 0.99), Color(red: 0.87, green: 0.91, blue: 0.97)],
+            colors: isPrivateMode
+                ? (colorScheme == .dark
+                    ? [Color(red: 0.17, green: 0.08, blue: 0.24), Color(red: 0.10, green: 0.05, blue: 0.18)]
+                    : [Color(red: 0.93, green: 0.89, blue: 0.98), Color(red: 0.87, green: 0.80, blue: 0.96)])
+                : (colorScheme == .dark
+                    ? [Color(red: 0.07, green: 0.11, blue: 0.18), Color(red: 0.04, green: 0.07, blue: 0.12)]
+                    : [Color(red: 0.93, green: 0.95, blue: 0.99), Color(red: 0.87, green: 0.91, blue: 0.97)]),
             startPoint: .top,
             endPoint: .bottom
         )
         .overlay(alignment: .topLeading) {
             Circle()
-                .fill(Color.blue.opacity(colorScheme == .dark ? 0.16 : 0.14))
+                .fill((isPrivateMode ? Color.purple : Color.blue).opacity(colorScheme == .dark ? 0.16 : 0.14))
                 .frame(width: compact ? 180 : 260)
                 .blur(radius: 34)
                 .offset(x: compact ? -30 : -40, y: compact ? -20 : -10)
         }
         .overlay(alignment: .topTrailing) {
             Circle()
-                .fill(Color.cyan.opacity(colorScheme == .dark ? 0.10 : 0.08))
+                .fill((isPrivateMode ? Color.pink : Color.cyan).opacity(colorScheme == .dark ? 0.10 : 0.08))
                 .frame(width: compact ? 140 : 220)
                 .blur(radius: 30)
                 .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
@@ -2409,8 +2433,8 @@ private struct PadNativeStartPageView: View {
     }
 
     @ViewBuilder
-    private var startCard: some View {
-        VStack(spacing: compact ? 16 : 22) {
+    private var startContent: some View {
+        VStack(spacing: compact ? 20 : 26) {
             Text("Vidarr")
                 .font(.custom("Snell Roundhand", size: compact ? 42 : 60))
                 .fontWeight(.semibold)
@@ -2418,50 +2442,74 @@ private struct PadNativeStartPageView: View {
                 .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.98) : Color(red: 0.10, green: 0.14, blue: 0.22))
                 .shadow(color: (colorScheme == .dark ? Color.white : Color.black).opacity(0.08), radius: 8, y: 2)
 
-            VStack(spacing: compact ? 12 : 14) {
-                HStack(spacing: compact ? 10 : 12) {
-                    TextField("検索語または URL を入力", text: $query)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .focused($inputFocused)
-                        .onSubmit(submitCurrentQuery)
-                        .padding(.horizontal, compact ? 16 : 18)
-                        .frame(height: compact ? 52 : 60)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
-                                .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
-                        )
+            VStack(spacing: compact ? 16 : 18) {
+                PadNativeStartSectionCard(
+                    title: "ブックマーク",
+                    items: bookmarkItems,
+                    compact: compact,
+                    emptyMessage: "ブックマークはまだありません",
+                    onOpen: onOpenBookmarkItem,
+                    onDelete: onDeleteBookmarkItem,
+                    onClear: onClearBookmarks
+                )
 
-                    Button(action: submitCurrentQuery) {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: compact ? 17 : 20, weight: .semibold))
-                            .frame(width: compact ? 48 : 56, height: compact ? 48 : 56)
-                    }
-                    .buttonStyle(.plain)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
-                }
-
-                Button("ペーストして検索", action: onPasteAndSearch)
-                    .font(.system(size: compact ? 14 : 16, weight: .semibold))
-                    .padding(.horizontal, compact ? 18 : 22)
-                    .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                PadNativeStartSectionCard(
+                    title: "履歴",
+                    items: historyItems,
+                    compact: compact,
+                    emptyMessage: "履歴はまだありません",
+                    onOpen: onOpenHistoryItem,
+                    onDelete: onDeleteHistoryItem,
+                    onClear: onClearHistory
+                )
             }
-            .frame(maxWidth: compact ? 360 : 560)
+            .frame(maxWidth: listMaxWidth)
         }
         .padding(.horizontal, compact ? 18 : 28)
         .padding(.top, topOffset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     var body: some View {
         decorativeBackground
-            .overlay(alignment: .top) {
-                startCard
+            .overlay {
+                ScrollView {
+                    startContent
+                        .padding(.bottom, bottomSearchInset)
+                        .frame(maxWidth: .infinity)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 10) {
+                    HStack {
+                        Spacer()
+                        Button("ペーストして検索", action: onPasteAndSearch)
+                            .font(.system(size: compact ? 14 : 16, weight: .semibold))
+                            .padding(.horizontal, compact ? 18 : 22)
+                            .frame(minHeight: compact ? 40 : 44)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                    }
+                    .frame(maxWidth: listMaxWidth)
+
+                    TextField("検索語または URL を入力", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .focused($inputFocused)
+                        .onSubmit(submitCurrentQuery)
+                        .padding(.horizontal, compact ? 18 : 20)
+                        .frame(height: compact ? 54 : 62)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 22 : 26, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: compact ? 22 : 26, style: .continuous)
+                                .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
+                        )
+                        .frame(maxWidth: listMaxWidth)
+                }
+                .padding(.horizontal, compact ? 16 : 24)
+                .padding(.top, 8)
+                .padding(.bottom, compact ? 10 : 16)
             }
         .onAppear {
             query = initialQuery
@@ -2471,6 +2519,82 @@ private struct PadNativeStartPageView: View {
                 }
             }
         }
+    }
+}
+
+private struct PadNativeStartSectionCard: View {
+    let title: String
+    let items: [PadBrowsingItem]
+    let compact: Bool
+    let emptyMessage: String
+    let onOpen: (PadBrowsingItem) -> Void
+    let onDelete: (PadBrowsingItem) -> Void
+    let onClear: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.system(size: compact ? 16 : 18, weight: .semibold))
+                Spacer()
+                if !items.isEmpty {
+                    Button("すべて削除", role: .destructive, action: onClear)
+                        .font(.system(size: compact ? 13 : 14, weight: .semibold))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            if items.isEmpty {
+                Text(emptyMessage)
+                    .font(.system(size: compact ? 14 : 15))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+            } else {
+                ForEach(items) { item in
+                    Button {
+                        onOpen(item)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.system(size: compact ? 15 : 16, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+                            Text(item.urlString)
+                                .font(.system(size: compact ? 12 : 13))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            onDelete(item)
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+
+                    if item.id != items.last?.id {
+                        Divider()
+                            .padding(.leading, 16)
+                    }
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 

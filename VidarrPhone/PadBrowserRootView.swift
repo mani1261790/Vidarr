@@ -335,11 +335,13 @@ struct PadBrowserRootView: View {
                         step: gestureTutorialStep,
                         onSkip: skipGestureTutorial
                     )
+                    .allowsHitTesting(true)
                     Spacer()
                 }
                 .padding(.top, 42)
                 .padding(.horizontal, 12)
                 .transition(.move(edge: .top).combined(with: .opacity))
+                .allowsHitTesting(false)
             }
 
             if let gestureHUD {

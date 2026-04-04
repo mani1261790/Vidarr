@@ -877,25 +877,25 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     private func symbol(for name: String) -> String {
         switch name {
         case "Left":
-            return "arrow.left.circle.fill"
+            return "arrow.right.circle"
         case "Right":
-            return "arrow.right.circle.fill"
+            return "arrow.left.circle"
         case "DownRight":
-            return "xmark.square.fill"
+            return "xmark.circle"
         case "DownRightDownRight":
-            return "trash.circle.fill"
+            return "xmark.circle.fill"
         case "O":
-            return "arrow.clockwise.circle.fill"
+            return "arrow.clockwise.circle"
         case "U":
-            return "arrow.uturn.backward.circle.fill"
+            return "arrow.uturn.backward.circle"
         case "OO":
             return "square.stack.3d.up.fill"
         case "UpRight":
-            return "chevron.backward.circle.fill"
+            return "arrow.uturn.backward"
         case "UpLeft":
-            return "chevron.forward.circle.fill"
+            return "arrow.uturn.forward"
         case "DownLeft":
-            return "plus.square.on.square"
+            return "plus.circle"
         default:
             return "questionmark.circle"
         }

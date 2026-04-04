@@ -2382,77 +2382,87 @@ private struct PadNativeStartPageView: View {
 
     private var topOffset: CGFloat { compact ? 82 : 128 }
 
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: colorScheme == .dark
-                    ? [Color(red: 0.07, green: 0.11, blue: 0.18), Color(red: 0.04, green: 0.07, blue: 0.12)]
-                    : [Color(red: 0.93, green: 0.95, blue: 0.99), Color(red: 0.87, green: 0.91, blue: 0.97)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .allowsHitTesting(false)
-            .overlay(alignment: .topLeading) {
-                Circle()
-                    .fill(Color.blue.opacity(colorScheme == .dark ? 0.16 : 0.14))
-                    .frame(width: compact ? 180 : 260)
-                    .blur(radius: 34)
-                    .offset(x: compact ? -30 : -40, y: compact ? -20 : -10)
-            }
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(Color.cyan.opacity(colorScheme == .dark ? 0.10 : 0.08))
-                    .frame(width: compact ? 140 : 220)
-                    .blur(radius: 30)
-                    .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
-            }
-            VStack(spacing: compact ? 16 : 22) {
-                Text("Vidarr")
-                    .font(.custom("Snell Roundhand", size: compact ? 42 : 60))
-                    .fontWeight(.semibold)
-                    .kerning(0.5)
-                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.98) : Color(red: 0.10, green: 0.14, blue: 0.22))
-                    .shadow(color: (colorScheme == .dark ? Color.white : Color.black).opacity(0.08), radius: 8, y: 2)
-
-                VStack(spacing: compact ? 12 : 14) {
-                    HStack(spacing: compact ? 10 : 12) {
-                        TextField("検索語または URL を入力", text: $query)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .submitLabel(.go)
-                            .focused($inputFocused)
-                            .onSubmit(submitCurrentQuery)
-                            .padding(.horizontal, compact ? 16 : 18)
-                            .frame(height: compact ? 52 : 60)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
-                                    .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
-                            )
-
-                        Button(action: submitCurrentQuery) {
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: compact ? 17 : 20, weight: .semibold))
-                                .frame(width: compact ? 48 : 56, height: compact ? 48 : 56)
-                        }
-                        .buttonStyle(.plain)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
-                    }
-
-                    Button("ペーストして検索", action: onPasteAndSearch)
-                        .font(.system(size: compact ? 14 : 16, weight: .semibold))
-                        .padding(.horizontal, compact ? 18 : 22)
-                        .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
-                }
-                .frame(maxWidth: compact ? 360 : 560)
-            }
-            .padding(.horizontal, compact ? 18 : 28)
-            .padding(.top, topOffset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    @ViewBuilder
+    private var decorativeBackground: some View {
+        LinearGradient(
+            colors: colorScheme == .dark
+                ? [Color(red: 0.07, green: 0.11, blue: 0.18), Color(red: 0.04, green: 0.07, blue: 0.12)]
+                : [Color(red: 0.93, green: 0.95, blue: 0.99), Color(red: 0.87, green: 0.91, blue: 0.97)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .overlay(alignment: .topLeading) {
+            Circle()
+                .fill(Color.blue.opacity(colorScheme == .dark ? 0.16 : 0.14))
+                .frame(width: compact ? 180 : 260)
+                .blur(radius: 34)
+                .offset(x: compact ? -30 : -40, y: compact ? -20 : -10)
         }
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .fill(Color.cyan.opacity(colorScheme == .dark ? 0.10 : 0.08))
+                .frame(width: compact ? 140 : 220)
+                .blur(radius: 30)
+                .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
+        }
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private var startCard: some View {
+        VStack(spacing: compact ? 16 : 22) {
+            Text("Vidarr")
+                .font(.custom("Snell Roundhand", size: compact ? 42 : 60))
+                .fontWeight(.semibold)
+                .kerning(0.5)
+                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.98) : Color(red: 0.10, green: 0.14, blue: 0.22))
+                .shadow(color: (colorScheme == .dark ? Color.white : Color.black).opacity(0.08), radius: 8, y: 2)
+
+            VStack(spacing: compact ? 12 : 14) {
+                HStack(spacing: compact ? 10 : 12) {
+                    TextField("検索語または URL を入力", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.go)
+                        .focused($inputFocused)
+                        .onSubmit(submitCurrentQuery)
+                        .padding(.horizontal, compact ? 16 : 18)
+                        .frame(height: compact ? 52 : 60)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
+                                .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
+                        )
+
+                    Button(action: submitCurrentQuery) {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: compact ? 17 : 20, weight: .semibold))
+                            .frame(width: compact ? 48 : 56, height: compact ? 48 : 56)
+                    }
+                    .buttonStyle(.plain)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+                }
+
+                Button("ペーストして検索", action: onPasteAndSearch)
+                    .font(.system(size: compact ? 14 : 16, weight: .semibold))
+                    .padding(.horizontal, compact ? 18 : 22)
+                    .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
+            }
+            .frame(maxWidth: compact ? 360 : 560)
+        }
+        .padding(.horizontal, compact ? 18 : 28)
+        .padding(.top, topOffset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    var body: some View {
+        decorativeBackground
+            .overlay(alignment: .top) {
+                startCard
+            }
         .onAppear {
             query = initialQuery
             if !initialQuery.isEmpty {

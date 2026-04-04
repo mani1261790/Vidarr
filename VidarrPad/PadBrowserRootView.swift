@@ -887,6 +887,7 @@ struct PadBrowserRootView: View {
                 }
             },
             onResolved: { action in
+                guard action != .previousTab && action != .nextTab else { return }
                 showResolvedGestureHUD(for: action)
             },
             onHorizontalSwipeDrag: { action, totalX in

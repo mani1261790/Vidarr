@@ -661,6 +661,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
     }
 
     private func hudState(for name: String, confidence: CGFloat, committed: Bool) -> PadGestureHUDState? {
+        if name == "Left" || name == "Right" {
+            return nil
+        }
         guard let action = mapAction(name: name),
               let option = preferenceOption(for: action),
               enabledOptions.contains(option) else { return nil }

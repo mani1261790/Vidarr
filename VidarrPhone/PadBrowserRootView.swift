@@ -961,6 +961,7 @@ struct PadBrowserRootView: View {
                 }
             },
             onResolved: { action in
+                guard action != .previousTab && action != .nextTab else { return }
                 showResolvedGestureHUD(for: action)
                 if isGestureEnabled(for: action) {
                     triggerGestureHaptic()

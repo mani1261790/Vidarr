@@ -842,6 +842,19 @@ struct PadBrowserRootView: View {
         }
     }
 
+    private func showResolvedGestureHUD(for action: PadGestureAction) {
+        guard isGestureEnabled(for: action) else { return }
+        gestureHUDTask?.cancel()
+        gestureHUD = PadGestureHUDState(
+            action: action,
+            title: "",
+            systemImageName: symbol(for: action),
+            confidence: 1,
+            isCommitted: false,
+            kind: .resolved
+        )
+    }
+
     private func hideGestureHUD() {
         gestureHUDTask?.cancel()
         withAnimation(.easeOut(duration: 0.08)) {
@@ -905,8 +918,14 @@ struct PadBrowserRootView: View {
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
-                withAnimation(.easeOut(duration: 0.04)) {
-                    if let state, (state.kind == .pending || isGestureEnabled(for: state.action)) {
+                if gestureHUD?.kind == .resolved {
+                    if let state, state.kind == .resolved, isGestureEnabled(for: state.action) {
+                        gestureHUD = state
+                    }
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.025)) {
+                    if let state, isGestureEnabled(for: state.action) {
                         gestureHUD = state
                     } else {
                         gestureHUD = nil
@@ -914,6 +933,7 @@ struct PadBrowserRootView: View {
                 }
             },
             onResolved: { action in
+                showResolvedGestureHUD(for: action)
                 if isGestureEnabled(for: action) {
                     triggerGestureHaptic()
                 }

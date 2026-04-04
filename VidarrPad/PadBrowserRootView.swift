@@ -768,6 +768,19 @@ struct PadBrowserRootView: View {
         }
     }
 
+    private func showResolvedGestureHUD(for action: PadGestureAction) {
+        guard isGestureEnabled(for: action) else { return }
+        gestureHUDTask?.cancel()
+        gestureHUD = PadGestureHUDState(
+            action: action,
+            title: "",
+            systemImageName: symbol(for: action),
+            confidence: 1,
+            isCommitted: false,
+            kind: .resolved
+        )
+    }
+
     private func hideGestureHUD() {
         gestureHUDTask?.cancel()
         withAnimation(.easeOut(duration: 0.10)) {
@@ -831,15 +844,23 @@ struct PadBrowserRootView: View {
             sensitivity: PadBrowserPreferences.shared.gestureSensitivity,
             enabledOptions: PadBrowserPreferences.shared.enabledGestureOptions,
             onPreview: { state in
-                withAnimation(.easeOut(duration: 0.05)) {
-                    if let state, (state.kind == .pending || isGestureEnabled(for: state.action)) {
+                if gestureHUD?.kind == .resolved {
+                    if let state, state.kind == .resolved, isGestureEnabled(for: state.action) {
+                        gestureHUD = state
+                    }
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.03)) {
+                    if let state, isGestureEnabled(for: state.action) {
                         gestureHUD = state
                     } else {
                         gestureHUD = nil
                     }
                 }
             },
-            onResolved: { _ in },
+            onResolved: { action in
+                showResolvedGestureHUD(for: action)
+            },
             onHorizontalSwipeDrag: { action, totalX in
                 showBottomBar(persist: true)
                 updateInteractiveTabSwitch(for: action, totalX: totalX)

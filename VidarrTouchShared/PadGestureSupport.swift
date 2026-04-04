@@ -354,6 +354,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             allowedNames: allowedGestureNames.subtracting(["Left", "Right", "OO"])
         ),
            eagerCandidateIsValid(eager, points: capturePoints),
+           !isReverseDirectionForCandidate(eager.name, points: capturePoints),
            eager.score >= config.eagerPreviewScoreThreshold,
            let state = hudState(for: eager.name, confidence: eager.score, committed: false) {
             lastLiveCandidate = eager
@@ -366,7 +367,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             points: capturePoints,
             minimumScore: config.livePreviewScoreThreshold,
             allowedNames: allowedGestureNames
-        ) {
+        ), !isReverseDirectionForCandidate(best.name, points: capturePoints) {
             if best.name == "Left" || best.name == "Right" {
                 lastLiveCandidate = nil
                 onPreview(nil)
@@ -382,7 +383,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             points: capturePoints,
             minimumScore: config.isPhoneLayout ? 0.06 : 0.1,
             allowedNames: allowedGestureNames.subtracting(["O", "OO"])
-        ) {
+        ), !isReverseDirectionForCandidate(early.name, points: capturePoints) {
             if early.name == "Left" || early.name == "Right" {
                 lastLiveCandidate = nil
                 onPreview(nil)
@@ -396,6 +397,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if enabledOptions.contains(.restoreClosedTab),
            let result = recognizeUGesture(points: capturePoints),
+           !isReverseDirectionForCandidate(result.name, points: capturePoints),
            let state = hudState(for: result.name, confidence: result.score, committed: false) {
             notifyResolvedPreviewIfNeeded(name: result.name)
             onPreview(state)
@@ -404,6 +406,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         if enabledOptions.contains(.reload),
            let result = recognizeSingleLoopGesture(points: capturePoints, allowLooseClosure: true),
+           !isReverseDirectionForCandidate(result.name, points: capturePoints),
            let state = hudState(for: result.name, confidence: result.score, committed: false) {
             notifyResolvedPreviewIfNeeded(name: result.name)
             onPreview(state)
@@ -908,6 +911,13 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         guard points.count >= 5 else { return nil }
         let compact = collapseDirections(simplifyDirections(points))
         guard compact.count >= 3 else { return nil }
+
+        // Favor a clear L then upward stroke. This makes U respond off the
+        // completed close-tab prefix instead of waiting on a looser template pass.
+        if let lThenUp = recognizeUFromLThenUp(compact) {
+            return lThenUp
+        }
+
         for index in 0...(compact.count - 3) {
             let slice = Array(compact[index..<(index + 3)])
             guard slice[0].axis == .vertical, slice[0].signed < 0 else { continue }
@@ -919,6 +929,27 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             guard verticalA >= 14, horizontal >= 12, verticalB >= 10 else { continue }
             let balancePenalty = max(0, abs(verticalA - verticalB) - max(5, horizontal * 0.42)) / 32
             let score = min(1.0, 0.66 + min(verticalA + horizontal + verticalB, 180) / 500 - balancePenalty)
+            return PadGestureResult(name: "U", score: score)
+        }
+        return nil
+    }
+
+    private func recognizeUFromLThenUp(_ compact: [DirectionSegment]) -> PadGestureResult? {
+        guard compact.count >= 3 else { return nil }
+        for index in 0...(compact.count - 3) {
+            let a = compact[index]
+            let b = compact[index + 1]
+            let c = compact[index + 2]
+            guard a.axis == .vertical, a.signed < 0 else { continue }
+            guard b.axis == .horizontal, b.signed > 0 else { continue }
+            guard c.axis == .vertical, c.signed > 0 else { continue }
+            let down = abs(a.primary)
+            let right = abs(b.primary)
+            let up = abs(c.primary)
+            guard down >= 13, right >= 11, up >= 7 else { continue }
+            let rightBalance = max(0, 10 - right) / 24
+            let upBalance = max(0, 8 - up) / 24
+            let score = min(1.0, 0.78 + min(down + right + up, 140) / 520 - rightBalance - upBalance)
             return PadGestureResult(name: "U", score: score)
         }
         return nil
@@ -942,6 +973,41 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return PadGestureResult(name: "DownRightDownRight", score: score)
         }
         return nil
+    }
+
+    private func isReverseDirectionForCandidate(_ name: String, points: [CGPoint]) -> Bool {
+        let compact = collapseDirections(simplifyDirections(points))
+        guard compact.count >= 2 else { return false }
+        let recent = Array(compact.suffix(4))
+
+        switch name {
+        case "UpRight":
+            return recent.contains { $0.axis == .horizontal && $0.signed < 0 }
+                || recent.contains { $0.axis == .vertical && $0.signed < 0 && abs($0.primary) >= 8 }
+        case "UpLeft":
+            return recent.contains { $0.axis == .horizontal && $0.signed > 0 }
+                || recent.contains { $0.axis == .vertical && $0.signed < 0 && abs($0.primary) >= 8 }
+        case "DownRight":
+            return recent.contains { $0.axis == .horizontal && $0.signed < 0 }
+                || recent.contains { $0.axis == .vertical && $0.signed > 0 && abs($0.primary) >= 8 }
+        case "DownLeft":
+            return recent.contains { $0.axis == .horizontal && $0.signed > 0 }
+                || recent.contains { $0.axis == .vertical && $0.signed > 0 && abs($0.primary) >= 8 }
+        case "U":
+            guard recent.count >= 3 else { return false }
+            let tail = Array(recent.suffix(2))
+            return tail.contains { $0.axis == .horizontal && $0.signed < 0 }
+                || tail.contains { $0.axis == .vertical && $0.signed < 0 && abs($0.primary) >= 6 }
+        case "DownRightDownRight":
+            guard recent.count >= 3 else { return false }
+            let tail = Array(recent.suffix(2))
+            return tail.contains { $0.axis == .horizontal && $0.signed < 0 }
+                || tail.contains { $0.axis == .vertical && $0.signed > 0 && abs($0.primary) >= 6 }
+        case "O":
+            return false
+        default:
+            return false
+        }
     }
 
     private func recognizeSingleLoopGesture(points: [CGPoint], allowLooseClosure: Bool) -> PadGestureResult? {

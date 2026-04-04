@@ -46,6 +46,7 @@ struct PadBrowserRootView: View {
     @State private var showingQuickSearch = false
     @State private var quickSearchQuery = ""
     @State private var showingSettings = false
+    @State private var showingBrowserShareSheet = false
     @State private var activeLibraryPanel: LibraryPanel?
     @State private var protectedClosePrompt: ProtectedClosePrompt?
     @State private var tabSwitchTransition: TabSwitchTransition?
@@ -203,6 +204,11 @@ struct PadBrowserRootView: View {
             .presentationDetents(settingsSheetDetents)
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingBrowserShareSheet) {
+            if let shareURL = selectedShareURL {
+                PadShareSheet(items: [shareURL])
+            }
+        }
         .sheet(item: $activeLibraryPanel) { panel in
             PadLibraryPanelSheet(
                 panel: panel,
@@ -347,8 +353,12 @@ struct PadBrowserRootView: View {
 
             HStack(spacing: isPhoneLayout ? 8 : chromeControlSpacing) {
                 groupSwitcher
-                chromeButton(systemName: "gearshape", disabled: false) {
-                    showingSettings = true
+                chromeButton(systemName: trailingToolbarSystemImage, disabled: false) {
+                    if showsSettingsButtonForSelectedTab {
+                        showingSettings = true
+                    } else {
+                        showingBrowserShareSheet = true
+                    }
                 }
             }
         }
@@ -382,6 +392,24 @@ struct PadBrowserRootView: View {
             .frame(width: groupButtonSize, height: groupButtonSize)
         }
         .buttonStyle(.plain)
+    }
+
+    private var showsSettingsButtonForSelectedTab: Bool {
+        guard let selectedTab = model.selectedTab else { return true }
+        return selectedTab.showsNativeStartPage || selectedTab.urlString.isEmpty
+    }
+
+    private var trailingToolbarSystemImage: String {
+        showsSettingsButtonForSelectedTab ? "gearshape" : "square.and.arrow.up"
+    }
+
+    private var selectedShareURL: URL? {
+        guard let selectedTab = model.selectedTab else { return nil }
+        if let liveURL = selectedTab.webView.url {
+            return liveURL
+        }
+        guard !selectedTab.showsNativeStartPage, !selectedTab.urlString.isEmpty else { return nil }
+        return URL(string: selectedTab.urlString)
     }
 
     private var groupStripStackOverlay: some View {

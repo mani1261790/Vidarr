@@ -65,6 +65,7 @@ struct PadBrowserRootView: View {
     @State private var lastCommittedTabTransitionAt: CFTimeInterval = 0
     @State private var gestureTutorialStep: PadGestureTutorialStep? = PadBrowserPreferences.shared.completedGestureTutorial ? nil : .firstSearch
     @State private var lastObservedSelectedTabID: UUID?
+    @State private var nativeStartDismissalTabID: UUID?
     @FocusState private var editingURLFocused: Bool
 
     private var isPhoneLayout: Bool {
@@ -268,9 +269,17 @@ struct PadBrowserRootView: View {
         }
         .onChange(of: model.selectedTab?.id) { oldID, newID in
             lastObservedSelectedTabID = newID
+            if oldID != newID {
+                nativeStartDismissalTabID = nil
+            }
             guard gestureTutorialStep == .switchTab else { return }
             guard let oldID, let newID, oldID != newID else { return }
             handleGestureTutorialEvent(.tabSwitched)
+        }
+        .onChange(of: model.navigationStateToken) { _, _ in
+            if model.selectedTab?.showsNativeStartPage != true {
+                nativeStartDismissalTabID = nil
+            }
         }
     }
 
@@ -295,17 +304,22 @@ struct PadBrowserRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if tabSwitchTransition == nil, let tab = model.selectedTab, tab.showsNativeStartPage {
+            if tabSwitchTransition == nil,
+               let tab = model.selectedTab,
+               tab.showsNativeStartPage,
+               nativeStartDismissalTabID != tab.id {
                 PadNativeStartPageView(
                     initialQuery: tab.startPageQuery,
                     compact: true,
                     onSubmit: { input in
+                        nativeStartDismissalTabID = tab.id
                         model.submitNativeStartPage(for: tab.id, input: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
+                        nativeStartDismissalTabID = tab.id
                         model.submitNativeStartPage(for: tab.id, input: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }

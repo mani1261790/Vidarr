@@ -2506,6 +2506,10 @@ private struct PadNativeStartPageView: View {
     let onPasteAndSearch: () -> Void
     @State private var query: String = ""
 
+    private func submitCurrentQuery() {
+        onSubmit(query)
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -2531,7 +2535,6 @@ private struct PadNativeStartPageView: View {
                     .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
             }
         }
-        .allowsHitTesting(false)
         .overlay {
             VStack(spacing: compact ? 16 : 22) {
                 Spacer(minLength: compact ? 82 : 128)
@@ -2549,7 +2552,7 @@ private struct PadNativeStartPageView: View {
                             .autocorrectionDisabled()
                             .submitLabel(.go)
                             .focused($inputFocused)
-                            .onSubmit { onSubmit(query) }
+                            .onSubmit(submitCurrentQuery)
                             .padding(.horizontal, compact ? 16 : 18)
                             .frame(height: compact ? 52 : 60)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous))
@@ -2560,7 +2563,7 @@ private struct PadNativeStartPageView: View {
                             .allowsHitTesting(true)
 
                         Button {
-                            onSubmit(query)
+                            submitCurrentQuery()
                         } label: {
                             Image(systemName: "arrow.right")
                                 .font(.system(size: compact ? 17 : 20, weight: .semibold))
@@ -2587,6 +2590,7 @@ private struct PadNativeStartPageView: View {
                 Spacer()
             }
             .padding(.horizontal, compact ? 18 : 28)
+            .allowsHitTesting(false)
         }
         .onAppear {
             query = initialQuery

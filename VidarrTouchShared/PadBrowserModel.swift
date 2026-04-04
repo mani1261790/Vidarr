@@ -565,6 +565,22 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
     }
 
+    func loadTab(id: UUID, with input: String) {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let url = resolvedURL(from: trimmed)
+        for group in PadBrowserTabGroup.allCases {
+            if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
+                currentGroup = group
+                syncPublishedState()
+                navigationStateToken = UUID()
+                load(url, in: tab.webView)
+                saveSessionSnapshot()
+                return
+            }
+        }
+    }
+
     func recentHistory(limit: Int = 8) -> [PadBrowsingItem] {
         Array(PadBrowsingHistoryStore.shared.all().prefix(limit))
     }

@@ -235,11 +235,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
     private func updateIdlePreviewIfNeeded() {
         guard state == .idle else { return }
-        if let state = idlePendingHUDState() {
-            onPreview(state)
-        } else {
-            onPreview(nil)
-        }
+        onPreview(nil)
     }
 
     private func idlePendingHUDState() -> PadGestureHUDState? {
@@ -341,11 +337,6 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
 
         cancelHorizontalSwipePreviewIfNeeded()
 
-        if let confidence = immediatePendingConfidence(points: capturePoints),
-           let state = pendingHUDState(for: nil, confidence: confidence) {
-            onPreview(state)
-        }
-
         var pendingDirectional: PadGestureResult?
         switch directionalPreviewDecision(points: capturePoints) {
         case .candidate(let directional):
@@ -419,18 +410,7 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
             return
         }
 
-        if let directional = pendingDirectional,
-           let state = pendingHUDState(for: directional.name, confidence: directional.score) {
-            lastLiveCandidate = directional
-            onPreview(state)
-            return
-        }
-
-        if let confidence = genericPendingConfidence(points: capturePoints),
-           let state = pendingHUDState(for: nil, confidence: confidence) {
-            onPreview(state)
-            return
-        }
+        _ = pendingDirectional
 
         if lastLiveCandidate != nil {
             captureInvalidated = true

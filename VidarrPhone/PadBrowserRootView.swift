@@ -294,15 +294,13 @@ struct PadBrowserRootView: View {
                     initialQuery: tab.startPageQuery,
                     compact: true,
                     onSubmit: { input in
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: input)
+                        model.loadTab(id: tab.id, with: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: pasted)
+                        model.loadTab(id: tab.id, with: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

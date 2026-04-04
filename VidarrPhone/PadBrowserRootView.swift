@@ -2510,6 +2510,8 @@ private struct PadNativeStartPageView: View {
         onSubmit(query)
     }
 
+    private var topOffset: CGFloat { compact ? 82 : 128 }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -2534,10 +2536,7 @@ private struct PadNativeStartPageView: View {
                     .blur(radius: 30)
                     .offset(x: compact ? 18 : 26, y: compact ? -8 : 8)
             }
-        }
-        .overlay {
             VStack(spacing: compact ? 16 : 22) {
-                Spacer(minLength: compact ? 82 : 128)
                 Text("Vidarr")
                     .font(.custom("Snell Roundhand", size: compact ? 42 : 60))
                     .fontWeight(.semibold)
@@ -2560,11 +2559,8 @@ private struct PadNativeStartPageView: View {
                                 RoundedRectangle(cornerRadius: compact ? 20 : 24, style: .continuous)
                                     .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1)
                             )
-                            .allowsHitTesting(true)
 
-                        Button {
-                            submitCurrentQuery()
-                        } label: {
+                        Button(action: submitCurrentQuery) {
                             Image(systemName: "arrow.right")
                                 .font(.system(size: compact ? 17 : 20, weight: .semibold))
                                 .frame(width: compact ? 48 : 56, height: compact ? 48 : 56)
@@ -2572,25 +2568,20 @@ private struct PadNativeStartPageView: View {
                         .buttonStyle(.plain)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay(Circle().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
-                        .allowsHitTesting(true)
                     }
 
-                    Button("ペーストして検索") {
-                        onPasteAndSearch()
-                    }
-                    .font(.system(size: compact ? 14 : 16, weight: .semibold))
-                    .padding(.horizontal, compact ? 18 : 22)
-                    .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
-                    .allowsHitTesting(true)
+                    Button("ペーストして検索", action: onPasteAndSearch)
+                        .font(.system(size: compact ? 14 : 16, weight: .semibold))
+                        .padding(.horizontal, compact ? 18 : 22)
+                        .frame(minWidth: compact ? 180 : 220, minHeight: compact ? 42 : 46)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.08), lineWidth: 1))
                 }
                 .frame(maxWidth: compact ? 360 : 560)
-
-                Spacer()
             }
             .padding(.horizontal, compact ? 18 : 28)
-            .allowsHitTesting(false)
+            .padding(.top, topOffset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .onAppear {
             query = initialQuery

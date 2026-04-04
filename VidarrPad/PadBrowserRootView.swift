@@ -266,13 +266,13 @@ struct PadBrowserRootView: View {
                         initialQuery: tab.startPageQuery,
                         compact: false,
                         onSubmit: { input in
-                            model.loadTab(id: tab.id, with: input)
+                            model.submitNativeStartPage(for: tab.id, input: input)
                             handleGestureTutorialEvent(.searchPerformed)
                         },
                         onPasteAndSearch: {
                             guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                                   !pasted.isEmpty else { return }
-                            model.loadTab(id: tab.id, with: pasted)
+                            model.submitNativeStartPage(for: tab.id, input: pasted)
                             handleGestureTutorialEvent(.searchPerformed)
                         }
                     )
@@ -841,8 +841,8 @@ struct PadBrowserRootView: View {
         case .restoreClosedTab: return "arrow.uturn.backward.circle"
         case .reload: return "arrow.clockwise.circle"
         case .reloadAll: return "square.stack.3d.up.fill"
-        case .back: return "arrow.uturn.backward"
-        case .forward: return "arrow.uturn.forward"
+        case .back: return "chevron.backward.circle.fill"
+        case .forward: return "chevron.forward.circle.fill"
         case .search: return "magnifyingglass.circle"
         case .newTab: return "plus.circle"
         }

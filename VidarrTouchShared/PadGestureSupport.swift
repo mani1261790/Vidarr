@@ -897,9 +897,9 @@ final class PadGestureCaptureCoordinator: NSObject, UIGestureRecognizerDelegate 
         case "OO":
             return "square.stack.3d.up.fill"
         case "UpRight":
-            return "arrow.uturn.backward"
+            return "chevron.backward.circle.fill"
         case "UpLeft":
-            return "arrow.uturn.forward"
+            return "chevron.forward.circle.fill"
         case "DownLeft":
             return "plus.circle"
         default:

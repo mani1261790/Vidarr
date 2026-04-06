@@ -583,29 +583,46 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     @discardableResult
     func openFromNativeStart(tabID id: UUID, input: String) -> Bool {
+        for group in PadBrowserTabGroup.allCases {
+            if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
+                return openFromNativeStart(webView: tab.webView, input: input)
+            }
+        }
+        return openFromNativeStart(webView: selectedTab?.webView, input: input)
+    }
+
+    @discardableResult
+    func openFromNativeStart(webView: WKWebView?, input: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let url = resolvedURL(from: trimmed)
-        for group in PadBrowserTabGroup.allCases {
-            var state = state(for: group)
-            if let index = state.tabs.firstIndex(where: { $0.id == id }) {
-                let tab = state.tabs[index]
-                currentGroup = group
-                state.selectedIndex = index
-                setState(state, for: group)
-                tab.showsNativeStartPage = false
-                tab.startPageQuery = ""
-                tab.urlString = url.absoluteString
-                syncPublishedState()
-                navigationStateToken = UUID()
-                load(url, in: tab.webView)
-                saveSessionSnapshot()
-                return true
-            }
+        guard let webView else {
+            loadSelectedTab(with: trimmed)
+            return false
         }
-        // Fallback for rare first-launch state races where the tab ID is stale.
-        loadSelectedTab(with: trimmed)
-        return false
+        guard let group = group(for: webView) else {
+            loadSelectedTab(with: trimmed)
+            return false
+        }
+
+        var state = state(for: group)
+        guard let index = state.tabs.firstIndex(where: { $0.webView === webView }) else {
+            loadSelectedTab(with: trimmed)
+            return false
+        }
+
+        let tab = state.tabs[index]
+        currentGroup = group
+        state.selectedIndex = index
+        setState(state, for: group)
+        tab.showsNativeStartPage = false
+        tab.startPageQuery = ""
+        tab.urlString = url.absoluteString
+        syncPublishedState()
+        navigationStateToken = UUID()
+        load(url, in: webView)
+        saveSessionSnapshot()
+        return true
     }
 
     func submitNativeStartPage(for id: UUID, input: String) {

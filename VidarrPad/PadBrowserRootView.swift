@@ -283,11 +283,11 @@ struct PadBrowserRootView: View {
                     bookmarkItems: model.allBookmarks(),
                     onOpenHistoryItem: { item in
                         nativeStartDismissalTabID = tab.id
-                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
+                        model.openFromNativeStart(webView: tab.webView, input: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
                         nativeStartDismissalTabID = tab.id
-                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
+                        model.openFromNativeStart(webView: tab.webView, input: item.urlString)
                     },
                     onDeleteHistoryItem: { item in model.removeHistoryItems([item.id]) },
                     onDeleteBookmarkItem: { item in model.removeBookmarkItems([item.id]) },
@@ -295,14 +295,14 @@ struct PadBrowserRootView: View {
                     onClearBookmarks: { model.removeBookmarkItems(Set(model.allBookmarks().map(\.id))) },
                     onSubmit: { input in
                         nativeStartDismissalTabID = tab.id
-                        model.openFromNativeStart(tabID: tab.id, input: input)
+                        model.openFromNativeStart(webView: tab.webView, input: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
                         nativeStartDismissalTabID = tab.id
-                        model.openFromNativeStart(tabID: tab.id, input: pasted)
+                        model.openFromNativeStart(webView: tab.webView, input: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

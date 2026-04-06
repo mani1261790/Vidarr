@@ -317,11 +317,11 @@ struct PadBrowserRootView: View {
                     bookmarkItems: model.allBookmarks(),
                     onOpenHistoryItem: { item in
                         nativeStartDismissalTabID = tab.id
-                        model.openHistoryItem(item)
+                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
                         nativeStartDismissalTabID = tab.id
-                        model.openBookmarkItem(item)
+                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
                     },
                     onDeleteHistoryItem: { item in
                         model.removeHistoryItems([item.id])
@@ -337,14 +337,14 @@ struct PadBrowserRootView: View {
                     },
                     onSubmit: { input in
                         nativeStartDismissalTabID = tab.id
-                        model.submitNativeStartPage(for: tab.id, input: input)
+                        model.openFromNativeStart(tabID: tab.id, input: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
                         nativeStartDismissalTabID = tab.id
-                        model.submitNativeStartPage(for: tab.id, input: pasted)
+                        model.openFromNativeStart(tabID: tab.id, input: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

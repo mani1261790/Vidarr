@@ -581,7 +581,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
     }
 
-    func submitNativeStartPage(for id: UUID, input: String) {
+    func openFromNativeStart(tabID id: UUID, input: String) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
@@ -597,6 +597,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return
             }
         }
+    }
+
+    func submitNativeStartPage(for id: UUID, input: String) {
+        openFromNativeStart(tabID: id, input: input)
     }
 
     func recentHistory(limit: Int = 8) -> [PadBrowsingItem] {

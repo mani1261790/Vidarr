@@ -281,22 +281,28 @@ struct PadBrowserRootView: View {
                     isPrivateMode: model.currentGroup == .privateMode,
                     historyItems: model.allHistory(),
                     bookmarkItems: model.allBookmarks(),
-                    onOpenHistoryItem: { item in model.openHistoryItem(item) },
-                    onOpenBookmarkItem: { item in model.openBookmarkItem(item) },
+                    onOpenHistoryItem: { item in
+                        nativeStartDismissalTabID = tab.id
+                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
+                    },
+                    onOpenBookmarkItem: { item in
+                        nativeStartDismissalTabID = tab.id
+                        model.openFromNativeStart(tabID: tab.id, input: item.urlString)
+                    },
                     onDeleteHistoryItem: { item in model.removeHistoryItems([item.id]) },
                     onDeleteBookmarkItem: { item in model.removeBookmarkItems([item.id]) },
                     onClearHistory: { model.removeHistoryItems(Set(model.allHistory().map(\.id))) },
                     onClearBookmarks: { model.removeBookmarkItems(Set(model.allBookmarks().map(\.id))) },
                     onSubmit: { input in
                         nativeStartDismissalTabID = tab.id
-                        model.submitNativeStartPage(for: tab.id, input: input)
+                        model.openFromNativeStart(tabID: tab.id, input: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
                         nativeStartDismissalTabID = tab.id
-                        model.submitNativeStartPage(for: tab.id, input: pasted)
+                        model.openFromNativeStart(tabID: tab.id, input: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

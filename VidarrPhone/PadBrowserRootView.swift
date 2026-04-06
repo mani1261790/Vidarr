@@ -306,8 +306,7 @@ struct PadBrowserRootView: View {
 
             if tabSwitchTransition == nil,
                let tab = model.selectedTab,
-               tab.showsNativeStartPage,
-               nativeStartDismissalTabID != tab.id {
+               shouldPresentNativeStartOverlay(for: tab) {
                 PadNativeStartPageView(
                     initialQuery: tab.startPageQuery,
                     compact: true,
@@ -422,6 +421,14 @@ struct PadBrowserRootView: View {
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.11), radius: isPhoneLayout ? 12 : 14, y: isPhoneLayout ? 4 : 6)
         .frame(maxWidth: chromeBarMaxWidth)
+    }
+
+    private func shouldPresentNativeStartOverlay(for tab: PadBrowserModel.Tab) -> Bool {
+        guard tab.showsNativeStartPage, nativeStartDismissalTabID != tab.id else { return false }
+        if let url = tab.webView.url {
+            return url.absoluteString == "about:blank"
+        }
+        return tab.urlString.isEmpty
     }
 
     private var groupSwitcher: some View {

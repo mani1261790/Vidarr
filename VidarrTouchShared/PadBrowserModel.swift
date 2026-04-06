@@ -560,9 +560,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
-        if let webView = selectedTab?.webView {
-            load(url, in: webView)
+        if selectedTab == nil {
+            ensureAtLeastOneTab(in: currentGroup)
+            syncPublishedState()
         }
+        guard let webView = selectedTab?.webView else { return }
+        if let tab = selectedTab {
+            tab.showsNativeStartPage = false
+            tab.startPageQuery = ""
+            tab.urlString = url.absoluteString
+        }
+        navigationStateToken = UUID()
+        load(url, in: webView)
+        saveSessionSnapshot()
     }
 
     func loadTab(id: UUID, with input: String) {
@@ -570,8 +580,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
         for group in PadBrowserTabGroup.allCases {
-            if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
+            var state = state(for: group)
+            if let index = state.tabs.firstIndex(where: { $0.id == id }) {
+                let tab = state.tabs[index]
                 currentGroup = group
+                state.selectedIndex = index
+                setState(state, for: group)
+                tab.showsNativeStartPage = false
+                tab.startPageQuery = ""
+                tab.urlString = url.absoluteString
                 syncPublishedState()
                 navigationStateToken = UUID()
                 load(url, in: tab.webView)
@@ -579,16 +596,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 return
             }
         }
+        // Fallback path: if the target tab id is stale, still honor the navigation in the active tab.
+        loadSelectedTab(with: trimmed)
     }
 
     @discardableResult
     func openFromNativeStart(tabID id: UUID, input: String) -> Bool {
-        for group in PadBrowserTabGroup.allCases {
-            if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
-                return openFromNativeStart(webView: tab.webView, input: input)
-            }
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        for group in PadBrowserTabGroup.allCases where state(for: group).tabs.contains(where: { $0.id == id }) {
+            loadTab(id: id, with: trimmed)
+            return true
         }
-        return openFromNativeStart(webView: selectedTab?.webView, input: input)
+        return openFromNativeStart(webView: selectedTab?.webView, input: trimmed)
     }
 
     @discardableResult

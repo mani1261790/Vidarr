@@ -319,13 +319,13 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.openFromNativeStart(webView: tab.webView, input: item.urlString)
+                        model.loadTab(id: tab.id, with: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.openFromNativeStart(webView: tab.webView, input: item.urlString)
+                        model.loadTab(id: tab.id, with: item.urlString)
                     },
                     onDeleteHistoryItem: { item in
                         model.removeHistoryItems([item.id])
@@ -343,7 +343,7 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.openFromNativeStart(webView: tab.webView, input: input)
+                        model.loadTab(id: tab.id, with: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
@@ -352,7 +352,7 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.openFromNativeStart(webView: tab.webView, input: pasted)
+                        model.loadTab(id: tab.id, with: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

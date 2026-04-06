@@ -311,6 +311,7 @@ struct PadBrowserRootView: View {
                 PadNativeStartPageView(
                     initialQuery: tab.startPageQuery,
                     compact: true,
+                    bottomBarClearance: tabStripHeight + bottomBarBottomPadding + 14,
                     isPrivateMode: model.currentGroup == .privateMode,
                     historyItems: model.allHistory(),
                     bookmarkItems: model.allBookmarks(),
@@ -2525,6 +2526,7 @@ private struct PadNativeStartPageView: View {
     @FocusState private var inputFocused: Bool
     let initialQuery: String
     let compact: Bool
+    let bottomBarClearance: CGFloat
     let isPrivateMode: Bool
     let historyItems: [PadBrowsingItem]
     let bookmarkItems: [PadBrowsingItem]
@@ -2653,7 +2655,7 @@ private struct PadNativeStartPageView: View {
                 }
                 .padding(.horizontal, compact ? 16 : 24)
                 .padding(.top, 8)
-                .padding(.bottom, compact ? 10 : 16)
+                .padding(.bottom, bottomBarClearance)
             }
         .onAppear {
             query = initialQuery

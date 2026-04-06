@@ -2395,6 +2395,7 @@ private struct PadNativeStartPageView: View {
     let onSubmit: (String) -> Void
     let onPasteAndSearch: () -> Void
     @State private var query: String = ""
+    @State private var keyboardHeight: CGFloat = 0
 
     private func submitCurrentQuery() {
         onSubmit(query)
@@ -2403,6 +2404,9 @@ private struct PadNativeStartPageView: View {
     private var topOffset: CGFloat { compact ? 28 : 46 }
     private var bottomSearchInset: CGFloat { compact ? 104 : 120 }
     private var listMaxWidth: CGFloat { compact ? 420 : 620 }
+    private var effectiveBottomClearance: CGFloat {
+        max(bottomBarClearance, keyboardHeight + 12)
+    }
 
     @ViewBuilder
     private var decorativeBackground: some View {
@@ -2511,7 +2515,7 @@ private struct PadNativeStartPageView: View {
                 }
                 .padding(.horizontal, compact ? 16 : 24)
                 .padding(.top, 8)
-                .padding(.bottom, bottomBarClearance)
+                .padding(.bottom, effectiveBottomClearance)
             }
         .onAppear {
             query = initialQuery
@@ -2520,6 +2524,14 @@ private struct PadNativeStartPageView: View {
                     inputFocused = true
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardHeight = 0
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let screenHeight = UIScreen.main.bounds.height
+            keyboardHeight = max(0, screenHeight - frame.minY)
         }
     }
 }

@@ -631,6 +631,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         if let data = try? JSONEncoder().encode(remaining) {
             PadBrowserPreferences.shared.userDefaultsForCurrentProfile().set(data, forKey: "history.items")
         }
+        navigationStateToken = UUID()
+        groupStateRevision = UUID()
     }
 
     func removeBookmarkItems(_ ids: Set<String>) {
@@ -639,6 +641,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
             PadBrowserPreferences.shared.userDefaultsForCurrentProfile().set(data, forKey: "bookmarks.items")
         }
         navigationStateToken = UUID()
+        groupStateRevision = UUID()
     }
 
     private func restoreSessionIfAvailable() {

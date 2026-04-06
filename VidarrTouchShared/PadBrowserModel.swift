@@ -738,6 +738,8 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let prefs = PadBrowserPreferences.shared
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = prefs.allowsJavaScript
+        configuration.allowsInlineMediaPlayback = true
+        configuration.allowsPictureInPictureMediaPlayback = true
         if group == .privateMode {
             configuration.websiteDataStore = privateWebsiteDataStore
         } else if prefs.cookiePolicy == .privateOnly {

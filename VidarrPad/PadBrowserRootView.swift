@@ -2402,6 +2402,7 @@ private struct PadNativeStartPageView: View {
     let onPasteAndSearch: () -> Void
     @State private var query: String = ""
     @State private var keyboardHeight: CGFloat = 0
+    @State private var didInitializeQuery = false
 
     private func submitCurrentQuery() {
         onSubmit(query)
@@ -2524,8 +2525,11 @@ private struct PadNativeStartPageView: View {
                 .padding(.bottom, effectiveBottomClearance)
             }
         .onAppear {
-            query = initialQuery
-            if !initialQuery.isEmpty {
+            if !didInitializeQuery {
+                query = initialQuery
+                didInitializeQuery = true
+            }
+            if !query.isEmpty {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     inputFocused = true
                 }

@@ -581,9 +581,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
     }
 
-    func openFromNativeStart(tabID id: UUID, input: String) {
+    @discardableResult
+    func openFromNativeStart(tabID id: UUID, input: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
         let url = resolvedURL(from: trimmed)
         for group in PadBrowserTabGroup.allCases {
             if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
@@ -594,9 +595,12 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 navigationStateToken = UUID()
                 load(url, in: tab.webView)
                 saveSessionSnapshot()
-                return
+                return true
             }
         }
+        // Fallback for rare first-launch state races where the tab ID is stale.
+        loadSelectedTab(with: trimmed)
+        return false
     }
 
     func submitNativeStartPage(for id: UUID, input: String) {

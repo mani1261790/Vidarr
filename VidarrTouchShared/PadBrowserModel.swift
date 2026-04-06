@@ -587,10 +587,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
         guard !trimmed.isEmpty else { return false }
         let url = resolvedURL(from: trimmed)
         for group in PadBrowserTabGroup.allCases {
-            if let tab = state(for: group).tabs.first(where: { $0.id == id }) {
+            var state = state(for: group)
+            if let index = state.tabs.firstIndex(where: { $0.id == id }) {
+                let tab = state.tabs[index]
                 currentGroup = group
+                state.selectedIndex = index
+                setState(state, for: group)
                 tab.showsNativeStartPage = false
                 tab.startPageQuery = ""
+                tab.urlString = url.absoluteString
                 syncPublishedState()
                 navigationStateToken = UUID()
                 load(url, in: tab.webView)

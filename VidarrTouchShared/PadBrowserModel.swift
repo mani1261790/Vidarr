@@ -58,6 +58,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let urlString: String?
         let title: String
         let isProtected: Bool
+        let prefersDesktopMode: Bool?
         let historyURLStrings: [String]
         let historyIndex: Int
     }
@@ -80,6 +81,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
         @Published var urlString: String = ""
         @Published var thumbnail: UIImage?
         @Published var isProtected: Bool = false
+        @Published var prefersDesktopMode: Bool = false
         @Published var showsNativeStartPage = false
         @Published var startPageQuery: String = ""
         var historyURLs: [URL] = []
@@ -120,6 +122,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
     private let privateWebsiteDataStore = WKWebsiteDataStore.nonPersistent()
     private var scriptHandlerBoxes: [ObjectIdentifier: PadWeakScriptMessageHandler] = [:]
     private static let longPressOpenMessageName = "vidarrLongPressOpen"
+    private static let desktopUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
     override init() {
         super.init()
@@ -330,6 +333,19 @@ final class PadBrowserModel: NSObject, ObservableObject {
         }
     }
 
+    func setDesktopModeForSelectedTab(_ enabled: Bool) {
+        guard let tab = selectedTab else { return }
+        tab.prefersDesktopMode = enabled
+        applyContentMode(for: tab)
+        if let url = tab.webView.url ?? URL(string: tab.urlString) {
+            load(url, in: tab.webView)
+        } else {
+            loadDefaultNewTabPage(in: tab.webView)
+        }
+        navigationStateToken = UUID()
+        saveSessionSnapshot()
+    }
+
     func commitAddressBar() {
         let trimmed = addressInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -366,9 +382,11 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 newTab.urlString = oldTab.urlString
                 newTab.thumbnail = currentThumbnails[oldTab.id] ?? nil
                 newTab.isProtected = oldTab.isProtected
+                newTab.prefersDesktopMode = oldTab.prefersDesktopMode
                 newTab.historyURLs = oldTab.historyURLs
                 newTab.historyIndex = oldTab.historyIndex
                 webView.navigationDelegate = self
+                applyContentMode(for: newTab)
                 if let url = currentTabID == oldTab.id ? currentURL : URL(string: oldTab.urlString) {
                     load(url, in: webView)
                 } else {
@@ -537,6 +555,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     func isBookmarked(_ tab: Tab) -> Bool {
         PadBookmarkStore.shared.contains(url: URL(string: tab.urlString))
+    }
+
+    func isDesktopMode(_ tab: Tab) -> Bool {
+        tab.prefersDesktopMode
     }
 
     func toggleBookmarkForSelectedTab() {
@@ -714,9 +736,11 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 tab.title = tabSnapshot.title
                 tab.urlString = tabSnapshot.urlString ?? ""
                 tab.isProtected = tabSnapshot.isProtected
+                tab.prefersDesktopMode = tabSnapshot.prefersDesktopMode ?? false
                 tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
                 tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
                 webView.navigationDelegate = self
+                applyContentMode(for: tab)
                 state.tabs.append(tab)
                 let initialURL: URL?
                 if tab.historyIndex >= 0, tab.historyIndex < tab.historyURLs.count {
@@ -761,6 +785,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
                             urlString: tab.webView.url?.absoluteString ?? (tab.urlString.isEmpty ? nil : tab.urlString),
                             title: tab.title,
                             isProtected: tab.isProtected,
+                            prefersDesktopMode: tab.prefersDesktopMode,
                             historyURLStrings: tab.historyURLs.map(\.absoluteString),
                             historyIndex: tab.historyIndex
                         )
@@ -807,6 +832,10 @@ final class PadBrowserModel: NSObject, ObservableObject {
             webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
         }
         return webView
+    }
+
+    private func applyContentMode(for tab: Tab) {
+        tab.webView.customUserAgent = tab.prefersDesktopMode ? Self.desktopUserAgent : nil
     }
 
     private func installLongPressOpenInBackgroundIfNeeded(on contentController: WKUserContentController) {

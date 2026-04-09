@@ -379,8 +379,8 @@ struct PadWebStageView: UIViewRepresentable {
         }
 
         private func updateFastScrollUI(in contentFrame: CGRect) {
-            let hitWidth: CGFloat = 22
-            let trackWidth: CGFloat = 4
+            let hitWidth: CGFloat = 16
+            let trackWidth: CGFloat = 3
             let verticalInset: CGFloat = 6
             fastScrollHitView.frame = CGRect(
                 x: contentFrame.maxX - hitWidth,
@@ -389,7 +389,7 @@ struct PadWebStageView: UIViewRepresentable {
                 height: contentFrame.height
             )
             fastScrollTrackView.frame = CGRect(
-                x: (hitWidth - trackWidth) * 0.5,
+                x: hitWidth - trackWidth - 0.5,
                 y: verticalInset,
                 width: trackWidth,
                 height: max(1, contentFrame.height - (verticalInset * 2))

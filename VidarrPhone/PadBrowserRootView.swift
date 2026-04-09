@@ -140,6 +140,7 @@ struct PadBrowserRootView: View {
                 tab: tab,
                 currentURL: bindingForEditingURL(),
                 isBookmarked: model.isBookmarked(tab),
+                isDesktopMode: model.isDesktopMode(tab),
                 isDangerousSiteAllowed: model.isDangerousSiteAllowed(for: tab),
                 onToggleBookmark: {
                     model.selectTab(id: tab.id)
@@ -156,6 +157,10 @@ struct PadBrowserRootView: View {
                 onReload: {
                     model.selectTab(id: tab.id)
                     model.reload()
+                },
+                onSetDesktopMode: { enabled in
+                    model.selectTab(id: tab.id)
+                    model.setDesktopModeForSelectedTab(enabled)
                 },
                 onShare: {
                     model.selectTab(id: tab.id)
@@ -319,16 +324,14 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: item.urlString)
+                        _ = model.openFromNativeStart(webView: tab.webView, input: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
                         resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: item.urlString)
+                        _ = model.openFromNativeStart(webView: tab.webView, input: item.urlString)
                     },
                     onDeleteHistoryItem: { item in
                         model.removeHistoryItems([item.id])
@@ -347,8 +350,7 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: input)
+                        _ = model.openFromNativeStart(webView: tab.webView, input: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
@@ -358,8 +360,7 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.selectTab(id: tab.id)
-                        model.loadSelectedTab(with: pasted)
+                        _ = model.openFromNativeStart(webView: tab.webView, input: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )
@@ -2336,11 +2337,13 @@ private struct PadTabEditSheet: View {
     @ObservedObject var tab: PadBrowserModel.Tab
     @Binding var currentURL: String
     let isBookmarked: Bool
+    let isDesktopMode: Bool
     let isDangerousSiteAllowed: Bool
     let onToggleBookmark: () -> Void
     let onToggleProtection: () -> Void
     let onToggleDangerousSiteAllowed: () -> Void
     let onReload: () -> Void
+    let onSetDesktopMode: (Bool) -> Void
     let onShare: () -> Void
     let onOpenURL: () -> Void
     let onFindInPage: (String, @escaping (String?) -> Void) -> Void
@@ -2432,6 +2435,10 @@ private struct PadTabEditSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("このサイト")
                                 .font(.headline)
+                            Toggle("PC向けページを表示", isOn: Binding(
+                                get: { isDesktopMode },
+                                set: { onSetDesktopMode($0) }
+                            ))
                             Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
                                 get: { isDangerousSiteAllowed },
                                 set: { _ in onToggleDangerousSiteAllowed() }

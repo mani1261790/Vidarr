@@ -319,6 +319,7 @@ final class PadBrowserPreferences {
         static let harmfulSiteWarningEnabled = "prefs.harmfulSiteWarningEnabled"
         static let preferHTTPS = "prefs.preferHTTPS"
         static let cookiePolicy = "prefs.cookiePolicy"
+        static let defaultDesktopMode = "prefs.defaultDesktopMode"
         static let harmfulSiteAllowedHosts = "prefs.harmfulSiteAllowedHosts"
         static let gestureEnabledPrefix = "prefs.gestureEnabled."
         static let completedGestureTutorial = "prefs.completedGestureTutorial"
@@ -511,6 +512,18 @@ final class PadBrowserPreferences {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.cookiePolicy)
+        }
+    }
+
+    var defaultDesktopMode: Bool {
+        get {
+            if defaults.object(forKey: Key.defaultDesktopMode) == nil {
+                return false
+            }
+            return defaults.bool(forKey: Key.defaultDesktopMode)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.defaultDesktopMode)
         }
     }
 

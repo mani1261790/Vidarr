@@ -179,10 +179,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
 
     func newTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false) {
         let group = currentGroup
+        let prefs = PadBrowserPreferences.shared
         let webView = makeWebView(for: group)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
+        tab.prefersDesktopMode = prefs.defaultDesktopMode
+        applyContentMode(for: tab)
         let preferredInitialURL = resolvedInitialURL(from: initialURL)
         let resolvedHistory = historyURLs.isEmpty ? (preferredInitialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
@@ -205,10 +208,13 @@ final class PadBrowserModel: NSObject, ObservableObject {
     @discardableResult
     func addBackgroundTab(initialURL: URL? = PadBrowserPreferences.shared.homePageURL, historyURLs: [URL] = [], historyIndex: Int = -1, isProtected: Bool = false, in group: PadBrowserTabGroup? = nil) -> Tab {
         let targetGroup = group ?? currentGroup
+        let prefs = PadBrowserPreferences.shared
         let webView = makeWebView(for: targetGroup)
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         tab.isProtected = isProtected
+        tab.prefersDesktopMode = prefs.defaultDesktopMode
+        applyContentMode(for: tab)
         let preferredInitialURL = resolvedInitialURL(from: initialURL)
         let resolvedHistory = historyURLs.isEmpty ? (preferredInitialURL.map { [$0] } ?? []) : historyURLs
         tab.historyURLs = resolvedHistory
@@ -582,12 +588,18 @@ final class PadBrowserModel: NSObject, ObservableObject {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let url = resolvedURL(from: trimmed)
+        #if DEBUG
+        print("[VidarrTouch] loadSelectedTab input:", trimmed, "resolved:", url.absoluteString)
+        #endif
         if selectedTab == nil {
             ensureAtLeastOneTab(in: currentGroup)
             syncPublishedState()
         }
         guard let webView = selectedTab?.webView else { return }
         if let tab = selectedTab {
+            #if DEBUG
+            print("[VidarrTouch] selectedTab before load:", tab.id.uuidString, "start:", tab.showsNativeStartPage, "url:", tab.urlString)
+            #endif
             tab.showsNativeStartPage = false
             tab.startPageQuery = ""
             tab.urlString = url.absoluteString
@@ -637,34 +649,15 @@ final class PadBrowserModel: NSObject, ObservableObject {
     func openFromNativeStart(webView: WKWebView?, input: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        let url = resolvedURL(from: trimmed)
+        if let webView, let tab = tab(for: webView) {
+            return openFromNativeStart(tabID: tab.id, input: trimmed)
+        }
         guard let webView else {
             loadSelectedTab(with: trimmed)
             return false
         }
-        guard let group = group(for: webView) else {
-            loadSelectedTab(with: trimmed)
-            return false
-        }
-
-        var state = state(for: group)
-        guard let index = state.tabs.firstIndex(where: { $0.webView === webView }) else {
-            loadSelectedTab(with: trimmed)
-            return false
-        }
-
-        let tab = state.tabs[index]
-        currentGroup = group
-        state.selectedIndex = index
-        setState(state, for: group)
-        tab.showsNativeStartPage = false
-        tab.startPageQuery = ""
-        tab.urlString = url.absoluteString
-        syncPublishedState()
-        navigationStateToken = UUID()
-        load(url, in: webView)
-        saveSessionSnapshot()
-        return true
+        loadSelectedTab(with: trimmed)
+        return group(for: webView) != nil
     }
 
     func submitNativeStartPage(for id: UUID, input: String) {
@@ -736,7 +729,7 @@ final class PadBrowserModel: NSObject, ObservableObject {
                 tab.title = tabSnapshot.title
                 tab.urlString = tabSnapshot.urlString ?? ""
                 tab.isProtected = tabSnapshot.isProtected
-                tab.prefersDesktopMode = tabSnapshot.prefersDesktopMode ?? false
+                tab.prefersDesktopMode = tabSnapshot.prefersDesktopMode ?? PadBrowserPreferences.shared.defaultDesktopMode
                 tab.historyURLs = tabSnapshot.historyURLStrings.compactMap(URL.init(string:))
                 tab.historyIndex = min(max(tabSnapshot.historyIndex, -1), max(tab.historyURLs.count - 1, -1))
                 webView.navigationDelegate = self
@@ -1215,6 +1208,9 @@ extension PadBrowserModel: WKNavigationDelegate {
         Task { @MainActor [weak self] in
             guard let self,
                   let group = self.group(for: webView) else { return }
+            #if DEBUG
+            print("[VidarrTouch] didFinish", webView.url?.absoluteString ?? "nil")
+            #endif
             var state = self.state(for: group)
             guard let index = state.tabs.firstIndex(where: { $0.webView === webView }) else { return }
             let tab = state.tabs[index]
@@ -1248,6 +1244,9 @@ extension PadBrowserModel: WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
+            #if DEBUG
+            print("[VidarrTouch] didStart", webView.url?.absoluteString ?? "nil")
+            #endif
             self?.navigationStateToken = UUID()
         }
     }
@@ -1404,6 +1403,22 @@ extension PadBrowserModel {
         } else {
             groupStateRevision = UUID()
         }
+    }
+
+    func stabilizeForForeground() {
+        ensureAtLeastOneTab(in: currentGroup)
+        repairBlankTabsIfNeeded()
+        if let tab = selectedTab {
+            let liveURL = tab.webView.url?.absoluteString ?? ""
+            if tab.showsNativeStartPage && !tab.urlString.isEmpty {
+                tab.showsNativeStartPage = false
+            }
+            if tab.showsNativeStartPage && !liveURL.isEmpty && liveURL != "about:blank" {
+                tab.showsNativeStartPage = false
+            }
+        }
+        syncPublishedState()
+        navigationStateToken = UUID()
     }
 
     private func group(for webView: WKWebView) -> PadBrowserTabGroup? {

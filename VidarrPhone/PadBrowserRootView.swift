@@ -4,6 +4,7 @@ import WebKit
 
 struct PadBrowserRootView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     enum LibraryPanel: String, Identifiable {
@@ -66,6 +67,8 @@ struct PadBrowserRootView: View {
     @State private var gestureTutorialStep: PadGestureTutorialStep? = PadBrowserPreferences.shared.completedGestureTutorial ? nil : .firstSearch
     @State private var lastObservedSelectedTabID: UUID?
     @State private var nativeStartDismissalTabID: UUID?
+    @State private var presentedNativeStartTabID: UUID?
+    @State private var didRunInitialStabilization = false
     @FocusState private var editingURLFocused: Bool
 
     private var isPhoneLayout: Bool {
@@ -246,10 +249,22 @@ struct PadBrowserRootView: View {
             )
         }
         .onAppear {
+            if !didRunInitialStabilization {
+                stabilizeTransientUIState()
+                model.stabilizeForForeground()
+                didRunInitialStabilization = true
+            }
+            refreshPresentedNativeStartOverlay()
             scheduleBottomBarAutoHide()
             if gestureTutorialStep != nil {
                 showBottomBar(persist: true)
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            stabilizeTransientUIState()
+            model.stabilizeForForeground()
+            refreshPresentedNativeStartOverlay()
         }
         .onChange(of: showingSettings) { _, isShowing in
             if isShowing {
@@ -277,6 +292,7 @@ struct PadBrowserRootView: View {
             if oldID != newID {
                 nativeStartDismissalTabID = nil
             }
+            refreshPresentedNativeStartOverlay()
             guard gestureTutorialStep == .switchTab else { return }
             guard let oldID, let newID, oldID != newID else { return }
             handleGestureTutorialEvent(.tabSwitched)
@@ -285,6 +301,7 @@ struct PadBrowserRootView: View {
             if model.selectedTab?.showsNativeStartPage != true {
                 nativeStartDismissalTabID = nil
             }
+            refreshPresentedNativeStartOverlay()
         }
     }
 
@@ -311,7 +328,7 @@ struct PadBrowserRootView: View {
 
             if tabSwitchTransition == nil,
                let tab = model.selectedTab,
-               shouldPresentNativeStartOverlay(for: tab) {
+               presentedNativeStartTabID == tab.id {
                 PadNativeStartPageView(
                     initialQuery: tab.startPageQuery,
                     compact: true,
@@ -320,18 +337,10 @@ struct PadBrowserRootView: View {
                     historyItems: model.allHistory(),
                     bookmarkItems: model.allBookmarks(),
                     onOpenHistoryItem: { item in
-                        resetTabSwitchVisualState()
-                        nativeStartDismissalTabID = tab.id
-                        tab.showsNativeStartPage = false
-                        tab.startPageQuery = ""
-                        _ = model.openFromNativeStart(webView: tab.webView, input: item.urlString)
+                        commitStartNavigation(item.urlString, tabID: tab.id)
                     },
                     onOpenBookmarkItem: { item in
-                        resetTabSwitchVisualState()
-                        nativeStartDismissalTabID = tab.id
-                        tab.showsNativeStartPage = false
-                        tab.startPageQuery = ""
-                        _ = model.openFromNativeStart(webView: tab.webView, input: item.urlString)
+                        commitStartNavigation(item.urlString, tabID: tab.id)
                     },
                     onDeleteHistoryItem: { item in
                         model.removeHistoryItems([item.id])
@@ -346,21 +355,13 @@ struct PadBrowserRootView: View {
                         model.removeBookmarkItems(Set(model.allBookmarks().map(\.id)))
                     },
                     onSubmit: { input in
-                        resetTabSwitchVisualState()
-                        nativeStartDismissalTabID = tab.id
-                        tab.showsNativeStartPage = false
-                        tab.startPageQuery = ""
-                        _ = model.openFromNativeStart(webView: tab.webView, input: input)
+                        commitStartNavigation(input, tabID: tab.id)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
-                        resetTabSwitchVisualState()
-                        nativeStartDismissalTabID = tab.id
-                        tab.showsNativeStartPage = false
-                        tab.startPageQuery = ""
-                        _ = model.openFromNativeStart(webView: tab.webView, input: pasted)
+                        commitStartNavigation(pasted, tabID: tab.id)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )
@@ -411,6 +412,7 @@ struct PadBrowserRootView: View {
                 groupSwitcher
                 chromeButton(systemName: trailingToolbarSystemImage, disabled: false) {
                     if showsSettingsButtonForSelectedTab {
+                        stabilizeTransientUIState()
                         showingSettings = true
                     } else {
                         showingBrowserShareSheet = true
@@ -451,8 +453,67 @@ struct PadBrowserRootView: View {
         edgePreviewTabID = nil
     }
 
+    private func stabilizeTransientUIState() {
+        resetTabSwitchVisualState()
+        gestureHUDTask?.cancel()
+        gestureHUD = nil
+        editingTabID = nil
+        showingQuickSearch = false
+        showingSettings = false
+        showingBrowserShareSheet = false
+        activeLibraryPanel = nil
+        protectedClosePrompt = nil
+        showsGroupStripStack = false
+        nativeStartDismissalTabID = nil
+        presentedNativeStartTabID = nil
+    }
+
+    private func commitStartNavigation(_ input: String, tabID: UUID) {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        stabilizeTransientUIState()
+        nativeStartDismissalTabID = tabID
+        showBottomBar(persist: true)
+        #if DEBUG
+        print("[VidarrPhone] commitStartNavigation", "tabID:", tabID.uuidString, "input:", trimmed)
+        #endif
+        DispatchQueue.main.async {
+            model.selectTab(id: tabID)
+            if model.selectedTab == nil {
+                #if DEBUG
+                print("[VidarrPhone] selectedTab nil before load, stabilizing model")
+                #endif
+                model.stabilizeForForeground()
+                model.selectTab(id: tabID)
+            }
+            #if DEBUG
+            print("[VidarrPhone] selectedTab after select:", model.selectedTab?.id.uuidString ?? "nil", "start:", model.selectedTab?.showsNativeStartPage ?? false, "url:", model.selectedTab?.urlString ?? "")
+            #endif
+            model.loadSelectedTab(with: trimmed)
+        }
+    }
+
+    private func refreshPresentedNativeStartOverlay() {
+        guard let tab = model.selectedTab else {
+            presentedNativeStartTabID = nil
+            return
+        }
+        guard nativeStartDismissalTabID != tab.id else {
+            presentedNativeStartTabID = nil
+            return
+        }
+        let shouldPresent: Bool
+        if let url = tab.webView.url {
+            shouldPresent = tab.showsNativeStartPage && url.absoluteString == "about:blank"
+        } else {
+            shouldPresent = tab.showsNativeStartPage && tab.urlString.isEmpty
+        }
+        presentedNativeStartTabID = shouldPresent ? tab.id : nil
+    }
+
     private var groupSwitcher: some View {
         Button {
+            stabilizeTransientUIState()
             if showsGroupStripStack {
                 dismissGroupStripStack()
             } else {
@@ -589,6 +650,7 @@ struct PadBrowserRootView: View {
                                     animateTabSelection(to: tab.id)
                                 },
                                 onLongPress: {
+                                    stabilizeTransientUIState()
                                     animateTabSelection(to: tab.id)
                                     editingURL = tab.urlString
                                     editingTabID = tab.id
@@ -1567,12 +1629,14 @@ private struct PadSettingsSheet: View {
     @State private var autoHideBottomBar = PadBrowserPreferences.shared.autoHideBottomBar
     @State private var bottomBarAutoHideDelay = PadBrowserPreferences.shared.bottomBarAutoHideDelay
     @State private var allowsJavaScript = PadBrowserPreferences.shared.allowsJavaScript
+    @State private var defaultDesktopMode = PadBrowserPreferences.shared.defaultDesktopMode
     @State private var preferHTTPS = PadBrowserPreferences.shared.preferHTTPS
     @State private var stripTrackingParameters = PadBrowserPreferences.shared.stripTrackingParameters
     @State private var harmfulSiteWarningEnabled = PadBrowserPreferences.shared.harmfulSiteWarningEnabled
     @State private var cookiePolicy = PadBrowserPreferences.shared.cookiePolicy
     @State private var historyCount = PadBrowsingHistoryStore.shared.all().count
     @State private var bookmarkCount = PadBookmarkStore.shared.all().count
+    @State private var downloadCount = PadDownloadStore.shared.all().count
 
     let onOpenHistory: () -> Void
     let onOpenBookmarks: () -> Void
@@ -1584,12 +1648,28 @@ private struct PadSettingsSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("設定", selection: $selectedTab) {
-                    ForEach(SettingsTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(SettingsTab.allCases) { tab in
+                            let isSelected = selectedTab == tab
+                            Button {
+                                selectedTab = tab
+                            } label: {
+                                Text(tab.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(isSelected ? Color.accentColor : Color(uiColor: .secondarySystemFill))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
-                .pickerStyle(.segmented)
                 .padding(.horizontal, isPhoneLayout ? 14 : 20)
                 .padding(.top, isPhoneLayout ? 10 : 14)
                 .padding(.bottom, isPhoneLayout ? 6 : 10)
@@ -1627,6 +1707,10 @@ private struct PadSettingsSheet: View {
                                 ForEach(PadPreferredContentLanguage.allCases, id: \.self) { language in
                                     Text(language.displayName).tag(language)
                                 }
+                            }
+                            Picker("既定のページ表示", selection: $defaultDesktopMode) {
+                                Text("モバイル").tag(false)
+                                Text("PC").tag(true)
                             }
                             Toggle("JavaScript を使う", isOn: $allowsJavaScript)
                             Toggle("HTTPS を優先する", isOn: $preferHTTPS)
@@ -1680,25 +1764,38 @@ private struct PadSettingsSheet: View {
 
                     case .data:
                         Section("保存データ") {
-                            LabeledContent("履歴") {
-                                Text("\(historyCount)件")
-                            }
-                            LabeledContent("ブックマーク") {
-                                Text("\(bookmarkCount)件")
-                            }
-                        }
-                        Section("一覧を開く") {
-                            Button("履歴を見る") {
+                            Button {
                                 dismiss()
                                 onOpenHistory()
+                            } label: {
+                                HStack {
+                                    Text("履歴を見る")
+                                    Spacer()
+                                    Text("\(historyCount)件")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            Button("ブックマークを見る") {
+                            Button {
                                 dismiss()
                                 onOpenBookmarks()
+                            } label: {
+                                HStack {
+                                    Text("ブックマークを見る")
+                                    Spacer()
+                                    Text("\(bookmarkCount)件")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            Button("ダウンロードを見る") {
+                            Button {
                                 dismiss()
                                 onOpenDownloads()
+                            } label: {
+                                HStack {
+                                    Text("ダウンロードを見る")
+                                    Spacer()
+                                    Text("\(downloadCount)件")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                         Section("消去") {
@@ -1742,6 +1839,7 @@ private struct PadSettingsSheet: View {
                         PadBrowserPreferences.shared.bottomBarAutoHideDelay = bottomBarAutoHideDelay
                         PadBrowserPreferences.shared.restoreClosedTabPageHistory = restoreClosedTabPageHistory
                         PadBrowserPreferences.shared.allowsJavaScript = allowsJavaScript
+                        PadBrowserPreferences.shared.defaultDesktopMode = defaultDesktopMode
                         PadBrowserPreferences.shared.preferHTTPS = preferHTTPS
                         PadBrowserPreferences.shared.stripTrackingParameters = stripTrackingParameters
                         PadBrowserPreferences.shared.harmfulSiteWarningEnabled = harmfulSiteWarningEnabled
@@ -1793,12 +1891,17 @@ private struct PadSettingsSheet: View {
                     Text("ジェスチャーの反応")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Picker("感度", selection: $gestureSensitivity) {
-                        ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
-                            Text(sensitivity.displayName).tag(sensitivity)
+                    HStack {
+                        Text("感度")
+                            .font(.body.weight(.medium))
+                        Spacer()
+                        Picker("感度", selection: $gestureSensitivity) {
+                            ForEach(PadGestureSensitivity.allCases, id: \.self) { sensitivity in
+                                Text(sensitivity.displayName).tag(sensitivity)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.segmented)
                 }
                 .padding(.horizontal, 16)
 
@@ -2353,102 +2456,107 @@ private struct PadTabEditSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 10) {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(tab.title)
-                            .font(.title2.weight(.semibold))
+                            .font(.headline)
                             .lineLimit(2)
                         if let host = currentHost {
                             Text(host)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("ページ")
-                            .font(.headline)
-                        TextField("URL または検索語", text: $currentURL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textFieldStyle(.roundedBorder)
-                            .submitLabel(.go)
-                            .onSubmit { onOpenURL() }
-                    }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("タブの操作")
-                            .font(.headline)
-                        HStack(spacing: 12) {
-                            actionButton("開く", systemImage: "arrow.up.right.circle.fill", role: .primary, action: onOpenURL)
-                            actionButton("再読み込み", systemImage: "arrow.clockwise.circle.fill", action: onReload)
-                        }
-                        HStack(spacing: 12) {
-                            actionButton("共有", systemImage: "square.and.arrow.up.fill", action: {
-                                onShare()
-                                showingShareSheet = true
-                            })
-                            actionButton(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash.fill" : "star.fill", action: onToggleBookmark)
-                            actionButton(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open.fill" : "lock.fill", action: onToggleProtection)
-                        }
-                    }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("ページ内検索")
-                            .font(.headline)
-                        HStack(spacing: 12) {
-                            TextField("このページを検索", text: $pageSearchQuery)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .textFieldStyle(.roundedBorder)
-                                .submitLabel(.search)
-                                .onSubmit {
-                                    onFindInPage(pageSearchQuery) { result in
-                                        pageSearchResult = result
-                                    }
-                                }
-                            Button("検索") {
-                                onFindInPage(pageSearchQuery) { result in
-                                    pageSearchResult = result
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        if let pageSearchResult, !pageSearchResult.isEmpty {
-                            Text(pageSearchResult)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(20)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                }
 
-                    if currentHost != nil {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("このサイト")
-                                .font(.headline)
-                            Toggle("PC向けページを表示", isOn: Binding(
-                                get: { isDesktopMode },
-                                set: { onSetDesktopMode($0) }
-                            ))
-                            Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
-                                get: { isDangerousSiteAllowed },
-                                set: { _ in onToggleDangerousSiteAllowed() }
-                            ))
+                Section("ページ") {
+                    HStack(spacing: 10) {
+                        TextField("URL または検索語", text: $currentURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.go)
+                            .onSubmit { onOpenURL() }
+                        Button {
+                            onOpenURL()
+                        } label: {
+                            Image(systemName: "arrow.right.circle.fill")
+                                .font(.system(size: 28, weight: .semibold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(Color.white, Color.accentColor)
+                                .accessibilityLabel("開く")
                         }
-                        .padding(20)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(20)
+
+                Section("アクション") {
+                    Button {
+                        onReload()
+                    } label: {
+                        Label("再読み込み", systemImage: "arrow.clockwise")
+                    }
+                    Button {
+                        onShare()
+                        showingShareSheet = true
+                    } label: {
+                        Label("共有", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        onToggleBookmark()
+                    } label: {
+                        Label(isBookmarked ? "ブックマーク解除" : "ブックマーク", systemImage: isBookmarked ? "star.slash" : "star")
+                    }
+                    Button {
+                        onToggleProtection()
+                    } label: {
+                        Label(tab.isProtected ? "保護を解除" : "保護する", systemImage: tab.isProtected ? "lock.open" : "lock")
+                    }
+                }
+
+                Section("ページ内検索") {
+                    HStack(spacing: 10) {
+                        TextField("このページを検索", text: $pageSearchQuery)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.search)
+                            .onSubmit {
+                                onFindInPage(pageSearchQuery) { result in
+                                    pageSearchResult = result
+                                }
+                            }
+                        Button {
+                            onFindInPage(pageSearchQuery) { result in
+                                pageSearchResult = result
+                            }
+                        } label: {
+                            Image(systemName: "magnifyingglass.circle.fill")
+                                .font(.system(size: 28, weight: .semibold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(Color.white, Color.accentColor)
+                                .accessibilityLabel("検索")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let pageSearchResult, !pageSearchResult.isEmpty {
+                        Text(pageSearchResult)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if currentHost != nil {
+                    Section("このサイト") {
+                        Toggle("PC向けページを表示", isOn: Binding(
+                            get: { isDesktopMode },
+                            set: { onSetDesktopMode($0) }
+                        ))
+                        Toggle("危険サイト警告をこのサイトではスキップ", isOn: Binding(
+                            get: { isDangerousSiteAllowed },
+                            set: { _ in onToggleDangerousSiteAllowed() }
+                        ))
+                    }
+                }
             }
             .navigationTitle("タブ設定")
             .navigationBarTitleDisplayMode(.inline)
@@ -2470,32 +2578,6 @@ private struct PadTabEditSheet: View {
 
     private var currentHost: String? {
         URL(string: currentURL.isEmpty ? tab.urlString : currentURL)?.host
-    }
-
-    @ViewBuilder
-    private func actionButton(_ title: String, systemImage: String, role: ActionRole = .secondary, action: @escaping () -> Void) -> some View {
-        if role == .primary {
-            Button(action: action) {
-                Label(title, systemImage: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-        } else {
-            Button(action: action) {
-                Label(title, systemImage: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private enum ActionRole {
-        case primary
-        case secondary
     }
 }
 

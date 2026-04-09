@@ -319,14 +319,16 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.loadTab(id: tab.id, with: item.urlString)
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
                         resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.loadTab(id: tab.id, with: item.urlString)
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: item.urlString)
                     },
                     onDeleteHistoryItem: { item in
                         model.removeHistoryItems([item.id])
@@ -345,7 +347,8 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.loadTab(id: tab.id, with: input)
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: input)
                         handleGestureTutorialEvent(.searchPerformed)
                     },
                     onPasteAndSearch: {
@@ -355,7 +358,8 @@ struct PadBrowserRootView: View {
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
-                        model.loadTab(id: tab.id, with: pasted)
+                        model.selectTab(id: tab.id)
+                        model.loadSelectedTab(with: pasted)
                         handleGestureTutorialEvent(.searchPerformed)
                     }
                 )

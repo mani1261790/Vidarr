@@ -116,6 +116,8 @@ final class PadInteractiveWebView: WKWebView {
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.contentInset = .zero
         scrollView.scrollIndicatorInsets = .zero
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
         if #available(iOS 13.0, *) {
             scrollView.automaticallyAdjustsScrollIndicatorInsets = false
         }
@@ -189,9 +191,10 @@ struct PadWebStageView: UIViewRepresentable {
         private var gestureCoordinator: PadGestureCaptureCoordinator?
         private let fastScrollHitView = UIView()
         private let fastScrollTrackView = UIView()
-        private let fastScrollThumbView = UIView()
         private var fastScrollPanRecognizer: UIPanGestureRecognizer?
         private var fastScrollTapRecognizer: UITapGestureRecognizer?
+        private var fastScrollHideTask: Task<Void, Never>?
+        private var fastScrollVisible = false
         private let dimView = UIView()
         private let gapView = UIView()
         private weak var activeFromWebView: WKWebView?
@@ -225,15 +228,11 @@ struct PadWebStageView: UIViewRepresentable {
                 fastScrollHitView.isUserInteractionEnabled = true
                 container.addSubview(fastScrollHitView)
 
-                fastScrollTrackView.backgroundColor = UIColor.black.withAlphaComponent(0.16)
+                fastScrollTrackView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.92)
                 fastScrollTrackView.layer.cornerRadius = 2
                 fastScrollTrackView.layer.cornerCurve = .continuous
+                fastScrollTrackView.alpha = 0
                 fastScrollHitView.addSubview(fastScrollTrackView)
-
-                fastScrollThumbView.backgroundColor = UIColor.white.withAlphaComponent(0.92)
-                fastScrollThumbView.layer.cornerRadius = 2
-                fastScrollThumbView.layer.cornerCurve = .continuous
-                fastScrollTrackView.addSubview(fastScrollThumbView)
 
                 let pan = UIPanGestureRecognizer(target: self, action: #selector(handleFastScrollPan(_:)))
                 pan.minimumNumberOfTouches = 1
@@ -334,6 +333,7 @@ struct PadWebStageView: UIViewRepresentable {
         @objc private func handleFastScrollPan(_ recognizer: UIPanGestureRecognizer) {
             guard let containerView else { return }
             let contentFrame = resolvedContentFrame(in: containerView, bounds: containerView.bounds)
+            showFastScrollTemporarily()
             performFastScroll(at: recognizer.location(in: containerView), in: contentFrame)
             if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
                 updateFastScrollUI(in: contentFrame)
@@ -343,8 +343,23 @@ struct PadWebStageView: UIViewRepresentable {
         @objc private func handleFastScrollTap(_ recognizer: UITapGestureRecognizer) {
             guard let containerView else { return }
             let contentFrame = resolvedContentFrame(in: containerView, bounds: containerView.bounds)
+            showFastScrollTemporarily()
             performFastScroll(at: recognizer.location(in: containerView), in: contentFrame)
             updateFastScrollUI(in: contentFrame)
+        }
+
+        private func showFastScrollTemporarily() {
+            fastScrollVisible = true
+            fastScrollHideTask?.cancel()
+            fastScrollHideTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(900))
+                guard let self else { return }
+                self.fastScrollVisible = false
+                if let containerView = self.containerView {
+                    let frame = self.resolvedContentFrame(in: containerView, bounds: containerView.bounds)
+                    self.updateFastScrollUI(in: frame)
+                }
+            }
         }
 
         private func performFastScroll(at point: CGPoint, in contentFrame: CGRect) {
@@ -391,17 +406,7 @@ struct PadWebStageView: UIViewRepresentable {
             let canScroll = maxOffset > 1
             fastScrollHitView.isHidden = !canScroll
             guard canScroll else { return }
-
-            let progress = min(max((scrollView.contentOffset.y + inset.top) / maxOffset, 0), 1)
-            let trackHeight = fastScrollTrackView.bounds.height
-            let thumbHeight = max(24, min(96, trackHeight * (visibleHeight / max(scrollView.contentSize.height, 1))))
-            let thumbTravel = max(1, trackHeight - thumbHeight)
-            fastScrollThumbView.frame = CGRect(
-                x: 0,
-                y: progress * thumbTravel,
-                width: trackWidth,
-                height: thumbHeight
-            )
+            fastScrollTrackView.alpha = fastScrollVisible ? 1 : 0
         }
 
         private func applyTransitionLayout(

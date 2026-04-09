@@ -315,12 +315,14 @@ struct PadBrowserRootView: View {
                     historyItems: model.allHistory(),
                     bookmarkItems: model.allBookmarks(),
                     onOpenHistoryItem: { item in
+                        resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
                         model.loadTab(id: tab.id, with: item.urlString)
                     },
                     onOpenBookmarkItem: { item in
+                        resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
@@ -339,6 +341,7 @@ struct PadBrowserRootView: View {
                         model.removeBookmarkItems(Set(model.allBookmarks().map(\.id)))
                     },
                     onSubmit: { input in
+                        resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
@@ -348,6 +351,7 @@ struct PadBrowserRootView: View {
                     onPasteAndSearch: {
                         guard let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
                               !pasted.isEmpty else { return }
+                        resetTabSwitchVisualState()
                         nativeStartDismissalTabID = tab.id
                         tab.showsNativeStartPage = false
                         tab.startPageQuery = ""
@@ -429,6 +433,17 @@ struct PadBrowserRootView: View {
             return url.absoluteString == "about:blank"
         }
         return tab.urlString.isEmpty
+    }
+
+    private func resetTabSwitchVisualState() {
+        tabSwitchToken = UUID()
+        tabSwitchTransition = nil
+        tabSwitchVisualState = .identity
+        interactiveTargetID = nil
+        if let edgePreviewTabID {
+            model.discardTab(id: edgePreviewTabID)
+        }
+        edgePreviewTabID = nil
     }
 
     private var groupSwitcher: some View {

@@ -130,6 +130,11 @@ struct PadWebStageView: UIViewRepresentable {
         private weak var attachedGestureView: UIView?
         private var panRecognizer: UIPanGestureRecognizer?
         private var gestureCoordinator: PadGestureCaptureCoordinator?
+        private let fastScrollHitView = UIView()
+        private let fastScrollTrackView = UIView()
+        private let fastScrollThumbView = UIView()
+        private var fastScrollPanRecognizer: UIPanGestureRecognizer?
+        private var fastScrollTapRecognizer: UITapGestureRecognizer?
         private let dimView = UIView()
         private let gapView = UIView()
         private weak var activeFromWebView: WKWebView?
@@ -156,6 +161,32 @@ struct PadWebStageView: UIViewRepresentable {
                 gapView.isHidden = true
                 gapView.isUserInteractionEnabled = false
                 container.addSubview(gapView)
+            }
+            if fastScrollHitView.superview == nil {
+                fastScrollHitView.backgroundColor = .clear
+                fastScrollHitView.isUserInteractionEnabled = true
+                container.addSubview(fastScrollHitView)
+
+                fastScrollTrackView.backgroundColor = UIColor.black.withAlphaComponent(0.16)
+                fastScrollTrackView.layer.cornerRadius = 2
+                fastScrollTrackView.layer.cornerCurve = .continuous
+                fastScrollHitView.addSubview(fastScrollTrackView)
+
+                fastScrollThumbView.backgroundColor = UIColor.white.withAlphaComponent(0.92)
+                fastScrollThumbView.layer.cornerRadius = 2
+                fastScrollThumbView.layer.cornerCurve = .continuous
+                fastScrollTrackView.addSubview(fastScrollThumbView)
+
+                let pan = UIPanGestureRecognizer(target: self, action: #selector(handleFastScrollPan(_:)))
+                pan.maximumNumberOfTouches = 1
+                pan.minimumNumberOfTouches = 1
+                pan.cancelsTouchesInView = true
+                fastScrollHitView.addGestureRecognizer(pan)
+                fastScrollPanRecognizer = pan
+
+                let tap = UITapGestureRecognizer(target: self, action: #selector(handleFastScrollTap(_:)))
+                fastScrollHitView.addGestureRecognizer(tap)
+                fastScrollTapRecognizer = tap
             }
         }
 
@@ -218,6 +249,7 @@ struct PadWebStageView: UIViewRepresentable {
                 activeToWebView = toWebView
                 configureGestureRecognizer(for: fromWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [fromWebView, toWebView])
+                updateFastScrollUI(in: bounds)
             } else if let selectedWebView {
                 activeFromWebView = nil
                 activeToWebView = nil
@@ -234,6 +266,7 @@ struct PadWebStageView: UIViewRepresentable {
                 gapView.alpha = 0
                 configureGestureRecognizer(for: selectedWebView, configuration: gestureConfiguration)
                 cleanupDetachedViews(keeping: [selectedWebView])
+                updateFastScrollUI(in: bounds)
             } else {
                 activeFromWebView = nil
                 activeToWebView = nil
@@ -244,7 +277,75 @@ struct PadWebStageView: UIViewRepresentable {
                 gapView.isHidden = true
                 dimView.alpha = 0
                 gapView.alpha = 0
+                updateFastScrollUI(in: bounds)
             }
+        }
+
+        @objc private func handleFastScrollPan(_ recognizer: UIPanGestureRecognizer) {
+            guard let containerView else { return }
+            performFastScroll(at: recognizer.location(in: containerView), in: containerView.bounds)
+            if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
+                updateFastScrollUI(in: containerView.bounds)
+            }
+        }
+
+        @objc private func handleFastScrollTap(_ recognizer: UITapGestureRecognizer) {
+            guard let containerView else { return }
+            performFastScroll(at: recognizer.location(in: containerView), in: containerView.bounds)
+            updateFastScrollUI(in: containerView.bounds)
+        }
+
+        private func performFastScroll(at point: CGPoint, in bounds: CGRect) {
+            guard let webView = activeSelectedWebView ?? activeFromWebView ?? activeToWebView else { return }
+            let scrollView = webView.scrollView
+            let trackMinY = bounds.minY + 6
+            let trackMaxY = bounds.maxY - 6
+            let clampedY = min(max(point.y, trackMinY), trackMaxY)
+            let progress = (clampedY - trackMinY) / max(1, trackMaxY - trackMinY)
+
+            let inset = scrollView.adjustedContentInset
+            let visibleHeight = max(1, scrollView.bounds.height - inset.top - inset.bottom)
+            let maxOffset = max(0, scrollView.contentSize.height - visibleHeight)
+            let targetY = (progress * maxOffset) - inset.top
+            scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetY), animated: false)
+            updateFastScrollUI(in: bounds)
+        }
+
+        private func updateFastScrollUI(in bounds: CGRect) {
+            let hitWidth: CGFloat = 22
+            let trackWidth: CGFloat = 4
+            let verticalInset: CGFloat = 6
+            let hitX = bounds.maxX - hitWidth
+            fastScrollHitView.frame = CGRect(x: hitX, y: bounds.minY, width: hitWidth, height: bounds.height)
+            fastScrollTrackView.frame = CGRect(
+                x: (hitWidth - trackWidth) * 0.5,
+                y: verticalInset,
+                width: trackWidth,
+                height: max(1, bounds.height - (verticalInset * 2))
+            )
+
+            guard let webView = activeSelectedWebView ?? activeFromWebView ?? activeToWebView else {
+                fastScrollHitView.isHidden = true
+                return
+            }
+            let scrollView = webView.scrollView
+            let inset = scrollView.adjustedContentInset
+            let visibleHeight = max(1, scrollView.bounds.height - inset.top - inset.bottom)
+            let maxOffset = max(0, scrollView.contentSize.height - visibleHeight)
+            let canScroll = maxOffset > 1
+            fastScrollHitView.isHidden = !canScroll
+            guard canScroll else { return }
+
+            let progress = min(max((scrollView.contentOffset.y + inset.top) / maxOffset, 0), 1)
+            let trackHeight = fastScrollTrackView.bounds.height
+            let thumbHeight = max(24, min(96, trackHeight * (visibleHeight / max(scrollView.contentSize.height, 1))))
+            let thumbTravel = max(1, trackHeight - thumbHeight)
+            fastScrollThumbView.frame = CGRect(
+                x: 0,
+                y: progress * thumbTravel,
+                width: trackWidth,
+                height: thumbHeight
+            )
         }
 
         private func ensureSubview(_ webView: WKWebView, in container: UIView) {
@@ -265,6 +366,7 @@ struct PadWebStageView: UIViewRepresentable {
             }
             containerView?.bringSubviewToFront(dimView)
             containerView?.bringSubviewToFront(gapView)
+            containerView?.bringSubviewToFront(fastScrollHitView)
         }
 
         private func configureGestureRecognizer(for webView: WKWebView?, configuration: PadGestureConfiguration?) {

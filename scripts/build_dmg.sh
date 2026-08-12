@@ -11,6 +11,19 @@ APP_NAME="Vidarr.app"
 APP_PATH="$PRODUCTS_DIR/$APP_NAME"
 
 VERSION_TAG="${1:-local}"
+RELEASE_VERSION=""
+BUILD_VERSION_ARGS=()
+
+if [[ "$VERSION_TAG" != "local" ]]; then
+  if [[ "$VERSION_TAG" =~ ^[vV]([0-9]+(\.[0-9]+){1,2})$ ]]; then
+    RELEASE_VERSION="${BASH_REMATCH[1]}"
+    BUILD_VERSION_ARGS+=("MARKETING_VERSION=$RELEASE_VERSION")
+  else
+    echo "Release version must look like v0.1.10: $VERSION_TAG" >&2
+    exit 1
+  fi
+fi
+
 OUTPUT_DIR="$ROOT_DIR/build/dist"
 DMG_NAME="Vidarr-${VERSION_TAG}.dmg"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
@@ -29,11 +42,20 @@ xcodebuild \
   -derivedDataPath "$DERIVED_DATA_PATH" \
   -jobs 1 \
   CODE_SIGNING_ALLOWED=NO \
+  "${BUILD_VERSION_ARGS[@]}" \
   clean build
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "App bundle not found: $APP_PATH" >&2
   exit 1
+fi
+
+if [[ -n "$RELEASE_VERSION" ]]; then
+  BUNDLED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
+  if [[ "$BUNDLED_VERSION" != "$RELEASE_VERSION" ]]; then
+    echo "Release tag and bundled app version do not match: $VERSION_TAG != $BUNDLED_VERSION" >&2
+    exit 1
+  fi
 fi
 
 # Re-sign ad-hoc so Gatekeeper does not treat the bundle as malformed/damaged.

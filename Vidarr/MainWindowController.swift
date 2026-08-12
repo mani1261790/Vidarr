@@ -22,6 +22,7 @@ final class MainWindowController: NSWindowController {
         static let fullScreenRevealHotzoneHeight: CGFloat = 6
         static let fullScreenHideDelay: TimeInterval = 0.55
         static let tabChipSize = NSSize(width: 96, height: 48)
+        static let tabThumbnailSnapshotWidth: CGFloat = 320
         static let tabSwitchGap: CGFloat = 16
         static let newTabTransitionExtraTravel: CGFloat = 28
         static let newTabTransitionGapWidth: CGFloat = 18
@@ -261,7 +262,9 @@ final class MainWindowController: NSWindowController {
         tabStripScrollView.borderType = .noBorder
         tabStripScrollView.scrollerStyle = .overlay
         tabStripScrollView.verticalScrollElasticity = .none
-        tabStripScrollView.horizontalScrollElasticity = .automatic
+        // Tabs should scroll only when their content is wider than the strip.
+        // Elastic scrolling otherwise makes a single remaining tab appear scrollable.
+        tabStripScrollView.horizontalScrollElasticity = .none
         tabStripScrollView.contentView = HorizontalOnlyClipView()
         tabStripScrollView.contentView.drawsBackground = false
         tabStripContainer.addSubview(tabStripScrollView)
@@ -370,8 +373,12 @@ final class MainWindowController: NSWindowController {
         addressBarEditorField.isHidden = true
 
         tabSearchField.translatesAutoresizingMaskIntoConstraints = false
-        tabSearchField.font = NSFont.systemFont(ofSize: 12.0)
+        tabSearchField.controlSize = .regular
+        tabSearchField.font = NSFont.systemFont(ofSize: 13.0)
+        tabSearchField.bezelStyle = .roundedBezel
+        tabSearchField.focusRingType = .default
         tabSearchField.placeholderString = "タブを検索"
+        tabSearchField.setAccessibilityLabel("タブを検索")
         tabSearchField.sendsSearchStringImmediately = true
         tabSearchField.sendsWholeSearchString = false
         tabSearchField.target = self
@@ -446,9 +453,9 @@ final class MainWindowController: NSWindowController {
 
             tabSearchField.leadingAnchor.constraint(equalTo: rightPanelView.leadingAnchor, constant: 4),
             tabSearchField.trailingAnchor.constraint(equalTo: rightPanelView.trailingAnchor, constant: -4),
-            tabSearchField.topAnchor.constraint(equalTo: addressBarDisplayLabel.bottomAnchor, constant: 4),
-            tabSearchField.heightAnchor.constraint(equalToConstant: 20),
-            tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -2)
+            tabSearchField.topAnchor.constraint(equalTo: addressBarDisplayLabel.bottomAnchor, constant: 3),
+            tabSearchField.heightAnchor.constraint(equalToConstant: 22),
+            tabSearchField.bottomAnchor.constraint(lessThanOrEqualTo: rightPanelView.bottomAnchor, constant: -1)
         ])
 
         setupTabStripInteractions()
@@ -1985,13 +1992,13 @@ final class MainWindowController: NSWindowController {
     private func captureThumbnail(for webView: WKWebView) {
         guard webView.bounds.width > 1, webView.bounds.height > 1 else { return }
 
-        let width = min(webView.bounds.width, 320)
-        let height = min(webView.bounds.height, 160)
         let config = WKSnapshotConfiguration()
-        config.rect = CGRect(x: 0, y: 0, width: width, height: height)
+        config.rect = webView.bounds
+        config.snapshotWidth = NSNumber(value: Double(min(webView.bounds.width, UI.tabThumbnailSnapshotWidth)))
+        config.afterScreenUpdates = true
 
-        webView.takeSnapshot(with: config) { [weak self, weak webView] image, _ in
-            guard let self, let webView else { return }
+        webView.takeSnapshot(with: config) { [weak self, weak webView] image, error in
+            guard error == nil, let self, let webView, let image else { return }
             self.tabManager.updateThumbnail(for: webView, image: image)
         }
     }
@@ -2026,7 +2033,7 @@ final class MainWindowController: NSWindowController {
             tabStripStackView.addArrangedSubview(chip)
         }
 
-        layoutTabStripAndRevealActive()
+        syncToolbarLayout()
     }
 
     private func confirmCloseProtectedTab() -> Bool {
@@ -2065,7 +2072,17 @@ final class MainWindowController: NSWindowController {
         let reservedRight = rightPanelWidth + 10 + 20 + 8 + 12
         let leftReserved = maxButtonX + 168
         let available = window.frame.width - leftReserved - reservedRight
-        tabStripWidthConstraint?.constant = min(640, max(220, available))
+        let maximumTabStripWidth = min(640, max(220, available))
+        let tabCount = tabStripStackView.arrangedSubviews.count
+        let tabContentWidth = tabCount > 0
+            ? (CGFloat(tabCount) * UI.tabChipSize.width) + (CGFloat(tabCount - 1) * tabStripStackView.spacing)
+            : UI.tabChipSize.width
+        tabStripWidthConstraint?.constant = min(maximumTabStripWidth, tabContentWidth)
+
+        // Apply the new strip width before centering its contents. Without this,
+        // deleting tabs can center the last tab using the previous wider bounds,
+        // then clip its trailing edge when the constraint takes effect.
+        toolbarContainer.contentLayoutView.layoutSubtreeIfNeeded()
         layoutTabStripAndRevealActive()
     }
 
@@ -2104,12 +2121,14 @@ final class MainWindowController: NSWindowController {
         let contentHeight = max(tabStripContainer.bounds.height, UI.tabChipSize.height)
         let chipWidth = tabStripStackView.fittingSize.width
         let viewportWidth = tabStripContainer.bounds.width
+        let hasOverflow = chipWidth > viewportWidth + 0.5
+        tabStripScrollView.horizontalScrollElasticity = hasOverflow ? .automatic : .none
         let documentWidth = max(chipWidth, viewportWidth)
         let centeredX = chipWidth < viewportWidth ? (viewportWidth - chipWidth) * 0.5 : 0
         tabStripDocumentView.frame = CGRect(x: 0, y: 0, width: documentWidth, height: contentHeight)
         tabStripStackView.frame = CGRect(x: centeredX, y: 0, width: chipWidth, height: contentHeight)
 
-        if chipWidth > viewportWidth,
+        if hasOverflow,
            let activeChip = tabStripStackView.arrangedSubviews.first(where: {
             ($0 as? TabChipView)?.isActiveChip == true
         }) {
@@ -3268,6 +3287,10 @@ private final class HorizontalOnlyClipView: NSClipView {
         constrained.origin.y = 0
         return constrained
     }
+
+    override func setBoundsOrigin(_ newOrigin: NSPoint) {
+        super.setBoundsOrigin(NSPoint(x: newOrigin.x, y: 0))
+    }
 }
 
 private class NonDraggableView: NSView {
@@ -3285,6 +3308,15 @@ private final class NonInteractiveStackView: NSStackView {
 
 private class NonDraggableScrollView: NSScrollView {
     override var mouseDownCanMoveWindow: Bool { false }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard abs(event.scrollingDeltaX) > 0.01 else { return }
+        super.scrollWheel(with: event)
+
+        let horizontalOrigin = NSPoint(x: contentView.bounds.origin.x, y: 0)
+        contentView.scroll(to: horizontalOrigin)
+        reflectScrolledClipView(contentView)
+    }
 }
 
 private final class TabInteractionView: NonDraggableView {
@@ -3598,7 +3630,8 @@ private final class TabChipView: NSView {
         layer?.shadowOffset = CGSize(width: 0, height: -1)
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailView.imageScaling = .scaleAxesIndependently
+        thumbnailView.imageScaling = .scaleProportionallyUpOrDown
+        thumbnailView.imageAlignment = .alignCenter
         thumbnailView.image = thumbnail
         thumbnailView.wantsLayer = true
         thumbnailView.layer?.cornerRadius = 1

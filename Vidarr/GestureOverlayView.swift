@@ -82,6 +82,26 @@ final class GestureOverlayView: NSView {
 
     override var isOpaque: Bool { false }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        hitTarget(at: point, for: NSApp.currentEvent?.type)
+    }
+
+    func hitTarget(at point: NSPoint, for eventType: NSEvent.EventType?) -> NSView? {
+        guard bounds.contains(point), Self.capturesEvent(eventType) else {
+            return nil
+        }
+        return self
+    }
+
+    static func capturesEvent(_ type: NSEvent.EventType?) -> Bool {
+        switch type {
+        case .scrollWheel, .rightMouseDown, .rightMouseDragged, .rightMouseUp:
+            return true
+        default:
+            return false
+        }
+    }
+
     override func scrollWheel(with event: NSEvent) {
         // Normalize to stroke direction. X and Y use independent signs.
         let xSign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1

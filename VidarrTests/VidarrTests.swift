@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Testing
 import VidarrCore
@@ -150,6 +151,44 @@ struct GestureRecognizerTests {
         let allowedNames: Set<String> = ["Left"]
         let result = recognizer.recognize(points: points, allowedNames: allowedNames)
         #expect(result == nil)
+    }
+}
+
+struct GestureOverlayEventRoutingTests {
+    @Test func passesStandardWebInteractionThroughToWebView() {
+        #expect(!GestureOverlayView.capturesEvent(.mouseMoved))
+        #expect(!GestureOverlayView.capturesEvent(.cursorUpdate))
+        #expect(!GestureOverlayView.capturesEvent(.leftMouseDown))
+        #expect(!GestureOverlayView.capturesEvent(.leftMouseDragged))
+        #expect(!GestureOverlayView.capturesEvent(.leftMouseUp))
+        #expect(!GestureOverlayView.capturesEvent(nil))
+    }
+
+    @Test func retainsGestureInputCapture() {
+        #expect(GestureOverlayView.capturesEvent(.scrollWheel))
+        #expect(GestureOverlayView.capturesEvent(.rightMouseDown))
+        #expect(GestureOverlayView.capturesEvent(.rightMouseDragged))
+        #expect(GestureOverlayView.capturesEvent(.rightMouseUp))
+    }
+
+    @Test @MainActor func overlayHitTestingPassesWebInteractionThrough() {
+        let overlay = GestureOverlayView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let point = NSPoint(x: 120, y: 160)
+
+        #expect(overlay.hitTarget(at: point, for: .mouseMoved) == nil)
+        #expect(overlay.hitTarget(at: point, for: .cursorUpdate) == nil)
+        #expect(overlay.hitTarget(at: point, for: .leftMouseDown) == nil)
+        #expect(overlay.hitTarget(at: point, for: .leftMouseUp) == nil)
+    }
+
+    @Test @MainActor func overlayHitTestingStillOwnsGestureEvents() {
+        let overlay = GestureOverlayView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let point = NSPoint(x: 120, y: 160)
+
+        #expect(overlay.hitTarget(at: point, for: .scrollWheel) === overlay)
+        #expect(overlay.hitTarget(at: point, for: .rightMouseDown) === overlay)
+        #expect(overlay.hitTarget(at: point, for: .rightMouseDragged) === overlay)
+        #expect(overlay.hitTarget(at: point, for: .rightMouseUp) === overlay)
     }
 }
 

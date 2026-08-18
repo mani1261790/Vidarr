@@ -16,6 +16,109 @@ private final class PDFExportContext {
     }
 }
 
+private final class TabGroupMenuRowView: NSView {
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let action: () -> Void
+    private var pointerInside = false {
+        didSet {
+            titleLabel.textColor = pointerInside ? .selectedMenuItemTextColor : .labelColor
+            needsDisplay = true
+        }
+    }
+
+    init(
+        title: String,
+        symbolName: String,
+        color: NSColor,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.action = action
+        super.init(frame: NSRect(x: 0, y: 0, width: 246, height: 28))
+
+        let checkView = NSImageView()
+        checkView.image = isSelected
+            ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+            : nil
+        checkView.symbolConfiguration = .init(pointSize: 11, weight: .semibold)
+        checkView.contentTintColor = .labelColor
+        checkView.translatesAutoresizingMaskIntoConstraints = false
+
+        let iconView = NSImageView()
+        iconView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: title)
+        iconView.symbolConfiguration = .init(pointSize: 14, weight: .medium)
+        iconView.contentTintColor = color
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        titleLabel.stringValue = title
+        titleLabel.font = .menuFont(ofSize: 0)
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(checkView)
+        addSubview(iconView)
+        addSubview(titleLabel)
+        NSLayoutConstraint.activate([
+            checkView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            checkView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            checkView.widthAnchor.constraint(equalToConstant: 14),
+            checkView.heightAnchor.constraint(equalToConstant: 14),
+
+            iconView.leadingAnchor.constraint(equalTo: checkView.trailingAnchor, constant: 7),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 17),
+            iconView.heightAnchor.constraint(equalToConstant: 17),
+
+            titleLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.menuItem)
+        setAccessibilityLabel(title)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        _ = event
+        pointerInside = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        _ = event
+        pointerInside = false
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        enclosingMenuItem?.menu?.cancelTracking()
+        action()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if pointerInside {
+            NSColor.selectedContentBackgroundColor.setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 1), xRadius: 5, yRadius: 5).fill()
+        }
+        super.draw(dirtyRect)
+    }
+}
+
 final class MainWindowController: NSWindowController {
     private enum UI {
         static let toolbarHeight: CGFloat = 54
@@ -95,6 +198,7 @@ final class MainWindowController: NSWindowController {
     private var fullScreenMouseMonitor: Any?
     private var fullScreenHideTimer: Timer?
     private var isFullScreenToolbarHidden = false
+    private var commandPaletteWindowController: CommandPaletteWindowController?
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -334,6 +438,7 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.image = Self.makeTabGroupGridImage()
         groupSelectorButton.contentTintColor = Self.toolbarSecondaryForegroundColor
         groupSelectorButton.wantsLayer = false
+        groupSelectorButton.setAccessibilityLabel("タブグループを選択")
 
         newTabButton.translatesAutoresizingMaskIntoConstraints = false
         newTabButton.target = self
@@ -418,7 +523,6 @@ final class MainWindowController: NSWindowController {
             tabStripContainer.centerXAnchor.constraint(equalTo: toolbarContent.centerXAnchor),
             tabStripContainer.topAnchor.constraint(equalTo: toolbarContent.topAnchor, constant: 1),
             tabStripContainer.bottomAnchor.constraint(equalTo: toolbarContent.bottomAnchor, constant: -1),
-            groupSelectorButton.leadingAnchor.constraint(greaterThanOrEqualTo: navigationButtonRow.trailingAnchor, constant: 10),
             tabStripContainer.leadingAnchor.constraint(greaterThanOrEqualTo: groupSelectorButton.trailingAnchor, constant: 6),
 
             tabStripScrollView.topAnchor.constraint(equalTo: tabStripContainer.topAnchor),
@@ -601,25 +705,81 @@ final class MainWindowController: NSWindowController {
 
     @objc private func didTapGroupSelector() {
         let menu = NSMenu()
-        for group in BrowserTabGroup.allCases {
-            let item = NSMenuItem(title: group.displayName, action: #selector(didSelectGroupMenuItem(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = group.rawValue
-            item.state = (group == tabManager.currentGroup) ? .on : .off
+        for group in tabManager.availableGroups {
+            let item = NSMenuItem(title: group.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = group.id
+            item.view = TabGroupMenuRowView(
+                title: group.displayName,
+                symbolName: tabGroupSymbolName(for: group),
+                color: accentColor(for: group),
+                isSelected: group == tabManager.currentGroup
+            ) { [weak self] in
+                self?.tabManager.switchGroup(group)
+            }
             menu.addItem(item)
+        }
+        if tabManager.currentGroup.kind == .custom {
+            menu.addItem(.separator())
+            let rename = NSMenuItem(title: "このグループの名前を変更…", action: #selector(didRenameCurrentTabGroup), keyEquivalent: "")
+            rename.target = self
+            rename.image = menuImage(symbolName: "pencil", color: .secondaryLabelColor)
+            menu.addItem(rename)
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: groupSelectorButton.bounds.height + 4), in: groupSelectorButton)
     }
 
     @objc private func didSelectGroupMenuItem(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let group = BrowserTabGroup(rawValue: raw) else { return }
+        guard let id = sender.representedObject as? String,
+              let group = tabManager.availableGroups.first(where: { $0.id == id }) else { return }
         tabManager.switchGroup(group)
+    }
+
+    @objc private func didRenameCurrentTabGroup() {
+        let group = tabManager.currentGroup
+        guard group.kind == .custom else { return }
+        let alert = NSAlert()
+        alert.messageText = "タブグループ名を変更"
+        let field = NSTextField(string: group.displayName)
+        field.frame.size = NSSize(width: 280, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "変更")
+        alert.addButton(withTitle: "キャンセル")
+        guard alert.runModal() == .alertFirstButtonReturn,
+              TabGroupStore.shared.rename(id: group.id, to: field.stringValue),
+              let renamed = tabManager.availableGroups.first(where: { $0.id == group.id }) else { return }
+        tabManager.switchGroup(renamed)
+    }
+
+    @objc private func didMoveCurrentTabGroupEarlier() {
+        if TabGroupStore.shared.move(id: tabManager.currentGroup.id, by: -1) { rebuildTabStrip() }
+    }
+
+    @objc private func didMoveCurrentTabGroupLater() {
+        if TabGroupStore.shared.move(id: tabManager.currentGroup.id, by: 1) { rebuildTabStrip() }
+    }
+
+    @objc private func didExportTabGroups() {
+        guard let data = tabManager.exportTabGroupsData() else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "Vidarr Tab Groups.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
     // MARK: - Menu Actions
     func menuNewTab() {
         animateNewTabOpenFromToolbar()
+    }
+
+    func openExternalURL(_ url: URL, in group: BrowserTabGroup? = nil) {
+        if let group {
+            tabManager.switchGroup(group)
+            tabManager.newTab(url: url, in: group)
+        } else {
+            tabManager.newTab(url: url)
+        }
+        window?.makeKeyAndOrderFront(nil)
     }
 
     func menuCloseTab() {
@@ -652,6 +812,60 @@ final class MainWindowController: NSWindowController {
 
     func menuFocusTabSearch() {
         window?.makeFirstResponder(tabSearchField)
+    }
+
+    func showCommandPalette() {
+        let controller = commandPaletteWindowController ?? CommandPaletteWindowController { [weak self] in
+            self?.commandPaletteItems() ?? []
+        }
+        commandPaletteWindowController = controller
+        controller.show(relativeTo: window)
+    }
+
+    private func commandPaletteItems() -> [CommandPaletteItem] {
+        let commands: [CommandPaletteItem] = [
+            CommandPaletteItem(title: "新しいタブ", detail: "操作", symbol: "plus", searchText: "new tab 新規") { [weak self] in self?.menuNewTab() },
+            CommandPaletteItem(title: "現在のページを再読み込み", detail: "操作", symbol: "arrow.clockwise", searchText: "reload 更新") { [weak self] in self?.menuReload() },
+            CommandPaletteItem(title: "すべてのタブを再読み込み", detail: "操作", symbol: "arrow.triangle.2.circlepath", searchText: "reload all") { [weak self] in self?.menuReloadAllTabs() },
+            CommandPaletteItem(title: "閉じたタブを復元", detail: "操作", symbol: "arrow.uturn.backward", searchText: "reopen restore") { [weak self] in self?.menuReopenClosedTab() },
+            CommandPaletteItem(title: "アドレスバーへ移動", detail: "操作", symbol: "location", searchText: "address location url") { [weak self] in self?.menuFocusAddressBar() }
+        ]
+
+        let tabs = tabManager.allTabSearchItems.map { item in
+            let sleeping = item.isSleeping ? " · 休止中" : ""
+            return CommandPaletteItem(
+                title: item.title,
+                detail: "タブ · \(item.group.displayName)\(sleeping) · \(item.url?.absoluteString ?? "")",
+                symbol: item.isSleeping ? "moon.zzz" : "rectangle",
+                searchText: "tab \(item.group.displayName) \(item.url?.absoluteString ?? "")"
+            ) { [weak self] in self?.tabManager.selectTab(item) }
+        }
+
+        let bookmarks = BookmarkStore.shared.all().map { item in
+            CommandPaletteItem(
+                title: item.title,
+                detail: "ブックマーク · \(item.urlString)",
+                symbol: "star",
+                searchText: "bookmark お気に入り \(item.urlString)"
+            ) { [weak self] in
+                guard let url = item.url else { return }
+                self?.menuOpenExternalListURL(url)
+            }
+        }
+
+        let history = BrowsingHistoryStore.shared.all().map { item in
+            CommandPaletteItem(
+                title: item.title,
+                detail: "履歴 · \(item.urlString)",
+                symbol: "clock",
+                searchText: "history \(item.urlString)"
+            ) { [weak self] in
+                guard let url = item.url else { return }
+                self?.menuOpenExternalListURL(url)
+            }
+        }
+
+        return commands + tabs + bookmarks + history
     }
 
     func menuSelectNextTab() {
@@ -1114,9 +1328,12 @@ final class MainWindowController: NSWindowController {
             window.__vidarrLongPressInstalled = true;
 
             const HOLD_MS = 380;
+            const INDICATOR_DELAY_MS = 160;
+            const INDICATOR_PROGRESS_MS = HOLD_MS - INDICATOR_DELAY_MS;
             const MOVE_TOLERANCE = 14;
             const SELECTION_MIN_LENGTH = 1;
             var timer = null;
+            var indicatorTimer = null;
             var activeTargetHref = null;
             var startX = 0;
             var startY = 0;
@@ -1223,6 +1440,10 @@ final class MainWindowController: NSWindowController {
                     clearTimeout(timer);
                     timer = null;
                 }
+                if (indicatorTimer !== null) {
+                    clearTimeout(indicatorTimer);
+                    indicatorTimer = null;
+                }
             }
 
             function ensureHoldIndicator() {
@@ -1263,7 +1484,7 @@ final class MainWindowController: NSWindowController {
                 holdRing.style.transition = 'none';
                 holdRing.style.strokeDashoffset = '103.67';
                 requestAnimationFrame(() => {
-                    holdRing.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                    holdRing.style.transition = `stroke-dashoffset ${INDICATOR_PROGRESS_MS}ms linear`;
                     holdRing.style.strokeDashoffset = '0';
                 });
             }
@@ -1346,9 +1567,14 @@ final class MainWindowController: NSWindowController {
                 activeTargetHref = href;
                 startX = event.clientX;
                 startY = event.clientY;
-                showHoldIndicator(startX, startY);
                 clearTimer();
+                indicatorTimer = setTimeout(() => {
+                    indicatorTimer = null;
+                    if (!activeTargetHref) { return; }
+                    showHoldIndicator(startX, startY);
+                }, INDICATOR_DELAY_MS);
                 timer = setTimeout(() => {
+                    timer = null;
                     if (!activeTargetHref) { return; }
                     window.__vidarrSuppressLongPressClick = true;
                     window.webkit.messageHandlers.\(Self.longPressLinkMessageName).postMessage({
@@ -2092,6 +2318,25 @@ final class MainWindowController: NSWindowController {
         groupSelectorButton.toolTip = tabManager.currentGroup.displayName
     }
 
+    private func tabGroupSymbolName(for group: BrowserTabGroup) -> String {
+        group.displaySymbolName
+    }
+
+    private func menuImage(
+        symbolName: String,
+        color: NSColor,
+        accessibilityDescription: String? = nil
+    ) -> NSImage? {
+        let size = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let hierarchy = NSImage.SymbolConfiguration(hierarchicalColor: color)
+        guard let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)?
+            .withSymbolConfiguration(size.applying(hierarchy)) else { return nil }
+        // NSMenu renders template images monochromatically. Keep the configured
+        // symbol as a non-template image so each group retains its own color.
+        image.isTemplate = false
+        return image
+    }
+
     private func refreshNavigationButtons() {
         backButton.isEnabled = tabManager.canCurrentTabGoBack
         forwardButton.isEnabled = tabManager.canCurrentTabGoForward
@@ -2101,15 +2346,20 @@ final class MainWindowController: NSWindowController {
     }
 
     private func accentColorForCurrentGroup() -> NSColor {
-        switch tabManager.currentGroup {
-        case .regular:
-            return NSColor.systemBlue
-        case .privateMode:
-            return NSColor.systemPurple
-        case .work:
-            return NSColor.systemGreen
-        case .research:
-            return NSColor.systemPink
+        accentColor(for: tabManager.currentGroup)
+    }
+
+    private func accentColor(for group: BrowserTabGroup) -> NSColor {
+        switch group.displayColorID {
+        case "blue": return .systemBlue
+        case "purple": return .systemPurple
+        case "green": return .systemGreen
+        case "pink": return .systemPink
+        case "orange": return .systemOrange
+        case "red": return .systemRed
+        case "teal": return .systemTeal
+        case "indigo": return .systemIndigo
+        default: return .controlAccentColor
         }
     }
 
@@ -2478,6 +2728,7 @@ extension MainWindowController: WKNavigationDelegate {
            !temporarilyAllowedHosts.contains(host),
            !BrowserPreferences.shared.isHarmfulSiteAllowed(for: host),
            let warning = HarmfulSiteGuard.warning(for: url) {
+            PrivacyReportStore.shared.record(.harmfulSite, host: host)
             decisionHandler(.cancel)
             presentHarmfulSiteWarning(
                 warning: warning,
@@ -2502,6 +2753,9 @@ extension MainWindowController: WKNavigationDelegate {
         }
 
         decisionHandler(.cancel)
+        let originalCount = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.count ?? 0
+        let sanitizedCount = URLComponents(url: sanitized, resolvingAgainstBaseURL: false)?.queryItems?.count ?? 0
+        PrivacyReportStore.shared.record(.trackingParameter, host: url.host, count: max(1, originalCount - sanitizedCount))
         webView.load(URLRequest(url: sanitized))
     }
 
@@ -2763,6 +3017,7 @@ extension MainWindowController: WKNavigationDelegate {
         }
 
         if let saved = MediaPermissionStore.shared.decision(for: originHost, kind: kind) {
+            PrivacyReportStore.shared.record(saved == .allow ? .permissionAllowed : .permissionDenied, host: originHost)
             decisionHandler(saved == .allow ? .grant : .deny)
             return
         }
@@ -2788,6 +3043,7 @@ extension MainWindowController: WKNavigationDelegate {
         presentAlert(alert) { response in
             guard response == .alertFirstButtonReturn else {
                 MediaPermissionStore.shared.setDecision(.deny, for: originHost, kind: kind)
+                PrivacyReportStore.shared.record(.permissionDenied, host: originHost)
                 decisionHandler(.deny)
                 return
             }
@@ -2819,6 +3075,7 @@ extension MainWindowController: WKNavigationDelegate {
 
             group.notify(queue: .main) {
                 MediaPermissionStore.shared.setDecision(allowed ? .allow : .deny, for: originHost, kind: kind)
+                PrivacyReportStore.shared.record(allowed ? .permissionAllowed : .permissionDenied, host: originHost)
                 decisionHandler(allowed ? .grant : .deny)
             }
         }
@@ -2933,6 +3190,7 @@ extension MainWindowController: WKUIDelegate {
 
         if navigationAction.targetFrame == nil {
             guard shouldAllowPopup(for: navigationAction, opener: webView) else {
+                PrivacyReportStore.shared.record(.popup, host: navigationAction.request.url?.host ?? webView.url?.host)
                 return nil
             }
 

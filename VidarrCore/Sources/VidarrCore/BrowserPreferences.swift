@@ -42,10 +42,10 @@ public final class BrowserPreferences {
             case .closeAllTabs: return "LL（↓→↓→）"
             case .restoreClosedTab: return "U（↓→↑）"
             case .reload: return "O（↑→↓←）"
-            case .reloadAll: return "OO"
+            case .reloadAll: return "◎"
             case .back: return "↑→"
             case .forward: return "↑←"
-            case .search: return "S（←↓→↓←）"
+            case .search: return "S（斜めに折り返す）"
             case .newTab: return "↓←"
             }
         }
@@ -63,13 +63,13 @@ public final class BrowserPreferences {
             case .reload:
                 return "O 字で、今のタブを再読み込みします。"
             case .reloadAll:
-                return "O を 2 回続けて書いて、すべてのタブを再読み込みします。"
+                return "円を続けて 2 周書いて、すべてのタブを再読み込みします。"
             case .back:
                 return "上に払ってから右へ曲げて、ひとつ前のページへ戻ります。"
             case .forward:
                 return "上に払ってから左へ曲げて、次のページへ進みます。"
             case .search:
-                return "S 字に書いて、検索 UI を開きます。"
+                return "斜めに折り返す S 字を書いて、検索 UI を開きます。"
             case .newTab:
                 return "左下へ曲げて、新しいタブを開きます。"
             }
@@ -115,9 +115,79 @@ public final class BrowserPreferences {
             case .forward:
                 return [CGPoint(x: 0.7, y: 0.78), CGPoint(x: 0.7, y: 0.24), CGPoint(x: 0.22, y: 0.24)]
             case .search:
-                return [CGPoint(x: 0.76, y: 0.22), CGPoint(x: 0.34, y: 0.22), CGPoint(x: 0.24, y: 0.5), CGPoint(x: 0.7, y: 0.5), CGPoint(x: 0.6, y: 0.78), CGPoint(x: 0.22, y: 0.78)]
+                // GestureRecognizer の S テンプレートと同じ、上下を斜めに
+                // 折り返す形。角張った横・縦・横の記号にはしない。
+                return [
+                    CGPoint(x: 0.17, y: 0.86),
+                    CGPoint(x: 0.4, y: 0.94),
+                    CGPoint(x: 0.71, y: 0.78),
+                    CGPoint(x: 0.88, y: 0.6),
+                    CGPoint(x: 0.58, y: 0.48),
+                    CGPoint(x: 0.31, y: 0.35),
+                    CGPoint(x: 0.13, y: 0.15)
+                ]
             case .newTab:
                 return [CGPoint(x: 0.72, y: 0.22), CGPoint(x: 0.72, y: 0.74), CGPoint(x: 0.22, y: 0.74)]
+            }
+        }
+    }
+
+    public enum GesturePattern: String, CaseIterable, Hashable {
+        case left = "Left"
+        case right = "Right"
+        case downRight = "DownRight"
+        case downRightDownRight = "DownRightDownRight"
+        case u = "U"
+        case o = "O"
+        case oo = "OO"
+        case upRight = "UpRight"
+        case upLeft = "UpLeft"
+        case downLeft = "DownLeft"
+        case s = "S"
+
+        public var label: String {
+            switch self {
+            case .left: return "←"
+            case .right: return "→"
+            case .downRight: return "↓→"
+            case .downRightDownRight: return "↓→↓→"
+            case .u: return "U"
+            case .o: return "O"
+            case .oo: return "◎"
+            case .upRight: return "↑→"
+            case .upLeft: return "↑←"
+            case .downLeft: return "↓←"
+            case .s: return "S"
+            }
+        }
+
+        public var defaultAction: GestureOption {
+            switch self {
+            case .left: return .nextTab
+            case .right: return .previousTab
+            case .downRight: return .closeTab
+            case .downRightDownRight: return .closeAllTabs
+            case .u: return .restoreClosedTab
+            case .o: return .reload
+            case .oo: return .reloadAll
+            case .upRight: return .back
+            case .upLeft: return .forward
+            case .downLeft: return .newTab
+            case .s: return .search
+            }
+        }
+
+        public var strokePoints: [CGPoint] { defaultAction.strokePoints }
+    }
+
+    public enum GestureInputKind: String, CaseIterable, Hashable {
+        case touchSurface
+        case rightDrag
+
+        public var displayName: String {
+            switch self {
+            case .touchSurface: return "トラックパッド / Magic Mouse"
+            case .rightDrag: return "マウスの右ドラッグ"
             }
         }
     }
@@ -187,6 +257,8 @@ public final class BrowserPreferences {
         static let preferredDownloadDirectoryBookmark = "prefs.preferredDownloadDirectoryBookmark"
         static let preferredDownloadDirectoryPath = "prefs.preferredDownloadDirectoryPath"
         static let gestureSensitivity = "prefs.gestureSensitivity"
+        static let gestureSensitivityPrefix = "prefs.gestureSensitivity.device."
+        static let gestureActionPrefix = "prefs.gestureAction."
         static let antiTrackingEnabled = "prefs.antiTrackingEnabled"
         static let contentBlockingEnabled = "prefs.contentBlockingEnabled"
         static let contentBlockingDisabledHosts = "prefs.contentBlockingDisabledHosts"
@@ -197,6 +269,8 @@ public final class BrowserPreferences {
         static let sendDoNotTrack = "prefs.sendDoNotTrack"
         static let restoreClosedTabPageHistory = "prefs.restoreClosedTabPageHistory"
         static let reopenTabsOnLaunch = "prefs.reopenTabsOnLaunch"
+        static let tabSleepingEnabled = "prefs.tabSleepingEnabled"
+        static let tabSleepingMinutes = "prefs.tabSleepingMinutes"
         static let appleAccountUserID = "prefs.appleAccountUserID"
         static let appleAccountEmail = "prefs.appleAccountEmail"
         static let appleAccountDisplayName = "prefs.appleAccountDisplayName"
@@ -224,7 +298,9 @@ public final class BrowserPreferences {
             Key.ephemeralModeEnabled: false,
             Key.sendDoNotTrack: true,
             Key.restoreClosedTabPageHistory: true,
-            Key.reopenTabsOnLaunch: true
+            Key.reopenTabsOnLaunch: true,
+            Key.tabSleepingEnabled: true,
+            Key.tabSleepingMinutes: 30
         ])
     }
 
@@ -328,6 +404,43 @@ public final class BrowserPreferences {
         }
     }
 
+    public func gestureSensitivity(for input: GestureInputKind) -> GestureSensitivity {
+        let key = Key.gestureSensitivityPrefix + input.rawValue
+        guard let raw = defaults.string(forKey: key) else { return gestureSensitivity }
+        return GestureSensitivity(rawValue: raw) ?? gestureSensitivity
+    }
+
+    public func setGestureSensitivity(_ sensitivity: GestureSensitivity, for input: GestureInputKind) {
+        defaults.set(sensitivity.rawValue, forKey: Key.gestureSensitivityPrefix + input.rawValue)
+        notifyChanged()
+    }
+
+    public func gestureAction(for pattern: GesturePattern) -> GestureOption? {
+        let key = Key.gestureActionPrefix + pattern.rawValue
+        if let raw = defaults.string(forKey: key) {
+            return GestureOption(rawValue: raw)
+        }
+        return isGestureEnabled(pattern.defaultAction) ? pattern.defaultAction : nil
+    }
+
+    public func setGestureAction(_ action: GestureOption?, for pattern: GesturePattern) {
+        let key = Key.gestureActionPrefix + pattern.rawValue
+        if let action {
+            defaults.set(action.rawValue, forKey: key)
+        } else {
+            defaults.set("disabled", forKey: key)
+        }
+        notifyChanged()
+    }
+
+    public var enabledGesturePatternNames: Set<String> {
+        Set(GesturePattern.allCases.compactMap { gestureAction(for: $0) == nil ? nil : $0.rawValue })
+    }
+
+    public func gesturePatterns(assignedTo action: GestureOption) -> [GesturePattern] {
+        GesturePattern.allCases.filter { gestureAction(for: $0) == action }
+    }
+
     public func isGestureEnabled(_ option: GestureOption) -> Bool {
         if defaults.object(forKey: Key.gestureEnabledPrefix + option.rawValue) == nil {
             return true
@@ -342,6 +455,16 @@ public final class BrowserPreferences {
 
     public var enabledGestureOptions: Set<GestureOption> {
         Set(GestureOption.allCases.filter(isGestureEnabled(_:)))
+    }
+
+    public var tabSleepingEnabled: Bool {
+        get { defaults.bool(forKey: Key.tabSleepingEnabled) }
+        set { defaults.set(newValue, forKey: Key.tabSleepingEnabled); notifyChanged() }
+    }
+
+    public var tabSleepingMinutes: Int {
+        get { max(5, defaults.integer(forKey: Key.tabSleepingMinutes)) }
+        set { defaults.set(max(5, newValue), forKey: Key.tabSleepingMinutes); notifyChanged() }
     }
 
     public var antiTrackingEnabled: Bool {
@@ -497,6 +620,9 @@ public final class BrowserPreferences {
             defaults.removeObject(forKey: Key.preferredDownloadDirectoryBookmark)
             defaults.removeObject(forKey: Key.preferredDownloadDirectoryPath)
             defaults.set(GestureSensitivity.normal.rawValue, forKey: Key.gestureSensitivity)
+            GestureInputKind.allCases.forEach { input in
+                defaults.removeObject(forKey: Key.gestureSensitivityPrefix + input.rawValue)
+            }
             defaults.set(true, forKey: Key.antiTrackingEnabled)
             defaults.set(true, forKey: Key.contentBlockingEnabled)
             defaults.set([], forKey: Key.contentBlockingDisabledHosts)
@@ -507,8 +633,13 @@ public final class BrowserPreferences {
             defaults.set(true, forKey: Key.sendDoNotTrack)
             defaults.set(true, forKey: Key.restoreClosedTabPageHistory)
             defaults.set(true, forKey: Key.reopenTabsOnLaunch)
+            defaults.set(true, forKey: Key.tabSleepingEnabled)
+            defaults.set(30, forKey: Key.tabSleepingMinutes)
             GestureOption.allCases.forEach { option in
                 defaults.set(true, forKey: Key.gestureEnabledPrefix + option.rawValue)
+            }
+            GesturePattern.allCases.forEach { pattern in
+                defaults.removeObject(forKey: Key.gestureActionPrefix + pattern.rawValue)
             }
         }
     }

@@ -2,7 +2,184 @@ import AppKit
 import CoreGraphics
 import Testing
 import VidarrCore
+import WebKit
 @testable import Vidarr
+
+struct BrowserProfileIsolationTests {
+    @Test @MainActor func persistentWebsiteDataStoresAreUniquePerTabGroup() throws {
+        let suiteName = "VidarrTests.TabGroupDataStores.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let manager = BrowserProfileManager(defaults: defaults)
+
+        let regularStore = manager.websiteDataStore(for: BrowserTabGroup.regular)
+        let workStore = manager.websiteDataStore(for: BrowserTabGroup.work)
+        let researchStore = manager.websiteDataStore(for: BrowserTabGroup.research)
+
+        #expect(regularStore === WKWebsiteDataStore.default())
+        #expect(workStore !== regularStore)
+        #expect(researchStore !== regularStore)
+        #expect(workStore !== researchStore)
+        #expect(workStore.isPersistent)
+        #expect(researchStore.isPersistent)
+        #expect(manager.websiteDataStore(for: BrowserTabGroup.work) === workStore)
+    }
+
+    @Test func legacyDefaultRoutesMigrateToTheRegularTabGroup() throws {
+        let suiteName = "VidarrTests.TabGroupRouteMigration.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(["example.com": BrowserProfile.default.id], forKey: "profiles.routeRules")
+
+        let manager = BrowserProfileManager(defaults: defaults)
+
+        #expect(manager.tabGroupRouteRules["example.com"] == BrowserTabGroup.regular.id)
+    }
+
+    @Test @MainActor func persistentWebsiteDataStoresAreUniquePerProfile() {
+        let profileA = BrowserProfile(id: "11111111-1111-4111-8111-111111111111", name: "A")
+        let profileB = BrowserProfile(id: "22222222-2222-4222-8222-222222222222", name: "B")
+        let manager = BrowserProfileManager.shared
+
+        let storeA = manager.websiteDataStore(for: profileA)
+        let storeB = manager.websiteDataStore(for: profileB)
+
+        #expect(storeA !== storeB)
+        #expect(storeA.isPersistent)
+        #expect(storeB.isPersistent)
+        #expect(storeA.identifier == UUID(uuidString: profileA.id))
+        #expect(storeB.identifier == UUID(uuidString: profileB.id))
+    }
+
+    @Test @MainActor func defaultProfileKeepsTheLegacyDefaultStore() {
+        let store = BrowserProfileManager.shared.websiteDataStore(for: .default)
+        #expect(store === WKWebsiteDataStore.default())
+    }
+
+    @Test @MainActor func profileRoutingUsesTheMostSpecificMatchingDomain() {
+        let rules = [
+            "example.com": "personal",
+            "work.example.com": "work"
+        ]
+        let manager = BrowserProfileManager.shared
+
+        #expect(manager.routedProfileID(for: URL(string: "https://example.com/")!, rules: rules) == "personal")
+        #expect(manager.routedProfileID(for: URL(string: "https://news.example.com/")!, rules: rules) == "personal")
+        #expect(manager.routedProfileID(for: URL(string: "https://docs.work.example.com/")!, rules: rules) == "work")
+        #expect(manager.routedProfileID(for: URL(string: "https://example.org/")!, rules: rules) == nil)
+    }
+}
+
+struct GestureStudioPreferencesTests {
+    @Test func storesAssignmentsAndDeviceSensitivityIndependently() throws {
+        let suiteName = "VidarrTests.GestureStudio.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = BrowserPreferences(defaults: defaults)
+
+        preferences.setGestureAction(.search, for: .o)
+        preferences.setGestureAction(nil, for: .left)
+        preferences.setGestureSensitivity(.low, for: .touchSurface)
+        preferences.setGestureSensitivity(.high, for: .rightDrag)
+
+        #expect(preferences.gestureAction(for: .o) == .search)
+        #expect(preferences.gestureAction(for: .left) == nil)
+        #expect(!preferences.enabledGesturePatternNames.contains("Left"))
+        #expect(preferences.gestureSensitivity(for: .touchSurface) == .low)
+        #expect(preferences.gestureSensitivity(for: .rightDrag) == .high)
+    }
+
+    @Test func defaultAssignmentsCoverEveryActionOnce() throws {
+        let suiteName = "VidarrTests.GestureDefaults.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = BrowserPreferences(defaults: defaults)
+
+        for action in BrowserPreferences.GestureOption.allCases {
+            #expect(preferences.gesturePatterns(assignedTo: action).count == 1)
+        }
+    }
+}
+
+struct TabSleepingTests {
+    @Test @MainActor func inactiveTabSleepsAndRestoresWhenSelected() {
+        let manager = TabManager()
+        manager.newTab(url: URL(string: "about:blank"))
+        manager.openBackgroundTab(url: URL(string: "https://example.com/"))
+
+        manager.sleepInactiveTabs(now: Date().addingTimeInterval(3 * 60 * 60))
+        #expect(manager.sleepingTabCount == 1)
+        #expect(manager.isTabSleeping(at: 1))
+
+        manager.selectTab(index: 1)
+        #expect(manager.sleepingTabCount == 0)
+        #expect(!manager.isTabSleeping(at: 1))
+    }
+}
+
+struct PrivacyReportStoreTests {
+    @Test func aggregatesAndPersistsProtectionEvents() throws {
+        let suiteName = "VidarrTests.PrivacyReport.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PrivacyReportStore(defaults: defaults)
+
+        store.record(.trackingParameter, host: "Example.COM", count: 3)
+        store.record(.popup, host: "example.com")
+
+        #expect(store.total(for: .trackingParameter) == 3)
+        #expect(store.total(for: .popup) == 1)
+        #expect(store.recent().first?.host == "example.com")
+
+        let restored = PrivacyReportStore(defaults: defaults)
+        #expect(restored.total(for: .trackingParameter) == 3)
+    }
+}
+
+@MainActor
+struct TabGroupStoreTests {
+    @Test func decodesLegacyBuiltInGroupIdentifiers() throws {
+        let decoded = try JSONDecoder().decode(BrowserTabGroup.self, from: Data("\"regular\"".utf8))
+        #expect(decoded == .regular)
+        #expect(decoded.displayName == "通常タブグループ")
+    }
+
+    @Test func createsRenamesReordersAndExportsCustomGroups() throws {
+        let suiteName = "VidarrTests.TabGroups.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TabGroupStore(defaults: defaults)
+
+        let group = try #require(store.add(name: "Reading", symbolName: "book.closed", colorID: "orange"))
+        #expect(group.displaySymbolName == "book.closed")
+        #expect(group.displayColorID == "orange")
+        #expect(store.rename(id: group.id, to: "あとで読む"))
+        #expect(store.groups.last?.name == "あとで読む")
+        #expect(store.move(id: group.id, by: -1))
+
+        let data = try #require(store.exportData())
+        let exported = try JSONDecoder().decode([BrowserTabGroup].self, from: data)
+        #expect(exported.contains(where: { $0.id == group.id && $0.name == "あとで読む" }))
+
+        let restored = TabGroupStore(defaults: defaults)
+        let restoredGroup = try #require(restored.groups.first(where: { $0.id == group.id }))
+        #expect(restoredGroup.displaySymbolName == "book.closed")
+        #expect(restoredGroup.displayColorID == "orange")
+    }
+}
+
+struct CommandPaletteTests {
+    @Test func filtersAcrossTitleDetailAndSearchAliases() {
+        let items = [
+            CommandPaletteItem(title: "現在のページを再読み込み", detail: "操作", symbol: "arrow.clockwise", searchText: "reload 更新", action: {}),
+            CommandPaletteItem(title: "Example", detail: "ブックマーク · https://example.com", symbol: "star", searchText: "bookmark", action: {})
+        ]
+
+        #expect(CommandPaletteWindowController.filtered(items, query: "再読み込み").map(\.title) == ["現在のページを再読み込み"])
+        #expect(CommandPaletteWindowController.filtered(items, query: "bookmark example").map(\.title) == ["Example"])
+        #expect(CommandPaletteWindowController.filtered(items, query: "missing").isEmpty)
+    }
+}
 
 struct GestureRecognizerTests {
     private func makeRecognizer() -> GestureRecognizer {

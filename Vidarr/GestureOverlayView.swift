@@ -15,6 +15,7 @@ final class GestureOverlayView: NSView {
     }
 
     weak var actionCenter: ActionCenter?
+    var recognitionHandler: ((GestureResult?) -> Void)?
 
     let config = CaptureConfig()
 
@@ -41,23 +42,13 @@ final class GestureOverlayView: NSView {
     private var latestEventTimestamp: TimeInterval = 0
     private var captureSuppressionUntil: TimeInterval = 0
     private var rightDragLastPointInWindow: NSPoint?
+    private var activeInputKind: BrowserPreferences.GestureInputKind = .touchSurface
     private var sensitivityMultiplier: CGFloat {
-        BrowserPreferences.shared.gestureSensitivity.multiplier
+        BrowserPreferences.shared.gestureSensitivity(for: activeInputKind).multiplier
     }
 
     private var allowedGestureNames: Set<String> {
-        let prefs = BrowserPreferences.shared
-        var names: Set<String> = []
-        if prefs.isGestureEnabled(.back) { names.insert("UpRight") }
-        if prefs.isGestureEnabled(.forward) { names.insert("UpLeft") }
-        if prefs.isGestureEnabled(.closeTab) { names.insert("DownRight") }
-        if prefs.isGestureEnabled(.newTab) { names.insert("DownLeft") }
-        if prefs.isGestureEnabled(.reload) { names.insert("O") }
-        if prefs.isGestureEnabled(.restoreClosedTab) { names.insert("U") }
-        if prefs.isGestureEnabled(.closeAllTabs) { names.insert("DownRightDownRight") }
-        if prefs.isGestureEnabled(.nextTab) { names.insert("Left") }
-        if prefs.isGestureEnabled(.previousTab) { names.insert("Right") }
-        return names
+        BrowserPreferences.shared.enabledGesturePatternNames
     }
 
     private lazy var recognizer = GestureRecognizer(
@@ -114,6 +105,7 @@ final class GestureOverlayView: NSView {
             timestamp: event.timestamp,
             anchorInWindow: event.locationInWindow,
             shouldCommit: shouldCommitImmediately(for: event),
+            inputKind: .touchSurface,
             passthrough: { [weak self] in
                 self?.superScrollWheel(event)
             }
@@ -142,6 +134,7 @@ final class GestureOverlayView: NSView {
             timestamp: event.timestamp,
             anchorInWindow: current,
             shouldCommit: false,
+            inputKind: .rightDrag,
             passthrough: {}
         )
     }
@@ -163,6 +156,7 @@ final class GestureOverlayView: NSView {
         timestamp: TimeInterval,
         anchorInWindow: NSPoint,
         shouldCommit: Bool,
+        inputKind: BrowserPreferences.GestureInputKind,
         passthrough: () -> Void
     ) {
         latestEventTimestamp = timestamp
@@ -173,6 +167,11 @@ final class GestureOverlayView: NSView {
         }
 
         hudAnchorPoint = convert(anchorInWindow, from: nil)
+
+        if state == .idle, activeInputKind != inputKind {
+            activeInputKind = inputKind
+            recentSamples.removeAll()
+        }
 
         switch state {
         case .idle:
@@ -303,6 +302,7 @@ final class GestureOverlayView: NSView {
         }()
 
         if let result = strict ?? relaxed {
+            recognitionHandler?(result)
             performAction(for: result.name)
             if result.name == "Left" || result.name == "Right" {
                 hudView.hideImmediately()
@@ -316,12 +316,14 @@ final class GestureOverlayView: NSView {
         if !captureHasStrongVerticalComponent,
            let horizontal = recognizeHorizontalSwipe(points: capturePoints)
         {
+            recognitionHandler?(horizontal)
             performAction(for: horizontal.name)
             hudView.hideImmediately()
             return
         }
 
         hudView.hideImmediately()
+        recognitionHandler?(nil)
     }
 
     private func recognizeHorizontalSwipe(points: [CGPoint]) -> GestureResult? {
@@ -438,7 +440,14 @@ final class GestureOverlayView: NSView {
         let verticalExcursion = maxY - minY
         guard verticalExcursion <= 20 else { return false }
 
-        let direction: ActionCenter.GestureTabSwitchDirection = displacementX < 0 ? .left : .right
+        let pattern: BrowserPreferences.GesturePattern = displacementX < 0 ? .left : .right
+        guard let action = BrowserPreferences.shared.gestureAction(for: pattern) else { return false }
+        let direction: ActionCenter.GestureTabSwitchDirection
+        switch action {
+        case .nextTab: direction = .left
+        case .previousTab: direction = .right
+        default: return false
+        }
         guard actionCenter?.beginInteractiveTabSwitch(direction: direction) == true else { return false }
 
         interactiveTabSwipeActive = true
@@ -507,42 +516,34 @@ final class GestureOverlayView: NSView {
 
     private func performAction(for name: String) {
         guard let actions = actionCenter else { return }
+        guard let pattern = BrowserPreferences.GesturePattern(rawValue: name),
+              let action = BrowserPreferences.shared.gestureAction(for: pattern) else { return }
 
-        switch name {
-        case "Left":
-            guard BrowserPreferences.shared.isGestureEnabled(.nextTab) else { return }
+        switch action {
+        case .nextTab:
             actions.gestureTabSwitchLeft()
-        case "Right":
-            guard BrowserPreferences.shared.isGestureEnabled(.previousTab) else { return }
+        case .previousTab:
             actions.gestureTabSwitchRight()
-        case "DownRight":
-            guard BrowserPreferences.shared.isGestureEnabled(.closeTab) else { return }
+        case .closeTab:
             actions.tabClose()
             captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
-        case "DownRightDownRight":
-            guard BrowserPreferences.shared.isGestureEnabled(.closeAllTabs) else { return }
+        case .closeAllTabs:
             actions.tabCloseAll()
             captureSuppressionUntil = latestEventTimestamp + config.closeActionSuppressionSeconds
-        case "O":
-            guard BrowserPreferences.shared.isGestureEnabled(.reload) else { return }
+        case .reload:
             actions.reload()
-        case "U":
-            guard BrowserPreferences.shared.isGestureEnabled(.restoreClosedTab) else { return }
+        case .restoreClosedTab:
             actions.tabReopenClosed()
-        case "OO":
-            guard BrowserPreferences.shared.isGestureEnabled(.reloadAll) else { return }
+        case .reloadAll:
             actions.reloadAll()
-        case "UpRight":
-            guard BrowserPreferences.shared.isGestureEnabled(.back) else { return }
+        case .back:
             actions.goBack()
-        case "UpLeft":
-            guard BrowserPreferences.shared.isGestureEnabled(.forward) else { return }
+        case .forward:
             actions.goForward()
-        case "DownLeft":
-            guard BrowserPreferences.shared.isGestureEnabled(.newTab) else { return }
+        case .newTab:
             actions.newTab()
-        default:
-            break
+        case .search:
+            actions.search()
         }
     }
 }

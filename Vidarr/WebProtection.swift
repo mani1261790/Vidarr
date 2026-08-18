@@ -2,7 +2,7 @@ import Foundation
 import VidarrCore
 import WebKit
 
-final class WebContentBlocker {
+final class WebContentBlocker: NSObject, WKScriptMessageHandler {
     static let shared = WebContentBlocker()
 
     private let ruleListIdentifier = "VidarrContentBlockRules"
@@ -10,10 +10,13 @@ final class WebContentBlocker {
     private var cachedRuleSource: String?
     private var isCompiling = false
     private var pending: [(WKContentRuleList?) -> Void] = []
+    private let reportHandlerName = "vidarrPrivacyReport"
 
-    private init() {}
+    private override init() { super.init() }
 
     func configure(userContentController controller: WKUserContentController) {
+        controller.removeScriptMessageHandler(forName: reportHandlerName)
+        controller.add(self, name: reportHandlerName)
         installPrivacyScripts(on: controller)
         applyContentRulesIfNeeded(to: controller)
     }
@@ -40,6 +43,33 @@ final class WebContentBlocker {
                     forMainFrameOnly: false
                 )
             )
+        }
+        if BrowserPreferences.shared.contentBlockingEnabled {
+            controller.addUserScript(
+                WKUserScript(
+                    source: Self.blockedElementReportScriptSource,
+                    injectionTime: .atDocumentEnd,
+                    forMainFrameOnly: true
+                )
+            )
+        }
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        _ = userContentController
+        guard message.name == reportHandlerName,
+              let body = message.body as? [String: Any],
+              let type = body["type"] as? String else { return }
+        let host = message.webView?.url?.host
+        switch type {
+        case "blockedElements":
+            PrivacyReportStore.shared.record(.blockedElement, host: host, count: (body["count"] as? NSNumber)?.intValue ?? 1)
+        case "blockedRequests":
+            PrivacyReportStore.shared.record(.blockedRequest, host: host, count: (body["count"] as? NSNumber)?.intValue ?? 1)
+        case "popup":
+            PrivacyReportStore.shared.record(.popup, host: host)
+        default:
+            break
         }
     }
 
@@ -108,10 +138,32 @@ final class WebContentBlocker {
 
       window.open = function(...args) {
         if (!hasUserActivation()) {
+          try { window.webkit.messageHandlers.vidarrPrivacyReport.postMessage({ type: 'popup' }); } catch (_) {}
           return null;
         }
         return nativeOpen(...args);
       };
+    })();
+    """
+
+    private static let blockedElementReportScriptSource = """
+    (() => {
+      const blockedTokens = ['doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'google-analytics.com', 'googletagmanager.com', 'amazon-adsystem.com', 'facebook.net', 'hotjar.com', 'clarity.ms', 'adnxs.com', 'criteo.com', 'taboola.com', 'outbrain.com'];
+      const report = () => {
+        try {
+          const urls = new Set();
+          document.querySelectorAll('[src],[href]').forEach((node) => {
+            const raw = node.getAttribute('src') || node.getAttribute('href');
+            if (!raw) return;
+            let absolute = raw;
+            try { absolute = new URL(raw, document.baseURI).href; } catch (_) {}
+            if (blockedTokens.some((token) => absolute.includes(token))) urls.add(absolute);
+          });
+          if (urls.size > 0) window.webkit.messageHandlers.vidarrPrivacyReport.postMessage({ type: 'blockedRequests', count: urls.size });
+        } catch (_) {}
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', report, { once: true });
+      else report();
     })();
     """
 

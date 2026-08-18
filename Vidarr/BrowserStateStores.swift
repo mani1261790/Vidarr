@@ -110,6 +110,100 @@ final class BrowserSessionStore {
     }
 }
 
+final class TabGroupStore {
+    static var shared = TabGroupStore()
+    static let didChangeNotification = Notification.Name("TabGroupStoreDidChange")
+
+    private enum Key { static let groups = "tabGroups.definitions" }
+    private let defaults: UserDefaults
+    private(set) var groups: [BrowserTabGroup]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Key.groups),
+           let decoded = try? JSONDecoder().decode([BrowserTabGroup].self, from: data) {
+            groups = Self.normalized(decoded)
+        } else {
+            groups = BrowserTabGroup.builtIns
+        }
+    }
+
+    static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = TabGroupStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
+    }
+
+    @discardableResult
+    func add(
+        name rawName: String,
+        symbolName: String? = nil,
+        colorID: String? = nil
+    ) -> BrowserTabGroup? {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        let resolvedSymbol = symbolName.flatMap { BrowserTabGroup.selectableSymbolNames.contains($0) ? $0 : nil }
+        let resolvedColor = colorID.flatMap { BrowserTabGroup.selectableColorIDs.contains($0) ? $0 : nil }
+        let group = BrowserTabGroup(
+            id: UUID().uuidString.lowercased(),
+            name: name,
+            customSymbolName: resolvedSymbol,
+            customColorID: resolvedColor
+        )
+        groups.append(group)
+        persist()
+        return group
+    }
+
+    func rename(id: String, to rawName: String) -> Bool {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let index = groups.firstIndex(where: { $0.id == id }),
+              groups[index].kind == .custom else { return false }
+        groups[index].name = name
+        persist()
+        return true
+    }
+
+    func move(id: String, by offset: Int) -> Bool {
+        guard let source = groups.firstIndex(where: { $0.id == id }) else { return false }
+        let target = min(max(0, source + offset), groups.count - 1)
+        guard source != target else { return false }
+        let group = groups.remove(at: source)
+        groups.insert(group, at: target)
+        persist()
+        return true
+    }
+
+    func remove(id: String) -> Bool {
+        guard let index = groups.firstIndex(where: { $0.id == id }),
+              groups[index].kind == .custom else { return false }
+        groups.remove(at: index)
+        persist()
+        return true
+    }
+
+    func exportData() -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try? encoder.encode(groups)
+    }
+
+    private static func normalized(_ decoded: [BrowserTabGroup]) -> [BrowserTabGroup] {
+        var seen = Set<String>()
+        var output = decoded.filter { seen.insert($0.id).inserted }
+        for builtIn in BrowserTabGroup.builtIns where !seen.contains(builtIn.id) {
+            output.append(builtIn)
+        }
+        return output
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(groups) else { return }
+        defaults.set(data, forKey: Key.groups)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+}
+
 enum MediaPermissionKind: String, Codable {
     case camera
     case microphone
@@ -196,6 +290,108 @@ final class MediaPermissionStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(decisions) else { return }
         defaults.set(data, forKey: Key.decisions)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+    }
+}
+
+enum PrivacyEventKind: String, Codable, CaseIterable {
+    case blockedElement
+    case blockedRequest
+    case trackingParameter
+    case popup
+    case harmfulSite
+    case permissionAllowed
+    case permissionDenied
+
+    var title: String {
+        switch self {
+        case .blockedElement: return "広告・追跡要素を非表示"
+        case .blockedRequest: return "広告・追跡リクエストをブロック"
+        case .trackingParameter: return "追跡パラメータを除去"
+        case .popup: return "ポップアップをブロック"
+        case .harmfulSite: return "危険なサイトを警告"
+        case .permissionAllowed: return "サイト権限を許可"
+        case .permissionDenied: return "サイト権限を拒否"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .blockedElement, .blockedRequest: return "hand.raised"
+        case .trackingParameter: return "link"
+        case .popup: return "macwindow.badge.minus"
+        case .harmfulSite: return "exclamationmark.shield"
+        case .permissionAllowed: return "checkmark.circle"
+        case .permissionDenied: return "xmark.circle"
+        }
+    }
+}
+
+struct PrivacyEvent: Codable, Identifiable {
+    let id: UUID
+    let kind: PrivacyEventKind
+    let host: String
+    let count: Int
+    let createdAt: Date
+}
+
+final class PrivacyReportStore {
+    static var shared = PrivacyReportStore()
+    static let didChangeNotification = Notification.Name("PrivacyReportStoreDidChange")
+
+    private enum Key { static let events = "privacy.report.events" }
+    private let defaults: UserDefaults
+    private var events: [PrivacyEvent]
+    private let maxEvents = 1_000
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Key.events),
+           let decoded = try? JSONDecoder().decode([PrivacyEvent].self, from: data) {
+            events = decoded
+        } else {
+            events = []
+        }
+    }
+
+    static func useSharedDefaults(_ defaults: UserDefaults) {
+        shared = PrivacyReportStore(defaults: defaults)
+        NotificationCenter.default.post(name: didChangeNotification, object: shared)
+    }
+
+    func record(_ kind: PrivacyEventKind, host: String?, count: Int = 1) {
+        guard count > 0 else { return }
+        let normalizedHost = host?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedHost = (normalizedHost?.isEmpty == false) ? (normalizedHost ?? "不明なサイト") : "不明なサイト"
+        let event = PrivacyEvent(
+            id: UUID(),
+            kind: kind,
+            host: resolvedHost,
+            count: count,
+            createdAt: Date()
+        )
+        events.insert(event, at: 0)
+        if events.count > maxEvents { events.removeLast(events.count - maxEvents) }
+        persist()
+    }
+
+    func recent(since date: Date? = nil) -> [PrivacyEvent] {
+        guard let date else { return events }
+        return events.filter { $0.createdAt >= date }
+    }
+
+    func total(for kind: PrivacyEventKind, since date: Date? = nil) -> Int {
+        recent(since: date).filter { $0.kind == kind }.reduce(0) { $0 + $1.count }
+    }
+
+    func clear() {
+        events.removeAll()
+        persist()
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(events) else { return }
+        defaults.set(data, forKey: Key.events)
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
     }
 }

@@ -5,6 +5,12 @@ struct UpdateCandidate {
     let url: URL
 }
 
+enum UpdateCheckResult {
+    case updateAvailable(UpdateCandidate)
+    case upToDate
+    case failed
+}
+
 final class UpdateChecker {
     private struct ReleaseResponse: Decodable {
         let tagName: String
@@ -22,10 +28,10 @@ final class UpdateChecker {
 
     private let releasesAPI = URL(string: "https://api.github.com/repos/mani1261790/Vidarr/releases?per_page=30")!
 
-    func check(completion: @escaping (UpdateCandidate?) -> Void) {
+    func check(completion: @escaping (UpdateCheckResult) -> Void) {
         let currentVersion = Self.normalizedVersionString(from: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
         guard let currentVersion else {
-            completion(nil)
+            completion(.failed)
             return
         }
 
@@ -36,28 +42,31 @@ final class UpdateChecker {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data else {
-                completion(nil)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard error == nil,
+                  let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode),
+                  let data else {
+                completion(.failed)
                 return
             }
 
             let decoder = JSONDecoder()
             guard let releases = try? decoder.decode([ReleaseResponse].self, from: data) else {
-                completion(nil)
+                completion(.failed)
                 return
             }
 
             guard let latest = Self.bestStableRelease(from: releases),
                   let latestVersion = Self.normalizedVersionString(from: latest.tagName) else {
-                completion(nil)
+                completion(.failed)
                 return
             }
 
             if Self.compareSemanticVersion(latestVersion, currentVersion) == .orderedDescending {
-                completion(UpdateCandidate(version: latestVersion, url: latest.htmlURL))
+                completion(.updateAvailable(UpdateCandidate(version: latestVersion, url: latest.htmlURL)))
             } else {
-                completion(nil)
+                completion(.upToDate)
             }
         }.resume()
     }

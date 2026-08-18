@@ -2,6 +2,8 @@
 
 AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで、Magic Mouse のジェスチャー操作を主軸にしています。
 
+動作環境: macOS 14 Sonoma 以降
+
 ## 一般ユーザー向け
 
 ### インストール手順
@@ -23,8 +25,8 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
   - もう一度起動する
 
 ## ジェスチャー一覧 (実装)
-- `← (Left)` : 前タブ
-- `→ (Right)` : 次タブ
+- `← (Left)` : 次のタブ
+- `→ (Right)` : 前のタブ
 - `L (↓→ / DownRight)` : 現在タブを閉じる
 - `LL (↓→↓→ / DownRightDownRight)` : 全タブを閉じる
 - `U (↓→↑)` : 閉じたタブを復元
@@ -36,7 +38,7 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - `↓← (DownLeft)` : 新規タブ
 
 注意:
-- 横ストローク (`Left` / `Right`) はタブ切替専用です。
+- ジェスチャーと操作の割り当ては Preferences で変更できます。
 - 戻る/進むは矢印ジェスチャー (`↑→` / `↑←`) のみです。
 
 ## 開発者向け
@@ -55,6 +57,8 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 複数タブ管理（新規、前/次切替、現在閉じる、全閉じ、復元20件）
 - [x] 保護タブ、ブックマーク状態、タブ並び替え
 - [x] セッション復元（前回終了時のタブ状態を保存）
+- [x] 非アクティブタブの自動休止と選択時の復元
+- [x] タブグループの作成、改名、並べ替え、JSON書き出し
 - [x] ローカル `html / pdf / txt` の表示
 - [x] ダウンロード、ファイルアップロード、印刷、PDF書き出し
 
@@ -64,7 +68,9 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 左右タブ切替と新規タブ生成のアニメーション
 - [x] 最小UI（上部ツールバー + タブバー + 中央WebView）
 - [x] 全画面時のツールバー自動非表示 / 再表示
-- [x] Preferences 内のジェスチャーテスト領域
+- [x] 操作割り当て、入力方式別感度、重複警告を備えた Gesture Studio
+- [x] 本番の認識器をそのまま使う別ウィンドウのジェスチャーテスト
+- [x] タブ、履歴、ブックマーク、操作を横断するコマンドパレット（⌘K）
 
 ページ互換性 / 安全性:
 - [x] JavaScript の `alert` / `confirm` / `prompt` 対応
@@ -75,13 +81,15 @@ xattr -dr com.apple.quarantine /Applications/Vidarr.app
 - [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
 - [x] サイトごとの広告/追跡ブロック例外設定
 - [x] `Privacy & Site Controls` で例外ホストと保存済み権限を管理
+- [x] 追跡除去、広告要素、ポップアップ、危険サイト、権限判断のプライバシーレポート
 
 データ管理:
 - [x] `Downloads / History / Bookmarks` ウィンドウ
 - [x] 検索、複数選択、右クリックメニュー、削除操作
 - [x] ダウンロード先フォルダ設定
 - [x] 閲覧データ削除、設定リセット
-- [x] プロファイル切替の土台実装
+- [x] タブグループごとのタブ、Cookie、サイトデータ分離
+- [x] ドメインごとのタブグループ自動振り分け
 - [x] 同じ Apple ID 間でのブックマーク同期用コード（iCloud Key-Value Store）
 
 開発基盤:

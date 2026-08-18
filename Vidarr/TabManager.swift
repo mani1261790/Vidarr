@@ -3,23 +3,85 @@ import Foundation
 import VidarrCore
 import WebKit
 
-enum BrowserTabGroup: String, CaseIterable, Codable {
-    case regular
-    case privateMode
-    case work
-    case research
+struct BrowserTabGroup: Hashable, Codable, Identifiable {
+    enum Kind: String, Codable { case regular, privateMode, work, research, custom }
 
-    var displayName: String {
-        switch self {
-        case .regular:
-            return "通常タブグループ"
-        case .privateMode:
-            return "プライベートタブグループ"
-        case .work:
-            return "ワークタブグループ"
-        case .research:
-            return "リサーチタブグループ"
+    let id: String
+    var name: String
+    let kind: Kind
+    let customSymbolName: String?
+    let customColorID: String?
+
+    static let regular = BrowserTabGroup(id: "regular", name: "通常タブグループ", kind: .regular)
+    static let privateMode = BrowserTabGroup(id: "privateMode", name: "プライベートタブグループ", kind: .privateMode)
+    static let work = BrowserTabGroup(id: "work", name: "ワークタブグループ", kind: .work)
+    static let research = BrowserTabGroup(id: "research", name: "リサーチタブグループ", kind: .research)
+    static let builtIns: [BrowserTabGroup] = [.regular, .privateMode, .work, .research]
+
+    var displayName: String { name }
+    var isPrivate: Bool { kind == .privateMode }
+
+    var displaySymbolName: String {
+        if let customSymbolName, Self.selectableSymbolNames.contains(customSymbolName) {
+            return customSymbolName
         }
+        switch kind {
+        case .regular: return "square.grid.2x2"
+        case .privateMode: return "eye.slash"
+        case .work: return "briefcase"
+        case .research: return "text.magnifyingglass"
+        case .custom: return "rectangle.stack"
+        }
+    }
+
+    var displayColorID: String {
+        if let customColorID, Self.selectableColorIDs.contains(customColorID) {
+            return customColorID
+        }
+        switch kind {
+        case .regular: return "blue"
+        case .privateMode: return "purple"
+        case .work: return "green"
+        case .research: return "pink"
+        case .custom: return "accent"
+        }
+    }
+
+    static let selectableSymbolNames = [
+        "rectangle.stack", "square.grid.2x2", "briefcase", "text.magnifyingglass",
+        "book.closed", "folder", "graduationcap", "hammer", "paintbrush", "gamecontroller"
+    ]
+    static let selectableColorIDs = ["blue", "purple", "green", "pink", "orange", "red", "teal", "indigo"]
+
+    init(
+        id: String,
+        name: String,
+        kind: Kind = .custom,
+        customSymbolName: String? = nil,
+        customColorID: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.customSymbolName = customSymbolName
+        self.customColorID = customColorID
+    }
+
+    static func == (lhs: BrowserTabGroup, rhs: BrowserTabGroup) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    init(from decoder: Decoder) throws {
+        if let legacy = try? decoder.singleValueContainer().decode(String.self),
+           let builtIn = Self.builtIns.first(where: { $0.id == legacy }) {
+            self = builtIn
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        customSymbolName = try container.decodeIfPresent(String.self, forKey: .customSymbolName)
+        customColorID = try container.decodeIfPresent(String.self, forKey: .customColorID)
     }
 }
 
@@ -35,6 +97,29 @@ struct TabStripItem {
     let isProtected: Bool
     let isBookmarked: Bool
     let thumbnail: NSImage?
+    let isSleeping: Bool
+}
+
+struct TabSearchItem {
+    let group: BrowserTabGroup
+    let index: Int
+    let title: String
+    let url: URL?
+    let isSleeping: Bool
+}
+
+private struct ExportedTabGroup: Codable {
+    struct ExportedTab: Codable {
+        let title: String
+        let url: String?
+        let isProtected: Bool
+        let isBookmarked: Bool
+        let isSleeping: Bool
+    }
+
+    let id: String
+    let name: String
+    let tabs: [ExportedTab]
 }
 
 struct TabSessionSnapshot: Codable {
@@ -97,7 +182,7 @@ final class TabManager {
     weak var delegate: TabManagerDelegate?
 
     private struct Tab {
-        let webView: WKWebView
+        var webView: WKWebView
         var lastKnownURL: URL?
         var thumbnail: NSImage?
         var isProtected: Bool
@@ -106,6 +191,8 @@ final class TabManager {
         var historyURLs: [URL]
         var historyIndex: Int
         var pendingHistoryIndex: Int?
+        var isSleeping: Bool
+        var lastActivatedAt: Date
     }
 
     private struct GroupState {
@@ -125,16 +212,22 @@ final class TabManager {
 
     private var states: [BrowserTabGroup: GroupState]
     private var closedStack: [ClosedTabSnapshot] = []
+    private var sleepingTimer: Timer?
 
     private(set) var currentGroup: BrowserTabGroup = .regular
 
     init() {
         var map: [BrowserTabGroup: GroupState] = [:]
-        for group in BrowserTabGroup.allCases {
+        for group in TabGroupStore.shared.groups {
             map[group] = GroupState()
         }
         states = map
+        sleepingTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.sleepInactiveTabs()
+        }
     }
+
+    deinit { sleepingTimer?.invalidate() }
 
     var currentWebView: WKWebView? {
         webView(in: currentGroup, at: currentIndex)
@@ -146,6 +239,20 @@ final class TabManager {
 
     var tabCount: Int {
         state(for: currentGroup).tabs.count
+    }
+
+    var sleepingTabCount: Int {
+        availableGroups.reduce(0) { count, group in
+            count + state(for: group).tabs.filter(\.isSleeping).count
+        }
+    }
+
+    var availableGroups: [BrowserTabGroup] { TabGroupStore.shared.groups }
+
+    func isTabSleeping(at index: Int, in group: BrowserTabGroup? = nil) -> Bool {
+        let state = state(for: group ?? currentGroup)
+        guard index >= 0, index < state.tabs.count else { return false }
+        return state.tabs[index].isSleeping
     }
 
     var canReopenClosedTab: Bool { !closedStack.isEmpty }
@@ -168,16 +275,62 @@ final class TabManager {
             let resolvedURL = tab.webView.url ?? tab.lastKnownURL
             let fallbackTitle = resolvedURL?.host ?? resolvedURL?.absoluteString ?? "New Tab"
             let resolvedTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let title = (resolvedTitle?.isEmpty == false) ? resolvedTitle! : fallbackTitle
+            let baseTitle = (resolvedTitle?.isEmpty == false) ? resolvedTitle! : fallbackTitle
+            let title = tab.isSleeping ? "\(baseTitle) · 休止中" : baseTitle
             return TabStripItem(
                 index: index,
                 title: title,
                 isActive: index == state.currentIndex,
                 isProtected: tab.isProtected,
                 isBookmarked: tab.isBookmarked,
-                thumbnail: tab.thumbnail
+                thumbnail: tab.thumbnail,
+                isSleeping: tab.isSleeping
             )
         }
+    }
+
+    var allTabSearchItems: [TabSearchItem] {
+        availableGroups.flatMap { group in
+            state(for: group).tabs.enumerated().map { index, tab in
+                let url = tab.webView.url ?? tab.lastKnownURL
+                let pageTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return TabSearchItem(
+                    group: group,
+                    index: index,
+                    title: pageTitle?.isEmpty == false ? pageTitle! : (url?.host ?? url?.absoluteString ?? "New Tab"),
+                    url: url,
+                    isSleeping: tab.isSleeping
+                )
+            }
+        }
+    }
+
+    func selectTab(_ item: TabSearchItem) {
+        switchGroup(item.group)
+        selectTab(index: item.index)
+    }
+
+    func exportTabGroupsData() -> Data? {
+        let output = availableGroups.map { group in
+            ExportedTabGroup(
+                id: group.id,
+                name: group.displayName,
+                tabs: state(for: group).tabs.map { tab in
+                    let url = tab.webView.url ?? tab.lastKnownURL
+                    let pageTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return ExportedTabGroup.ExportedTab(
+                        title: pageTitle?.isEmpty == false ? pageTitle! : (url?.host ?? url?.absoluteString ?? "New Tab"),
+                        url: url?.absoluteString,
+                        isProtected: tab.isProtected,
+                        isBookmarked: tab.isBookmarked,
+                        isSleeping: tab.isSleeping
+                    )
+                }
+            )
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try? encoder.encode(output)
     }
 
     func switchGroup(_ group: BrowserTabGroup) {
@@ -189,7 +342,7 @@ final class TabManager {
     }
 
     func group(for webView: WKWebView) -> BrowserTabGroup? {
-        for group in BrowserTabGroup.allCases {
+        for group in availableGroups {
             let tabs = state(for: group).tabs
             if tabs.contains(where: { $0.webView === webView }) {
                 return group
@@ -256,7 +409,9 @@ final class TabManager {
                 pageZoom: pageZoom,
                 historyURLs: resolvedHistory,
                 historyIndex: resolvedHistoryIndex,
-                pendingHistoryIndex: nil
+                pendingHistoryIndex: nil,
+                isSleeping: false,
+                lastActivatedAt: Date()
             )
             state.tabs.append(tab)
             let insertedIndex = state.tabs.count - 1
@@ -294,7 +449,9 @@ final class TabManager {
             guard let self else { return }
             var state = state(for: currentGroup)
             guard index >= 0, index < state.tabs.count else { return }
+            wakeTab(at: index, in: currentGroup, state: &state)
             state.currentIndex = index
+            state.tabs[index].lastActivatedAt = Date()
             setState(state, for: currentGroup)
             delegate?.tabManager(self, didSelect: state.tabs[index].webView)
             delegate?.tabManager(self, didUpdateTabs: state.tabs.count)
@@ -431,7 +588,7 @@ final class TabManager {
             guard let self else { return }
             var didChangeCurrentGroup = false
 
-            for group in BrowserTabGroup.allCases {
+            for group in availableGroups {
                 var state = state(for: group)
                 var didChangeGroup = false
 
@@ -557,7 +714,7 @@ final class TabManager {
     func reloadAllTabs() {
         performOnMain { [weak self] in
             guard let self else { return }
-            for group in BrowserTabGroup.allCases {
+            for group in availableGroups {
                 var state = state(for: group)
                 for index in state.tabs.indices {
                     reload(tabAt: index, in: &state)
@@ -586,7 +743,7 @@ final class TabManager {
     }
 
     func sessionSnapshot(profileID: String? = nil) -> BrowserSessionSnapshot {
-        let groups = BrowserTabGroup.allCases.compactMap { group -> TabGroupSessionSnapshot? in
+        let groups = availableGroups.compactMap { group -> TabGroupSessionSnapshot? in
             guard group != .privateMode else { return nil }
             let state = state(for: group)
             return TabGroupSessionSnapshot(
@@ -613,7 +770,7 @@ final class TabManager {
             guard let self else { return }
 
             var rebuilt: [BrowserTabGroup: GroupState] = [:]
-            for group in BrowserTabGroup.allCases {
+            for group in availableGroups {
                 rebuilt[group] = GroupState()
             }
 
@@ -638,7 +795,9 @@ final class TabManager {
                             max(-1, snapshot.historyIndex),
                             max(snapshot.historyURLStrings.count - 1, -1)
                         ),
-                        pendingHistoryIndex: nil
+                        pendingHistoryIndex: nil,
+                        isSleeping: false,
+                        lastActivatedAt: Date()
                     )
                 }
                 if state.tabs.isEmpty {
@@ -659,7 +818,7 @@ final class TabManager {
     func reconfigureAllTabsForCurrentPreferences() {
         performOnMain { [weak self] in
             guard let self else { return }
-            for group in BrowserTabGroup.allCases {
+            for group in availableGroups {
                 reconfigureTabs(in: group)
             }
             ensureAtLeastOneTab(in: currentGroup)
@@ -762,7 +921,9 @@ final class TabManager {
                 pageZoom: snapshot.pageZoom,
                 historyURLs: snapshot.historyURLs,
                 historyIndex: snapshot.historyIndex,
-                pendingHistoryIndex: nil
+                pendingHistoryIndex: nil,
+                isSleeping: false,
+                lastActivatedAt: Date()
             )
         }
         state.currentIndex = min(max(0, selectedIndex), state.tabs.count - 1)
@@ -821,7 +982,46 @@ final class TabManager {
         }
 
         state.tabs[index].lastKnownURL = resolvedURL
+        state.tabs[index].isSleeping = false
         BrowserSession.reload(url: resolvedURL, in: state.tabs[index].webView)
+    }
+
+    func sleepInactiveTabs(now: Date = Date()) {
+        guard BrowserPreferences.shared.tabSleepingEnabled else { return }
+        let cutoff = now.addingTimeInterval(-Double(BrowserPreferences.shared.tabSleepingMinutes * 60))
+        var currentGroupChanged = false
+
+        for group in availableGroups {
+            var state = state(for: group)
+            for index in state.tabs.indices {
+                let isSelected = group == currentGroup && index == state.currentIndex
+                guard !isSelected,
+                      !state.tabs[index].isProtected,
+                      !state.tabs[index].isSleeping,
+                      state.tabs[index].lastActivatedAt <= cutoff else { continue }
+
+                let tab = state.tabs[index]
+                let resolvedURL = tab.webView.url ?? tab.lastKnownURL ?? currentHistoryURL(for: tab)
+                tab.webView.stopLoading()
+                tab.webView.removeFromSuperview()
+                let replacement = BrowserSession.makeConfiguredWebView(for: group)
+                replacement.pageZoom = tab.pageZoom
+                state.tabs[index].webView = replacement
+                state.tabs[index].lastKnownURL = resolvedURL
+                state.tabs[index].isSleeping = true
+                if group == currentGroup { currentGroupChanged = true }
+            }
+            setState(state, for: group)
+        }
+
+        if currentGroupChanged { notifyCurrentGroupUpdated(selectCurrent: false) }
+    }
+
+    private func wakeTab(at index: Int, in group: BrowserTabGroup, state: inout GroupState) {
+        guard index >= 0, index < state.tabs.count, state.tabs[index].isSleeping else { return }
+        let url = state.tabs[index].lastKnownURL ?? currentHistoryURL(for: state.tabs[index])
+        state.tabs[index].isSleeping = false
+        if let url { BrowserSession.load(url: url, in: state.tabs[index].webView) }
     }
 
     private func currentHistoryURL(for tab: Tab) -> URL? {
@@ -840,7 +1040,7 @@ final class TabManager {
     }
 
     private func findTabIndex(for webView: WKWebView) -> (BrowserTabGroup, Int)? {
-        for group in BrowserTabGroup.allCases {
+        for group in availableGroups {
             let tabs = state(for: group).tabs
             if let index = tabs.firstIndex(where: { $0.webView === webView }) {
                 return (group, index)

@@ -26,7 +26,9 @@ final class BrowserSession {
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let useEphemeralStore = (group == .privateMode) || prefs.ephemeralModeEnabled
-        config.websiteDataStore = useEphemeralStore ? .nonPersistent() : .default()
+        config.websiteDataStore = useEphemeralStore
+            ? .nonPersistent()
+            : BrowserProfileManager.shared.websiteDataStore(for: group)
 
         if prefs.sendDoNotTrack {
             let source = """

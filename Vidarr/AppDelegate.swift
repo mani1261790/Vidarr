@@ -7,6 +7,7 @@
 
 import Cocoa
 import AuthenticationServices
+import SwiftUI
 import VidarrCore
 import WebKit
 
@@ -19,7 +20,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var bookmarksWindowController: BrowsingItemsWindowController?
     private var siteSettingsWindowController: SiteSettingsWindowController?
     private let updateChecker = UpdateChecker()
+    private var pendingExternalURLs: [URL] = []
     private var hasPresentedUpdateAlert = false
+    private var isCheckingForUpdates = false
+    private weak var checkForUpdatesMenuItem: NSMenuItem?
     private weak var historyMenu: NSMenu?
     private weak var bookmarksMenu: NSMenu?
     private weak var developMenu: NSMenu?
@@ -40,6 +44,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         windowController.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
+        let queuedURLs = pendingExternalURLs
+        pendingExternalURLs.removeAll()
+        queuedURLs.forEach(openExternalURL)
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             self?.checkForAppUpdateIfNeeded()
         }
@@ -57,6 +65,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainWindowController?.saveSessionSnapshot()
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard mainWindowController != nil else {
+            pendingExternalURLs.append(contentsOf: urls)
+            return
+        }
+        urls.forEach(openExternalURL)
+    }
+
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
     }
@@ -64,16 +80,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func checkForAppUpdateIfNeeded() {
         guard BrowserPreferences.shared.updatesEnabled else { return }
         guard !hasPresentedUpdateAlert else { return }
-        updateChecker.check { [weak self] candidate in
-            guard let self, let candidate else { return }
+        performUpdateCheck(manual: false)
+    }
+
+    private func performUpdateCheck(manual: Bool) {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        checkForUpdatesMenuItem?.isEnabled = false
+
+        updateChecker.check { [weak self] result in
             DispatchQueue.main.async {
-                self.presentUpdateAlertIfNeeded(candidate)
+                guard let self else { return }
+                self.isCheckingForUpdates = false
+                self.checkForUpdatesMenuItem?.isEnabled = true
+
+                switch result {
+                case .updateAvailable(let candidate):
+                    if manual || !self.hasPresentedUpdateAlert {
+                        self.presentUpdateAlert(candidate)
+                    }
+                case .upToDate:
+                    if manual {
+                        self.presentUpdateStatus(
+                            title: "Vidarrは最新です",
+                            message: "現在利用できる最新バージョンを使用しています。"
+                        )
+                    }
+                case .failed:
+                    if manual {
+                        self.presentUpdateStatus(
+                            title: "アップデートを確認できませんでした",
+                            message: "インターネット接続を確認して、もう一度お試しください。"
+                        )
+                    }
+                }
             }
         }
     }
 
-    private func presentUpdateAlertIfNeeded(_ candidate: UpdateCandidate) {
-        guard !hasPresentedUpdateAlert else { return }
+    private func presentUpdateAlert(_ candidate: UpdateCandidate) {
         hasPresentedUpdateAlert = true
 
         let currentVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
@@ -98,6 +143,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    private func presentUpdateStatus(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+
+        if let window = mainWindowController?.window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     private func configureMainMenu() {
         let mainMenu = NSMenu()
         NSApp.mainMenu = mainMenu
@@ -109,13 +168,64 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appMenuItem.submenu = appMenu
         let appName = ProcessInfo.processInfo.processName
 
-        let preferencesItem = NSMenuItem(
-            title: "Preferences...",
+        let aboutItem = NSMenuItem(
+            title: "About \(appName)",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = NSApp
+        appMenu.addItem(aboutItem)
+
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(menuCheckForUpdates),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = self
+        appMenu.addItem(checkForUpdatesItem)
+        checkForUpdatesMenuItem = checkForUpdatesItem
+        appMenu.addItem(NSMenuItem.separator())
+
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
             action: #selector(openPreferences),
             keyEquivalent: ","
         )
-        preferencesItem.target = self
-        appMenu.addItem(preferencesItem)
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(NSMenuItem.separator())
+
+        let servicesMenu = NSMenu(title: "Services")
+        let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        servicesItem.submenu = servicesMenu
+        appMenu.addItem(servicesItem)
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(NSMenuItem.separator())
+
+        let hideItem = NSMenuItem(
+            title: "Hide \(appName)",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.target = NSApp
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        hideOthersItem.target = NSApp
+        appMenu.addItem(hideOthersItem)
+
+        let showAllItem = NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        showAllItem.target = NSApp
+        appMenu.addItem(showAllItem)
         appMenu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(
@@ -172,6 +282,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Focus Address Bar", action: #selector(menuFocusAddressBar), key: "l"))
         viewMenu.addItem(makeMenuItem("Focus Tab Search", action: #selector(menuFocusTabSearch), key: "f", modifiers: [.command, .shift]))
+        viewMenu.addItem(makeMenuItem("Command Palette", action: #selector(menuCommandPalette), key: "k"))
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(makeMenuItem("Zoom In", action: #selector(menuZoomIn), key: "+"))
         viewMenu.addItem(makeMenuItem("Zoom Out", action: #selector(menuZoomOut), key: "-"))
@@ -242,6 +353,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.keyEquivalentModifierMask = modifiers
         item.target = self
         return item
+    }
+
+    @objc private func menuCheckForUpdates() {
+        performUpdateCheck(manual: true)
     }
 
     @objc private func menuNewTab() {
@@ -331,6 +446,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func menuFocusTabSearch() {
         mainWindowController?.menuFocusTabSearch()
+    }
+
+    @objc private func menuCommandPalette() {
+        mainWindowController?.showCommandPalette()
     }
 
     @objc private func menuZoomIn() {
@@ -614,6 +733,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return true
     }
 
+    private func openExternalURL(_ url: URL) {
+        let routedGroup = BrowserProfileManager.shared.routedTabGroup(for: url)
+        mainWindowController?.openExternalURL(url, in: routedGroup)
+    }
+
 }
 
 private final class PreferencesWindowController: NSWindowController, NSTextFieldDelegate, NSTabViewDelegate {
@@ -625,8 +749,8 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let scrollView = NSScrollView()
     }
 
-    private static let preferredContentSize = NSSize(width: 760, height: 620)
-    private static let minimumTabHostSize = NSSize(width: 720, height: 520)
+    private static let preferredContentSize = NSSize(width: 940, height: 680)
+    private static let minimumTabHostSize = NSSize(width: 900, height: 580)
 
     private let prefs = BrowserPreferences.shared
     private let profileManager = BrowserProfileManager.shared
@@ -636,8 +760,21 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
     private let switchProfileAction: (String) -> Bool
+    private lazy var modernViewModel = PreferencesViewModel(
+        openDownloads: openDownloadsAction,
+        openHistory: openHistoryAction,
+        openBookmarks: openBookmarksAction,
+        openSiteControls: openSiteControlsAction,
+        windowProvider: { [weak self] in self?.window }
+    )
     private weak var rootLayoutView: NSView?
     private weak var tabView: NSTabView?
+    private let tabSelector = NSSegmentedControl(
+        labels: ["一般", "ジェスチャー", "プライバシー", "保存データ", "リセット"],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
 
     private let homePageField = NSTextField()
     private let searchTemplateField = NSTextField()
@@ -716,6 +853,16 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private func setupUI() {
         guard let window else { return }
+        let hostingView = NSHostingView(rootView: ModernPreferencesView(model: modernViewModel))
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView = hostingView
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.backgroundColor = .windowBackgroundColor
+    }
+
+    private func setupLegacyUI() {
+        guard let window else { return }
         let contentView = makeRootContentView(for: window)
         let titleLabel = NSTextField(labelWithString: "Preferences")
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -728,11 +875,24 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let tabView = NSTabView()
         tabView.translatesAutoresizingMaskIntoConstraints = false
-        tabView.tabViewType = .topTabsBezelBorder
+        tabView.tabViewType = .noTabsNoBorder
         tabView.drawsBackground = false
         tabView.delegate = self
         self.tabView = tabView
-        let tabHostView = makeTabHostView(content: tabView)
+
+        tabSelector.translatesAutoresizingMaskIntoConstraints = false
+        tabSelector.segmentStyle = .rounded
+        tabSelector.controlSize = .regular
+        tabSelector.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        tabSelector.selectedSegment = 0
+        tabSelector.target = self
+        tabSelector.action = #selector(preferenceTabChanged(_:))
+        tabSelector.setAccessibilityLabel("設定カテゴリ")
+        for index in 0..<tabSelector.segmentCount {
+            tabSelector.setWidth(90, forSegment: index)
+        }
+
+        let tabHostView = makeTabHostView(selector: tabSelector, content: tabView)
         contentView.addSubview(titleLabel)
         contentView.addSubview(summaryLabel)
         contentView.addSubview(tabHostView)
@@ -970,9 +1130,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         dataStack.addArrangedSubview(configureSummaryLabel(dataSummaryLabel))
         dataStack.setCustomSpacing(8, after: dataSummaryLabel)
         let dataGrid = makeTwoColumnGrid()
-        dataStack.addArrangedSubview(makeControlRow(for: dataGrid, height: 34))
         dataGrid.addArrangedSubview(openBookmarksButton)
         dataGrid.addArrangedSubview(openSiteControlsButton)
+        dataStack.addArrangedSubview(dataGrid)
         dataStack.addArrangedSubview(configureSummaryLabel(downloadFolderLabel))
         dataStack.setCustomSpacing(6, after: downloadFolderLabel)
         let downloadFolderButtons = NSStackView()
@@ -1113,8 +1273,9 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
     private func makeTwoColumnGrid() -> NSStackView {
         let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .horizontal
-        stack.alignment = .leading
+        stack.alignment = .centerY
         stack.distribution = .fillEqually
         stack.spacing = 10
         return stack
@@ -1136,12 +1297,25 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     }
 
     func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        if let tabViewItem {
+            let index = tabView.indexOfTabViewItem(tabViewItem)
+            if index >= 0, tabSelector.selectedSegment != index {
+                tabSelector.selectedSegment = index
+            }
+        }
         enforceMinimumWindowSize()
         guard let content = tabViewItem?.view as? PreferenceTabContentView else { return }
         DispatchQueue.main.async {
             content.scrollView.contentView.scroll(to: .zero)
             content.scrollView.reflectScrolledClipView(content.scrollView.contentView)
         }
+    }
+
+    @objc private func preferenceTabChanged(_ sender: NSSegmentedControl) {
+        guard let tabView else { return }
+        let index = sender.selectedSegment
+        guard index >= 0, index < tabView.numberOfTabViewItems else { return }
+        tabView.selectTabViewItem(at: index)
     }
 
     private func enforceMinimumWindowSize() {
@@ -1229,7 +1403,6 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
 
         let enabledCount = visibleGestureOptions.filter(prefs.isGestureEnabled).count
         gestureSummaryLabel.stringValue = "現在の感度: \(sensitivity.displayName)\n有効なジェスチャー: \(enabledCount)/\(visibleGestureOptions.count)\nMagic Mouse / トラックパッド / 右クリック押下ジェスチャーで共通使用"
-        gestureTestView.sensitivityMultiplier = sensitivity.multiplier
 
         privacySummaryLabel.stringValue = [
             "追跡除去 \(prefs.antiTrackingEnabled ? "オン" : "オフ")",
@@ -1254,6 +1427,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openBookmarksButton.title = "ブックマークを管理 (\(bookmarkCount)件)"
         openSiteControlsButton.title = "サイトごとの例外を管理 (\(contentExceptionCount + harmfulExceptionCount + mediaPermissionCount)件)"
         clearDownloadFolderButton.isEnabled = (downloadFolderPath != nil)
+        modernViewModel.reload()
     }
 
     private func makeRootContentView(for window: NSWindow) -> NSView {
@@ -1278,7 +1452,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         return layoutView
     }
 
-    private func makeTabHostView(content tabView: NSTabView) -> NSView {
+    private func makeTabHostView(selector: NSSegmentedControl, content tabView: NSTabView) -> NSView {
         let container = NSVisualEffectView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.material = .underWindowBackground
@@ -1287,9 +1461,15 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         container.wantsLayer = true
         container.layer?.cornerRadius = 24
         container.layer?.masksToBounds = true
+        container.addSubview(selector)
         container.addSubview(tabView)
         NSLayoutConstraint.activate([
-            tabView.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
+            selector.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            selector.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            selector.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 14),
+            selector.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -14),
+
+            tabView.topAnchor.constraint(equalTo: selector.bottomAnchor, constant: 10),
             tabView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
             tabView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
             tabView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14)
@@ -1325,7 +1505,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "プロファイルを切り替えました"
-        alert.informativeText = "切り替えはすぐ反映されました。設定、履歴、ブックマーク、セッションはプロファイルごとに分離されます。"
+        alert.informativeText = "切り替えはすぐ反映されました。Cookie、サイトデータ、設定、履歴、ブックマーク、セッションはプロファイルごとに分離されます。"
         alert.addButton(withTitle: "OK")
         if let window {
             alert.beginSheetModal(for: window)
@@ -1652,6 +1832,7 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
             row.addArrangedSubview(NSView())
             row.addArrangedSubview(toggle)
             row.setCustomSpacing(14, after: icon)
+            gestureRowsStack.addArrangedSubview(row)
 
             NSLayoutConstraint.activate([
                 icon.widthAnchor.constraint(equalToConstant: 42),
@@ -1660,25 +1841,126 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
                 toggle.widthAnchor.constraint(equalToConstant: 18)
             ])
 
-            gestureRowsStack.addArrangedSubview(row)
             gestureToggleButtons[option] = toggle
         }
     }
 }
 
-private final class GesturePracticeView: NSView {
-    var sensitivityMultiplier: CGFloat = 1.0 {
-        didSet { recognizer = makeRecognizer() }
+final class GesturePracticeWindowController: NSWindowController {
+    private let practiceView = GesturePracticeHostView(frame: .zero)
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 258),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "ジェスチャーテスト"
+        window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: 500, height: 258)
+        super.init(window: window)
+
+        let contentView = NSView()
+        practiceView.translatesAutoresizingMaskIntoConstraints = false
+        practiceView.setAccessibilityLabel("ジェスチャーテスト")
+        contentView.addSubview(practiceView)
+        window.contentView = contentView
+        NSLayoutConstraint.activate([
+            practiceView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
+            practiceView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            practiceView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            practiceView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
+        ])
     }
 
-    private let livePreviewScoreThreshold: CGFloat = 0.52
-    private let triggerDominanceRatio: CGFloat = 1.65
-    private let triggerWindowMs: TimeInterval = 90
-    private let seedHistoryWindowMs: TimeInterval = 240
-    private let triggerHorizontalDelta: CGFloat = 4.5
-    private let baseMinPathLength: CGFloat = 90
-    private let baseMatchScoreThreshold: CGFloat = 0.68
-    private let upStrokeDominanceRatio: CGFloat = 2.0
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show(relativeTo parentWindow: NSWindow?) {
+        if let parentWindow, let window {
+            let origin = NSPoint(
+                x: parentWindow.frame.midX - window.frame.width / 2,
+                y: parentWindow.frame.midY - window.frame.height / 2
+            )
+            window.setFrameOrigin(origin)
+        } else {
+            window?.center()
+        }
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// 本番と同じ GestureOverlayView 自体を使う確認画面。
+/// 認識ロジックの複製を避け、感度・開始条件・確定条件・割り当てを常に一致させる。
+final class GesturePracticeHostView: NSView {
+    private let overlay = GestureOverlayView(frame: .zero)
+    private let titleLabel = NSTextField(labelWithString: "ジェスチャーテスト")
+    private let detailLabel = NSTextField(wrappingLabelWithString: "右ドラッグまたはトラックパッドで入力してください。")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.72).cgColor
+
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.font = .systemFont(ofSize: 12)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.maximumNumberOfLines = 3
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.recognitionHandler = { [weak self] result in
+            guard let self else { return }
+            if let result,
+               let pattern = BrowserPreferences.GesturePattern(rawValue: result.name),
+               let action = BrowserPreferences.shared.gestureAction(for: pattern) {
+                self.detailLabel.stringValue = "\(pattern.label)  →  \(action.title)（一致度 \(String(format: "%.2f", result.score))）"
+                self.detailLabel.textColor = .labelColor
+            } else {
+                self.detailLabel.stringValue = "不成立 — ブラウザ本体でも実行されません。"
+                self.detailLabel.textColor = .systemRed
+            }
+        }
+
+        addSubview(titleLabel)
+        addSubview(detailLabel)
+        addSubview(overlay)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 210),
+            overlay.topAnchor.constraint(equalTo: topAnchor),
+            overlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            overlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            detailLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            detailLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            detailLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
+        ])
+    }
+}
+
+final class GesturePracticeView: NSView {
+    private var sensitivityMultiplier: CGFloat {
+        BrowserPreferences.shared.gestureSensitivity.multiplier
+    }
+
+    private let config = GestureOverlayView.CaptureConfig()
 
     private struct DeltaSample {
         let dx: CGFloat
@@ -1716,7 +1998,6 @@ private final class GesturePracticeView: NSView {
         if prefs.isGestureEnabled(.newTab) { allowed.insert("DownLeft") }
         if prefs.isGestureEnabled(.reload) { allowed.insert("O") }
         if prefs.isGestureEnabled(.restoreClosedTab) { allowed.insert("U") }
-        if prefs.isGestureEnabled(.reloadAll) { allowed.insert("OO") }
         if prefs.isGestureEnabled(.closeAllTabs) { allowed.insert("DownRightDownRight") }
         if prefs.isGestureEnabled(.nextTab) { allowed.insert("Left") }
         if prefs.isGestureEnabled(.previousTab) { allowed.insert("Right") }
@@ -1753,7 +2034,16 @@ private final class GesturePracticeView: NSView {
         let ySign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
         let dx = event.scrollingDeltaX * xSign
         let dy = event.scrollingDeltaY * ySign
-        handleInput(dx: dx, dy: dy, timestamp: event.timestamp, anchorInView: convert(event.locationInWindow, from: nil), shouldCommit: shouldCommitImmediately(for: event))
+        let consumed = handleInput(
+            dx: dx,
+            dy: dy,
+            timestamp: event.timestamp,
+            anchorInView: convert(event.locationInWindow, from: nil),
+            shouldCommit: shouldCommitImmediately(for: event)
+        )
+        if !consumed {
+            super.scrollWheel(with: event)
+        }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -1768,7 +2058,7 @@ private final class GesturePracticeView: NSView {
             return
         }
         rightDragLastPoint = current
-        handleInput(dx: current.x - last.x, dy: current.y - last.y, timestamp: event.timestamp, anchorInView: current, shouldCommit: false)
+        _ = handleInput(dx: current.x - last.x, dy: current.y - last.y, timestamp: event.timestamp, anchorInView: current, shouldCommit: false)
     }
 
     override func rightMouseUp(with event: NSEvent) {
@@ -1797,7 +2087,7 @@ private final class GesturePracticeView: NSView {
         outlineLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.58).cgColor
         layer?.addSublayer(outlineLayer)
 
-        pathLayer.strokeColor = NSColor.systemBlue.withAlphaComponent(0.72).cgColor
+        pathLayer.strokeColor = NSColor.controlAccentColor.withAlphaComponent(0.72).cgColor
         pathLayer.fillColor = NSColor.clear.cgColor
         pathLayer.lineWidth = 2.5
         pathLayer.lineCap = .round
@@ -1825,10 +2115,11 @@ private final class GesturePracticeView: NSView {
             detailLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
         ])
 
-        detailLabel.stringValue = "ここで入力したジェスチャーは動作しません。判定結果だけ表示します。"
+        detailLabel.stringValue = "右ドラッグまたはトラックパッドで試せます。ブラウザ本体と同じ感度で判定します。"
     }
 
-    private func handleInput(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval, anchorInView: CGPoint, shouldCommit: Bool) {
+    @discardableResult
+    private func handleInput(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval, anchorInView: CGPoint, shouldCommit: Bool) -> Bool {
         switch state {
         case .idle:
             trackRecent(dx: dx, dy: dy, timestamp: timestamp)
@@ -1837,37 +2128,40 @@ private final class GesturePracticeView: NSView {
                 if shouldCommit {
                     commitCapture()
                 }
+                return true
             }
+            return false
         case .capturing:
             appendCaptureDelta(dx: dx, dy: dy)
             updateLiveCandidate()
             if shouldCommit {
                 commitCapture()
             }
+            return true
         }
     }
 
     private func trackRecent(dx: CGFloat, dy: CGFloat, timestamp: TimeInterval) {
         recentSamples.append(DeltaSample(dx: dx, dy: dy, timestamp: timestamp))
-        let threshold = timestamp - (seedHistoryWindowMs / 1000)
+        let threshold = timestamp - (config.seedHistoryWindowMs / 1000)
         recentSamples.removeAll { $0.timestamp < threshold }
     }
 
     private func shouldStartCapture() -> Bool {
         guard let latestTimestamp = recentSamples.last?.timestamp else { return false }
-        let triggerThreshold = latestTimestamp - (triggerWindowMs / 1000)
+        let triggerThreshold = latestTimestamp - (config.triggerWindowMs / 1000)
         let triggerSamples = recentSamples.filter { $0.timestamp >= triggerThreshold }
         guard !triggerSamples.isEmpty else { return false }
 
-        let requiredHorizontal = triggerHorizontalDelta / max(0.75, sensitivityMultiplier)
-        if triggerSamples.contains(where: { abs($0.dx) > abs($0.dy) * triggerDominanceRatio && abs($0.dx) > requiredHorizontal }) {
+        let requiredHorizontal = config.triggerHorizontalDelta / max(0.75, sensitivityMultiplier)
+        if triggerSamples.contains(where: { abs($0.dx) > abs($0.dy) * config.triggerDominanceRatio && abs($0.dx) > requiredHorizontal }) {
             return true
         }
 
         let lastSamples = triggerSamples.suffix(4)
         let sumX = lastSamples.reduce(CGFloat.zero) { $0 + $1.dx }
         let sumY = lastSamples.reduce(CGFloat.zero) { $0 + $1.dy }
-        return abs(sumX) > abs(sumY) * triggerDominanceRatio && abs(sumX) > requiredHorizontal
+        return abs(sumX) > abs(sumY) * config.triggerDominanceRatio && abs(sumX) > requiredHorizontal
     }
 
     private func startCapture(at point: CGPoint, withSeed seed: [DeltaSample]) {
@@ -1900,7 +2194,7 @@ private final class GesturePracticeView: NSView {
     }
 
     private func updateLiveCandidate() {
-        if let best = recognizer.bestPassingMatch(points: capturePoints, minimumScore: livePreviewScoreThreshold, allowedNames: allowedGestureNames) {
+        if let best = recognizer.bestPassingMatch(points: capturePoints, minimumScore: config.livePreviewScoreThreshold, allowedNames: allowedGestureNames) {
             lastResultName = best.name
             detailLabel.stringValue = "候補: \(displayName(for: best.name))\n一致度: \(String(format: "%.2f", best.score))"
             detailLabel.textColor = .secondaryLabelColor
@@ -1922,21 +2216,22 @@ private final class GesturePracticeView: NSView {
 
         guard !capturePoints.isEmpty else { return }
 
-        let result = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
-            ?? recognizer.bestPassingMatch(
+        let strict = recognizer.recognize(points: capturePoints, allowedNames: allowedGestureNames)
+        let relaxed: GestureResult? = {
+            guard strict == nil else { return nil }
+            guard pathLength(capturePoints) >= (config.minPathLength * 0.45) / max(0.75, sensitivityMultiplier) else { return nil }
+            return recognizer.bestPassingMatch(
                 points: capturePoints,
-                minimumScore: max(0.58, baseMatchScoreThreshold - 0.16),
+                minimumScore: max(0.58, config.matchScoreThreshold - 0.16),
                 allowedNames: allowedGestureNames
             )
+        }()
+        let result = strict ?? relaxed
 
         if let result {
             detailLabel.stringValue = "確定: \(displayName(for: result.name))\n一致度: \(String(format: "%.2f", result.score))"
             detailLabel.textColor = .labelColor
             lastResultName = result.name
-        } else if isLikelyDoubleLoop(capturePoints) {
-            detailLabel.stringValue = "確定: \(displayName(for: "OO"))\n一致度: 0.30"
-            detailLabel.textColor = .labelColor
-            lastResultName = "OO"
         } else {
             detailLabel.stringValue = "不成立\n認識できる形から外れています。"
             detailLabel.textColor = .systemRed
@@ -1964,36 +2259,10 @@ private final class GesturePracticeView: NSView {
 
     private func makeRecognizer() -> GestureRecognizer {
         GestureRecognizer(
-            matchScoreThreshold: baseMatchScoreThreshold,
-            minPathLength: baseMinPathLength,
-            dominanceRatio: upStrokeDominanceRatio
+            matchScoreThreshold: config.matchScoreThreshold,
+            minPathLength: config.minPathLength,
+            dominanceRatio: config.upStrokeDominanceRatio
         )
-    }
-
-    private func isLikelyDoubleLoop(_ points: [CGPoint]) -> Bool {
-        guard points.count >= 16 else { return false }
-        var minX = points[0].x
-        var maxX = points[0].x
-        var minY = points[0].y
-        var maxY = points[0].y
-        for point in points {
-            minX = min(minX, point.x)
-            maxX = max(maxX, point.x)
-            minY = min(minY, point.y)
-            maxY = max(maxY, point.y)
-        }
-        let width = maxX - minX
-        let height = maxY - minY
-        guard width > 24, height > 24 else { return false }
-        let diagonal = hypot(width, height)
-        guard diagonal > 1 else { return false }
-        let closeRatio = hypot(points[0].x - points[points.count - 1].x, points[0].y - points[points.count - 1].y) / diagonal
-        guard closeRatio <= 0.68 else { return false }
-        let a = max(width * 0.5, 1)
-        let b = max(height * 0.5, 1)
-        let ellipseCircumference = .pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b)))
-        guard ellipseCircumference > 1 else { return false }
-        return pathLength(points) / ellipseCircumference >= 1.22
     }
 
     private func pathLength(_ points: [CGPoint]) -> CGFloat {
@@ -2012,7 +2281,7 @@ private final class GesturePracticeView: NSView {
         case "DownRight": return "↓→ タブを閉じる"
         case "DownRightDownRight": return "↓→↓→ 全タブを閉じる"
         case "O": return "O リロード"
-        case "OO": return "OO 全タブ再読み込み"
+        case "OO": return "◎ 全タブ再読み込み"
         case "U": return "U 閉じたタブを復元"
         case "UpRight": return "↑→ 戻る"
         case "UpLeft": return "↑← 進む"
@@ -2121,7 +2390,7 @@ private final class SignInWithAppleButtonHost: NSView {
     }
 }
 
-private final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     struct Result {
         let userID: String
         let email: String?

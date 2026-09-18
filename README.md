@@ -1,138 +1,107 @@
-# Vidarr
+<p align="center">
+  <img src="docs/branding/vidarr-logo-1024.png" alt="Vidarr のアプリアイコン" width="128" height="128">
+</p>
 
-AppKit + WKWebView で構成した軽量 macOS ブラウザです。最小UIで、Magic Mouse のジェスチャー操作を主軸にしています。
+<h1 align="center">Vidarr</h1>
 
-動作環境: macOS 14 Sonoma 以降
+<p align="center">
+  <strong>マウスで描いて、Webを進む。</strong><br>
+  ジェスチャーで操る、Macのための軽量ブラウザ。
+</p>
 
-## 一般ユーザー向け
+<p align="center">
+  macOS 14+ · iPhone / iPad版を開発中 · 日本語
+</p>
 
-### インストール手順
-1. [Releases](https://github.com/mani1261790/Vidarr/releases) から最新版の `Vidarr-*.dmg` をダウンロード
-2. `.dmg` を開き、`Vidarr.app` を同梱の `Applications` フォルダへドラッグ
-3. 初回起動時の保護解除が必要な場合は、DMG内の `2) First Launch Fix.command` を実行
-4. その後 `Vidarr.app` を起動（必要なら右クリック -> `開く`）
+**Vidarr** は、Magic Mouseやトラックパッドのジェスチャーでタブを切り替え、ページを移動できるブラウザです。画面をボタンで埋めず、Webページを見たまま、よく使う操作を手元で済ませることを目指しています。
 
-注意:
-- 現在の配布DMGは署名/公証なしです。環境によって初回起動時に macOS の警告が出る場合があります。
-- Appleの公証（notarization）なしでは、この警告を完全になくすことはできません。
-- もし `“Vidarr.app” is damaged and can’t be opened.` が出る場合:
-```bash
+macOS版はAppKitとWebKitで動作します。iPhone / iPad向けのSwiftUI版も同じリポジトリで開発しています。
+
+## 主な機能
+
+- **描いて操作** — タブの切り替え、戻る・進む、再読み込み、検索、新しいタブなどをジェスチャーから実行できます。感度や割り当ては設定画面で変更できます。
+- **用途で分けるタブグループ** — 通常、プライベート、ワーク、リサーチに加え、自分用のグループを作れます。グループごとにタブ、Cookie、サイトデータを分離します。
+- **プライベートグループ** — セッション復元、書き出し、通常グループからのタブ検索、閉じたタブ履歴に情報を残しません。外部リンクの自動振り分け設定もMacの認証で保護します。
+- **タブを失わない仕組み** — セッション復元、閉じたタブの復元、保護タブ、非アクティブタブの自動休止に対応しています。
+- **ブラウジングを一か所で管理** — 履歴、ブックマーク、ダウンロード、サイト権限をそれぞれ専用画面で確認できます。タブや履歴を横断するコマンドパレットもあります。
+- **Webの追跡を減らす設定** — 追跡パラメータの除去、広告・追跡スクリプトのブロック、ポップアップ抑止、DNT / GPC、有害サイト警告を選べます。
+
+## ジェスチャー
+
+初期設定では、次の操作を割り当てています。
+
+| ジェスチャー | 操作 |
+| --- | --- |
+| `←` / `→` | 次のタブ / 前のタブ |
+| `L` / `LL` | 現在のタブを閉じる / すべてのタブを閉じる |
+| `U` | 閉じたタブを復元 |
+| `O` / `◎` | 現在のタブを再読み込み / すべてのタブを再読み込み |
+| `↑→` / `↑←` | 戻る / 進む |
+| `S` | アドレスバーにフォーカス |
+| `↓←` | 新しいタブ |
+
+ジェスチャーはMagic Mouse、トラックパッド、右クリックを押しながらのドラッグで入力できます。設定画面には、本番と同じ認識処理を使うジェスチャーテストがあります。
+
+## 対応環境
+
+| 項目 | 状況 |
+| --- | --- |
+| macOS | macOS 14 Sonoma以降 |
+| iPhone / iPad | iOS / iPadOS 17以降。現在はソースからの開発ビルドのみ |
+| Webエンジン | WebKit |
+| UIの言語 | 日本語 |
+
+## インストール
+
+[Releases](https://github.com/mani1261790/Vidarr/releases)から最新の`Vidarr-*.dmg`をダウンロードします。
+
+1. DMGを開き、`Vidarr.app`を`Applications`フォルダへドラッグします。
+2. 初回起動時にmacOSから警告が表示された場合は、DMG内の`2) First Launch Fix.command`を実行します。
+3. `Vidarr.app`を開きます。必要に応じて、右クリックメニューの「開く」を使ってください。
+
+> [!IMPORTANT]
+> 現在の配布ビルドは署名・公証されていません。macOSが「壊れている」「開発元を確認できない」と表示する場合があります。
+
+DMG内のスクリプトを使わず、ターミナルから保護を解除する場合は次を実行します。
+
+```sh
 xattr -dr com.apple.quarantine /Applications/Vidarr.app
 ```
-- もし `“Vidarr.app” Not Opened` / `Apple could not verify ...` が出る場合も同様に上記コマンドで解除できます。
-- それでも `Move to Trash` のみが出る場合:
-  - `システム設定 > プライバシーとセキュリティ` で Vidarr の実行許可を有効化
-  - もう一度起動する
 
-## ジェスチャー一覧 (実装)
-- `← (Left)` : 次のタブ
-- `→ (Right)` : 前のタブ
-- `L (↓→ / DownRight)` : 現在タブを閉じる
-- `LL (↓→↓→ / DownRightDownRight)` : 全タブを閉じる
-- `U (↓→↑)` : 閉じたタブを復元
-- `O` : 現在タブをリロード
-- `OO` : 全タブをリロード
-- `↑→ (UpRight)` : 戻る
-- `↑← (UpLeft)` : 進む
-- `S` : 検索/URL入力用にアドレスバーへフォーカス
-- `↓← (DownLeft)` : 新規タブ
+それでも起動できない場合は、「システム設定」→「プライバシーとセキュリティ」でVidarrの実行を許可してから、もう一度開いてください。
 
-注意:
-- ジェスチャーと操作の割り当ては Preferences で変更できます。
-- 戻る/進むは矢印ジェスチャー (`↑→` / `↑←`) のみです。
+## ソースからビルドする
 
-## 開発者向け
+Xcodeで`Vidarr.xcodeproj`を開き、目的のターゲットを選んで実行します。
 
-### 実行手順 (Xcode)
-1. `Vidarr.xcodeproj` を Xcode で開く
-2. Target `Vidarr` を選択する
-3. `Signing & Capabilities` で `Automatically manage signing` を有効にする
-4. `Team` で `Personal Team` を選択する
-5. Run destination を `My Mac` にして `Run` (⌘R)
+| プラットフォーム | Scheme | Run destination |
+| --- | --- | --- |
+| Mac | `Vidarr` | My Mac |
+| iPhone | `VidarrPhone` | iPhone実機またはSimulator |
+| iPad | `VidarrPad` | iPad実機またはSimulator |
 
-### 現在の実装状況
+実機で動かす場合は、各ターゲットの「Signing & Capabilities」でTeamを設定してください。macOS版のブックマーク同期には、iCloud Key-Value Storeを利用できるTeamが必要です。
 
-ブラウザ本体:
-- [x] 起動時に `MainWindowController` が立ち上がり、`WKWebView` を表示
-- [x] 複数タブ管理（新規、前/次切替、現在閉じる、全閉じ、復元20件）
-- [x] 保護タブ、ブックマーク状態、タブ並び替え
-- [x] セッション復元（前回終了時のタブ状態を保存）
-- [x] 非アクティブタブの自動休止と選択時の復元
-- [x] タブグループの作成、改名、並べ替え、JSON書き出し
-- [x] ローカル `html / pdf / txt` の表示
-- [x] ダウンロード、ファイルアップロード、印刷、PDF書き出し
+### テスト
 
-ジェスチャー / UI:
-- [x] 指定ジェスチャーの認識とアクション実行
-- [x] ジェスチャーHUD表示
-- [x] 左右タブ切替と新規タブ生成のアニメーション
-- [x] 最小UI（上部ツールバー + タブバー + 中央WebView）
-- [x] 全画面時のツールバー自動非表示 / 再表示
-- [x] 操作割り当て、入力方式別感度、重複警告を備えた Gesture Studio
-- [x] 本番の認識器をそのまま使う別ウィンドウのジェスチャーテスト
-- [x] タブ、履歴、ブックマーク、操作を横断するコマンドパレット（⌘K）
-
-ページ互換性 / 安全性:
-- [x] JavaScript の `alert` / `confirm` / `prompt` 対応
-- [x] ページズーム
-- [x] カメラ/マイク要求時の権限確認ダイアログ
-- [x] 読み込み失敗時の簡易エラーページ
-- [x] 勝手に開くポップアップ/新規タブの抑止
-- [x] 主要広告・追跡ドメインのブロックと一部広告要素の非表示
-- [x] サイトごとの広告/追跡ブロック例外設定
-- [x] `Privacy & Site Controls` で例外ホストと保存済み権限を管理
-- [x] 追跡除去、広告要素、ポップアップ、危険サイト、権限判断のプライバシーレポート
-
-データ管理:
-- [x] `Downloads / History / Bookmarks` ウィンドウ
-- [x] 検索、複数選択、右クリックメニュー、削除操作
-- [x] ダウンロード先フォルダ設定
-- [x] 閲覧データ削除、設定リセット
-- [x] タブグループごとのタブ、Cookie、サイトデータ分離
-- [x] ドメインごとのタブグループ自動振り分け
-- [x] 同じ Apple ID 間でのブックマーク同期用コード（iCloud Key-Value Store）
-
-開発基盤:
-- [x] `VidarrCore` 共有パッケージを追加
-- [x] `BrowserPreferences / BrowsingStores / GestureRecognizer` を `VidarrCore` に移設
-- [x] `GestureRecognizer` 単体テスト
-- [ ] iPad target 追加
-- [ ] iPad UI 実装
-
-### ブックマーク同期
-- Vidarr は、同じ Apple ID で使っている Vidarr 間で `ブックマークだけ` を同期します。
-- 次のデータは同期しません:
-  - 履歴
-  - 開いているタブ
-  - Cookie / サイトデータ
-  - ダウンロード一覧
-  - サイトごとの権限状態
-- 同期コードは入っていますが、実際に使うには `Signing & Capabilities` で `iCloud` を有効にし、`Key-value storage` が使える Team で署名する必要があります。
-- `Personal Team` では iCloud capability を使えないため、ローカル開発ビルドでは同期が無効のままになることがあります。
-
-### テスト実行
-```bash
-xcodebuild -project Vidarr.xcodeproj -scheme Vidarr -destination 'platform=macOS' test -only-testing:VidarrTests/GestureRecognizerTests
+```sh
+xcodebuild \
+  -project Vidarr.xcodeproj \
+  -scheme Vidarr \
+  -destination 'platform=macOS' \
+  test -only-testing:VidarrTests
 ```
 
-### GitHub Releases (DMG自動配布)
-- `main` への push / PR で、GitHub Actions が自動ビルド検証します。
-- `v*` タグを push すると、GitHub Actions が `.dmg` を作成して Releases に自動添付します。
+## データと同期
 
-### リリース手順
-```bash
-git tag v0.1.8
-git push origin v0.1.8
-```
+ブックマーク同期を有効にした場合、同じApple Accountで使うVidarr間でブックマークだけをiCloud経由で同期します。履歴、開いているタブ、Cookie、サイトデータ、ダウンロード一覧、サイト権限は同期しません。
 
-### ローカルでDMG作成
-```bash
-./scripts/build_dmg.sh v0.1.8
-```
+プライベートグループの外部リンク振り分けルールはKeychainに保存し、端末のロック解除中だけ読み取れるようにしています。
 
-### License
-このリポジトリは [MIT License](./LICENSE) です。
+## フィードバック
 
-### Legal Notice
-- 本プロジェクトは Fenrir Inc.（フェンリル株式会社）とは一切関係ありません。
-- 権利者（Fenrir Inc. 含む）から申し立て・要請があった場合、公開状態（public/private）を含め、速やかに対応します。
+不具合や機能のリクエストは[Issues](https://github.com/mani1261790/Vidarr/issues)へ。不具合の場合は、OSのバージョン、利用していたデバイス、再現手順を添えてください。
+
+## ライセンス
+
+このリポジトリは[MIT License](LICENSE)で公開しています。

@@ -16,7 +16,7 @@ jobs:
       SIGNING_IDENTITY: "Developer ID Application"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install DMG tool
         run: brew install create-dmg

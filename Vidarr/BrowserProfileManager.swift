@@ -1,6 +1,74 @@
 import Foundation
+import Security
 import VidarrCore
 import WebKit
+
+protocol PrivateTabGroupRouteStoring: AnyObject {
+    func load() throws -> [String: String]
+    func save(_ routes: [String: String]) throws
+}
+
+private struct PrivateRouteKeychainError: Error {
+    let status: OSStatus
+}
+
+private final class KeychainPrivateTabGroupRouteStore: PrivateTabGroupRouteStoring {
+    private let service: String
+    private let account = "private-tab-group-routes"
+
+    init(bundleIdentifier: String) {
+        service = "\(bundleIdentifier).private-routes"
+    }
+
+    func load() throws -> [String: String] {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return [:] }
+        guard status == errSecSuccess, let data = result as? Data else {
+            throw PrivateRouteKeychainError(status: status)
+        }
+        return try JSONDecoder().decode([String: String].self, from: data)
+    }
+
+    func save(_ routes: [String: String]) throws {
+        if routes.isEmpty {
+            let status = SecItemDelete(baseQuery as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw PrivateRouteKeychainError(status: status)
+            }
+            return
+        }
+
+        let data = try JSONEncoder().encode(routes)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw PrivateRouteKeychainError(status: updateStatus)
+        }
+
+        var item = baseQuery
+        attributes.forEach { item[$0.key] = $0.value }
+        let addStatus = SecItemAdd(item as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw PrivateRouteKeychainError(status: addStatus)
+        }
+    }
+
+    private var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+    }
+}
 
 final class BrowserProfileManager {
     static let shared = BrowserProfileManager()
@@ -17,13 +85,20 @@ final class BrowserProfileManager {
 
     private let defaults: UserDefaults
     private let bundleIdentifier: String
+    private let privateRouteStore: PrivateTabGroupRouteStoring
     private var websiteDataStores: [String: WKWebsiteDataStore] = [:]
 
-    init(defaults: UserDefaults = .standard, bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "dev.mani.Vidarr") {
+    init(
+        defaults: UserDefaults = .standard,
+        bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "dev.mani.Vidarr",
+        privateRouteStore: PrivateTabGroupRouteStoring? = nil
+    ) {
         self.defaults = defaults
         self.bundleIdentifier = bundleIdentifier
+        self.privateRouteStore = privateRouteStore ?? KeychainPrivateTabGroupRouteStore(bundleIdentifier: bundleIdentifier)
         ensureDefaultProfileExists()
         migrateLegacyRoutesIfNeeded()
+        migratePrivateTabGroupRoutesToKeychainIfNeeded()
     }
 
     var profiles: [BrowserProfile] {
@@ -56,10 +131,13 @@ final class BrowserProfileManager {
     }
 
     var tabGroupRouteRules: [String: String] {
-        get { defaults.dictionary(forKey: Key.tabGroupRouteRules) as? [String: String] ?? [:] }
+        get {
+            let publicRules = defaults.dictionary(forKey: Key.tabGroupRouteRules) as? [String: String] ?? [:]
+            let privateRules = (try? privateRouteStore.load()) ?? [:]
+            return publicRules.merging(privateRules) { _, protectedValue in protectedValue }
+        }
         set {
-            defaults.set(newValue, forKey: Key.tabGroupRouteRules)
-            NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+            _ = persistTabGroupRouteRules(newValue)
         }
     }
 
@@ -172,20 +250,45 @@ final class BrowserProfileManager {
               let domain = normalizedDomain(rawDomain) else { return false }
         var rules = tabGroupRouteRules
         rules[domain] = tabGroupID
-        tabGroupRouteRules = rules
-        return true
+        return persistTabGroupRouteRules(rules)
     }
 
     func removeTabGroupRoute(domain rawDomain: String) {
         guard let domain = normalizedDomain(rawDomain) else { return }
         var rules = tabGroupRouteRules
         rules.removeValue(forKey: domain)
-        tabGroupRouteRules = rules
+        _ = persistTabGroupRouteRules(rules)
     }
 
     func routedTabGroup(for url: URL) -> BrowserTabGroup? {
         guard let groupID = routedProfileID(for: url, rules: tabGroupRouteRules) else { return nil }
         return TabGroupStore.shared.groups.first(where: { $0.id == groupID })
+    }
+
+    func removeConfiguration(forTabGroup group: BrowserTabGroup) {
+        var rules = tabGroupRouteRules
+        rules = rules.filter { $0.value != group.id }
+        _ = persistTabGroupRouteRules(rules)
+
+        let cacheKey = "tab-group:\(group.id)"
+        let cachedStore = websiteDataStores.removeValue(forKey: cacheKey)
+        var identifiers = defaults.dictionary(forKey: Key.tabGroupWebsiteDataStoreIdentifiers) as? [String: String] ?? [:]
+        let storedIdentifier = identifiers.removeValue(forKey: group.id).flatMap(UUID.init(uuidString:))
+        defaults.set(identifiers, forKey: Key.tabGroupWebsiteDataStoreIdentifiers)
+
+        let dataStore: WKWebsiteDataStore?
+        if let cachedStore {
+            dataStore = cachedStore
+        } else if let storedIdentifier {
+            dataStore = WKWebsiteDataStore(forIdentifier: storedIdentifier)
+        } else {
+            dataStore = nil
+        }
+        dataStore?.removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: .distantPast,
+            completionHandler: {}
+        )
     }
 
     private func normalizedDomain(_ rawValue: String) -> String? {
@@ -194,6 +297,36 @@ final class BrowserProfileManager {
         let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
         guard let host = URL(string: candidate)?.host?.lowercased(), !host.isEmpty else { return nil }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    @discardableResult
+    private func persistTabGroupRouteRules(_ rules: [String: String]) -> Bool {
+        let privateRules = rules.filter { $0.value == BrowserTabGroup.privateMode.id }
+        let publicRules = rules.filter { $0.value != BrowserTabGroup.privateMode.id }
+        do {
+            try privateRouteStore.save(privateRules)
+            defaults.set(publicRules, forKey: Key.tabGroupRouteRules)
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func migratePrivateTabGroupRoutesToKeychainIfNeeded() {
+        let storedRules = defaults.dictionary(forKey: Key.tabGroupRouteRules) as? [String: String] ?? [:]
+        let exposedPrivateRules = storedRules.filter { $0.value == BrowserTabGroup.privateMode.id }
+        guard !exposedPrivateRules.isEmpty else { return }
+
+        do {
+            let existingPrivateRules = try privateRouteStore.load()
+            let merged = existingPrivateRules.merging(exposedPrivateRules) { existing, _ in existing }
+            try privateRouteStore.save(merged)
+            let publicRules = storedRules.filter { $0.value != BrowserTabGroup.privateMode.id }
+            defaults.set(publicRules, forKey: Key.tabGroupRouteRules)
+        } catch {
+            // Keychainへの保存に成功するまでは既存設定を消さず、振り分けを壊さない。
+        }
     }
 
     @discardableResult

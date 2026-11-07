@@ -5,12 +5,19 @@ import VidarrCore
 import WebKit
 @testable import Vidarr
 
+private final class TestPrivateTabGroupRouteStore: PrivateTabGroupRouteStoring {
+    var routes: [String: String] = [:]
+
+    func load() throws -> [String: String] { routes }
+    func save(_ routes: [String: String]) throws { self.routes = routes }
+}
+
 struct BrowserProfileIsolationTests {
     @Test @MainActor func persistentWebsiteDataStoresAreUniquePerTabGroup() throws {
         let suiteName = "VidarrTests.TabGroupDataStores.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let manager = BrowserProfileManager(defaults: defaults)
+        let manager = BrowserProfileManager(defaults: defaults, privateRouteStore: TestPrivateTabGroupRouteStore())
 
         let regularStore = manager.websiteDataStore(for: BrowserTabGroup.regular)
         let workStore = manager.websiteDataStore(for: BrowserTabGroup.work)
@@ -31,9 +38,26 @@ struct BrowserProfileIsolationTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(["example.com": BrowserProfile.default.id], forKey: "profiles.routeRules")
 
-        let manager = BrowserProfileManager(defaults: defaults)
+        let manager = BrowserProfileManager(defaults: defaults, privateRouteStore: TestPrivateTabGroupRouteStore())
 
         #expect(manager.tabGroupRouteRules["example.com"] == BrowserTabGroup.regular.id)
+    }
+
+    @Test func privateTabGroupRoutesStayOutOfUserDefaults() throws {
+        let suiteName = "VidarrTests.PrivateTabGroupRoutes.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let protectedStore = TestPrivateTabGroupRouteStore()
+        let manager = BrowserProfileManager(defaults: defaults, privateRouteStore: protectedStore)
+
+        #expect(manager.setRoute(domain: "secret.example", tabGroupID: BrowserTabGroup.privateMode.id))
+        #expect(manager.setRoute(domain: "work.example", tabGroupID: BrowserTabGroup.work.id))
+        #expect(protectedStore.routes["secret.example"] == BrowserTabGroup.privateMode.id)
+
+        let exposed = defaults.dictionary(forKey: "tabGroups.routeRules") as? [String: String] ?? [:]
+        #expect(exposed["secret.example"] == nil)
+        #expect(exposed["work.example"] == BrowserTabGroup.work.id)
+        #expect(manager.tabGroupRouteRules["secret.example"] == BrowserTabGroup.privateMode.id)
     }
 
     @Test @MainActor func persistentWebsiteDataStoresAreUniquePerProfile() {
@@ -165,6 +189,9 @@ struct TabGroupStoreTests {
         let restoredGroup = try #require(restored.groups.first(where: { $0.id == group.id }))
         #expect(restoredGroup.displaySymbolName == "book.closed")
         #expect(restoredGroup.displayColorID == "orange")
+        #expect(restored.remove(id: restoredGroup.id))
+        #expect(!restored.groups.contains(where: { $0.id == restoredGroup.id }))
+        #expect(!restored.remove(id: BrowserTabGroup.regular.id))
     }
 }
 

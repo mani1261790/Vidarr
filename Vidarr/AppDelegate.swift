@@ -702,6 +702,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 openHistory: { [weak self] in self?.menuOpenHistoryWindow() },
                 openBookmarks: { [weak self] in self?.menuOpenBookmarksWindow() },
                 openSiteControls: { [weak self] in self?.menuOpenSiteSettings() },
+                deleteTabGroup: { [weak self] groupID in
+                    self?.mainWindowController?.deleteCustomTabGroup(id: groupID) ?? false
+                },
                 switchProfile: { [weak self] profileID in self?.switchProfileLive(to: profileID) ?? false }
             )
         }
@@ -759,12 +762,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
+    private let deleteTabGroupAction: (String) -> Bool
     private let switchProfileAction: (String) -> Bool
     private lazy var modernViewModel = PreferencesViewModel(
         openDownloads: openDownloadsAction,
         openHistory: openHistoryAction,
         openBookmarks: openBookmarksAction,
         openSiteControls: openSiteControlsAction,
+        deleteTabGroup: deleteTabGroupAction,
         windowProvider: { [weak self] in self?.window }
     )
     private weak var rootLayoutView: NSView?
@@ -819,12 +824,14 @@ private final class PreferencesWindowController: NSWindowController, NSTextField
         openHistory: @escaping () -> Void,
         openBookmarks: @escaping () -> Void,
         openSiteControls: @escaping () -> Void,
+        deleteTabGroup: @escaping (String) -> Bool,
         switchProfile: @escaping (String) -> Bool
     ) {
         self.openDownloadsAction = openDownloads
         self.openHistoryAction = openHistory
         self.openBookmarksAction = openBookmarks
         self.openSiteControlsAction = openSiteControls
+        self.deleteTabGroupAction = deleteTabGroup
         self.switchProfileAction = switchProfile
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.preferredContentSize),

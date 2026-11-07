@@ -290,7 +290,10 @@ final class TabManager {
     }
 
     var allTabSearchItems: [TabSearchItem] {
-        availableGroups.flatMap { group in
+        let searchableGroups = currentGroup.isPrivate
+            ? availableGroups.filter(\.isPrivate)
+            : availableGroups.filter { !$0.isPrivate }
+        return searchableGroups.flatMap { group in
             state(for: group).tabs.enumerated().map { index, tab in
                 let url = tab.webView.url ?? tab.lastKnownURL
                 let pageTitle = tab.webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -311,7 +314,7 @@ final class TabManager {
     }
 
     func exportTabGroupsData() -> Data? {
-        let output = availableGroups.map { group in
+        let output = availableGroups.filter { !$0.isPrivate }.map { group in
             ExportedTabGroup(
                 id: group.id,
                 name: group.displayName,
@@ -339,6 +342,29 @@ final class TabManager {
             switchGroupInternal(group, ensureTab: true)
             notifyCurrentGroupUpdated(selectCurrent: true)
         }
+    }
+
+    @discardableResult
+    func deleteCustomGroup(id: String) -> Bool {
+        guard let group = availableGroups.first(where: { $0.id == id }),
+              group.kind == .custom else { return false }
+
+        if currentGroup == group {
+            switchGroupInternal(.regular, ensureTab: true)
+        }
+
+        if let removedState = states.removeValue(forKey: group) {
+            removedState.tabs.forEach {
+                $0.webView.stopLoading()
+                $0.webView.removeFromSuperview()
+            }
+        }
+        closedStack.removeAll { $0.group == group }
+
+        BrowserProfileManager.shared.removeConfiguration(forTabGroup: group)
+        guard TabGroupStore.shared.remove(id: id) else { return false }
+        notifyCurrentGroupUpdated(selectCurrent: true)
+        return true
     }
 
     func group(for webView: WKWebView) -> BrowserTabGroup? {
@@ -931,6 +957,7 @@ final class TabManager {
     }
 
     private func pushClosed(_ snapshot: ClosedTabSnapshot) {
+        guard !snapshot.group.isPrivate else { return }
         closedStack.append(snapshot)
         if closedStack.count > 20 {
             closedStack.removeFirst(closedStack.count - 20)

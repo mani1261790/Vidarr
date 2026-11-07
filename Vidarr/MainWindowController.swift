@@ -750,6 +750,14 @@ final class MainWindowController: NSWindowController {
         tabManager.switchGroup(renamed)
     }
 
+    @discardableResult
+    func deleteCustomTabGroup(id: String) -> Bool {
+        guard tabManager.deleteCustomGroup(id: id) else { return false }
+        rebuildTabStrip()
+        syncGroupSelectorSelection()
+        return true
+    }
+
     @objc private func didMoveCurrentTabGroupEarlier() {
         if TabGroupStore.shared.move(id: tabManager.currentGroup.id, by: -1) { rebuildTabStrip() }
     }
@@ -1813,7 +1821,7 @@ final class MainWindowController: NSWindowController {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             birthView.animator().alphaValue = 1.0
             birthView.animator().frame = popRect
-        } completionHandler: {
+        } completionHandler: { [self, targetChip] in
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.25
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -2840,7 +2848,7 @@ extension MainWindowController: WKNavigationDelegate {
         webView: WKWebView,
         originalRequest: URLRequest
     ) {
-        let show = {
+        let show = { [self] in
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = warning.title

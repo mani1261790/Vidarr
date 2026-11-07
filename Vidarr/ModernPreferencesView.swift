@@ -1,8 +1,17 @@
 import AppKit
 import AuthenticationServices
 import Combine
+import LocalAuthentication
 import SwiftUI
 import VidarrCore
+
+private final class WeakSendableBox<Value: AnyObject>: @unchecked Sendable {
+    weak var value: Value?
+
+    init(_ value: Value) {
+        self.value = value
+    }
+}
 
 private struct TabGroupSymbolOption: Identifiable {
     let id: String
@@ -113,6 +122,8 @@ final class PreferencesViewModel: ObservableObject {
     @Published var newTabGroupName = ""
     @Published var newTabGroupSymbolName = "rectangle.stack"
     @Published var newTabGroupColorID = "blue"
+    @Published var privateSettingsUnlocked = false
+    @Published var privateSettingsAuthenticationInProgress = false
     @Published var contentLanguage: BrowserPreferences.PreferredContentLanguage = .system
     @Published var updatesEnabled = true
     @Published var reopenTabsOnLaunch = true
@@ -150,6 +161,7 @@ final class PreferencesViewModel: ObservableObject {
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
     private let openSiteControlsAction: () -> Void
+    private let deleteTabGroupAction: (String) -> Bool
     private let windowProvider: () -> NSWindow?
     private var gesturePracticeWindowController: GesturePracticeWindowController?
 
@@ -160,12 +172,14 @@ final class PreferencesViewModel: ObservableObject {
         openHistory: @escaping () -> Void,
         openBookmarks: @escaping () -> Void,
         openSiteControls: @escaping () -> Void,
+        deleteTabGroup: @escaping (String) -> Bool,
         windowProvider: @escaping () -> NSWindow?
     ) {
         openDownloadsAction = openDownloads
         openHistoryAction = openHistory
         openBookmarksAction = openBookmarks
         openSiteControlsAction = openSiteControls
+        deleteTabGroupAction = deleteTabGroup
         self.windowProvider = windowProvider
         reload()
     }
@@ -271,6 +285,10 @@ final class PreferencesViewModel: ObservableObject {
         controller.show(relativeTo: windowProvider())
     }
     func addTabGroupRoute() {
+        if routeTabGroupID == BrowserTabGroup.privateMode.id, !privateSettingsUnlocked {
+            showAlert(style: .warning, title: "認証が必要です", message: "プライベートタブグループの振り分けを変更するには、先に本人確認を行ってください。")
+            return
+        }
         guard tabGroupContext.setRoute(domain: routeDomain, tabGroupID: routeTabGroupID) else {
             showAlert(style: .warning, title: "ドメインを確認してください", message: "example.com のような形式で入力してください。")
             return
@@ -279,6 +297,10 @@ final class PreferencesViewModel: ObservableObject {
         reload()
     }
     func removeTabGroupRoute(domain: String) {
+        if tabGroupRoutes[domain] == BrowserTabGroup.privateMode.id, !privateSettingsUnlocked {
+            showAlert(style: .warning, title: "認証が必要です", message: "プライベートタブグループの振り分けを変更するには本人確認が必要です。")
+            return
+        }
         tabGroupContext.removeTabGroupRoute(domain: domain)
         reload()
     }
@@ -297,6 +319,68 @@ final class PreferencesViewModel: ObservableObject {
         newTabGroupName = ""
         routeTabGroupID = group.id
         reload()
+    }
+    var routeTargetGroups: [BrowserTabGroup] {
+        tabGroups.filter { !$0.isPrivate || privateSettingsUnlocked }
+    }
+    var visibleTabGroupRoutes: [String: String] {
+        tabGroupRoutes.filter { privateSettingsUnlocked || $0.value != BrowserTabGroup.privateMode.id }
+    }
+    func deleteTabGroup(_ group: BrowserTabGroup) {
+        guard group.kind == .custom else { return }
+        let alert = confirmation(
+            title: "「\(group.displayName)」を削除しますか？",
+            message: "このグループのタブ、外部リンクの振り分け、Cookieとサイトデータを削除します。この操作は取り消せません。",
+            actionTitle: "削除"
+        )
+        present(alert) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            if self.deleteTabGroupAction(group.id) {
+                self.reload()
+            } else {
+                self.showAlert(style: .warning, title: "削除できませんでした", message: "タブグループの状態を確認して、もう一度お試しください。")
+            }
+        }
+    }
+    func unlockPrivateSettings() {
+        guard !privateSettingsAuthenticationInProgress else { return }
+        privateSettingsAuthenticationInProgress = true
+        let context = LAContext()
+        context.localizedCancelTitle = "キャンセル"
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            privateSettingsAuthenticationInProgress = false
+            showAlert(
+                style: .warning,
+                title: "本人確認を利用できません",
+                message: error?.localizedDescription ?? "このMacでは本人確認を利用できません。"
+            )
+            return
+        }
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "プライベートタブグループの振り分け設定を表示します"
+        ) { [model = WeakSendableBox(self)] success, authenticationError in
+            Task { @MainActor in
+                guard let viewModel = model.value else { return }
+                viewModel.privateSettingsAuthenticationInProgress = false
+                if success {
+                    viewModel.privateSettingsUnlocked = true
+                } else if let authenticationError {
+                    viewModel.showAlert(
+                        style: .warning,
+                        title: "本人確認に失敗しました",
+                        message: authenticationError.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+    func lockPrivateSettings() {
+        privateSettingsUnlocked = false
+        if routeTabGroupID == BrowserTabGroup.privateMode.id {
+            routeTabGroupID = BrowserTabGroup.regular.id
+        }
     }
     func setGesture(_ option: BrowserPreferences.GestureOption, enabled: Bool) {
         prefs.setGestureEnabled(enabled, for: option)
@@ -467,6 +551,10 @@ struct ModernPreferencesView: View {
         }
         .frame(minWidth: 900, minHeight: 640)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onDisappear { model.lockPrivateSettings() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            model.lockPrivateSettings()
+        }
     }
 
     private var sidebar: some View {
@@ -633,11 +721,22 @@ struct ModernPreferencesView: View {
                         Text(group.displayName)
                             .font(.system(size: 12, weight: .medium))
                         if group.kind != .custom {
-                            Text("標準")
+                            Text(group.isPrivate ? "認証保護" : "標準")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
                         Spacer()
+                        if group.kind == .custom {
+                            Button {
+                                model.deleteTabGroup(group)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help("このタブグループを削除")
+                            .accessibilityLabel("「\(group.displayName)」を削除")
+                        }
                     }
                     .padding(.vertical, 2)
                 }
@@ -645,18 +744,48 @@ struct ModernPreferencesView: View {
                 Text("外部リンクの自動振り分け")
                     .font(.system(size: 13, weight: .semibold))
                 HStack(spacing: 10) {
+                    Image(systemName: model.privateSettingsUnlocked ? "lock.open" : "lock")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.privateSettingsUnlocked ? "プライベート設定を表示中" : "プライベート振り分けは非表示")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(model.privateSettingsUnlocked
+                             ? "設定画面を閉じるか、Vidarrが非アクティブになると再ロックします。"
+                             : "表示・追加・削除にはTouch IDまたはMacのログインパスワードが必要です。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if model.privateSettingsUnlocked {
+                        Button("ロック") { model.lockPrivateSettings() }
+                    } else {
+                        Button {
+                            model.unlockPrivateSettings()
+                        } label: {
+                            if model.privateSettingsAuthenticationInProgress {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Text("認証して表示")
+                            }
+                        }
+                        .disabled(model.privateSettingsAuthenticationInProgress)
+                    }
+                }
+                .padding(.vertical, 4)
+                HStack(spacing: 10) {
                     TextField("example.com", text: $model.routeDomain)
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 180)
                     Picker("", selection: $model.routeTabGroupID) {
-                        ForEach(model.tabGroups, id: \.id) { Text($0.displayName).tag($0.id) }
+                        ForEach(model.routeTargetGroups, id: \.id) { Text($0.displayName).tag($0.id) }
                     }
                     .labelsHidden()
                     .frame(width: 170)
                     Button("追加") { model.addTabGroupRoute() }
                         .buttonStyle(RoundedActionButtonStyle(tint: .accentColor))
                 }
-                ForEach(model.tabGroupRoutes.keys.sorted(), id: \.self) { domain in
+                ForEach(model.visibleTabGroupRoutes.keys.sorted(), id: \.self) { domain in
                     HStack(spacing: 10) {
                         Image(systemName: "globe").foregroundStyle(.secondary).frame(width: 18)
                         Text(domain).font(.system(size: 12, weight: .medium))

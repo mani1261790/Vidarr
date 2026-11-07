@@ -56,19 +56,10 @@ macOS版はAppKitとWebKitで動作します。iPhone / iPad向けのSwiftUI版�
 [Releases](https://github.com/mani1261790/Vidarr/releases)から最新の`Vidarr-*.dmg`をダウンロードします。
 
 1. DMGを開き、`Vidarr.app`を`Applications`フォルダへドラッグします。
-2. 初回起動時にmacOSから警告が表示された場合は、DMG内の`2) First Launch Fix.command`を実行します。
-3. `Vidarr.app`を開きます。必要に応じて、右クリックメニューの「開く」を使ってください。
+2. `Vidarr.app`を開きます。
 
 > [!IMPORTANT]
-> 現在の配布ビルドは署名・公証されていません。macOSが「壊れている」「開発元を確認できない」と表示する場合があります。
-
-DMG内のスクリプトを使わず、ターミナルから保護を解除する場合は次を実行します。
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Vidarr.app
-```
-
-それでも起動できない場合は、「システム設定」→「プライバシーとセキュリティ」でVidarrの実行を許可してから、もう一度開いてください。
+> v0.1.12以降の配布ビルドはDeveloper IDで署名し、Appleの公証を通しています。ダウンロード元はこのGitHub Releasesに限定してください。
 
 ## ソースからビルドする
 

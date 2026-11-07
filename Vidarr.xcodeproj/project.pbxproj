@@ -38,9 +38,22 @@
 		D0AA00012F50F00000CB4EE9 /* VidarrPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VidarrPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1B2C3D4E5F60718293A4B5C /* Exceptions for "Vidarr" folder in "Vidarr" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3C233D792F4F227E00CB4EE9 /* Vidarr */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3C233D7C2F4F227E00CB4EE9 /* Vidarr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1B2C3D4E5F60718293A4B5C /* Exceptions for "Vidarr" folder in "Vidarr" target */,
+			);
 			path = Vidarr;
 			sourceTree = "<group>";
 		};
@@ -525,7 +538,7 @@
 				CODE_SIGN_ENTITLEMENTS = Vidarr/Vidarr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_BLUETOOTH = YES;
@@ -538,7 +551,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.Vidarr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -559,7 +572,7 @@
 				CODE_SIGN_ENTITLEMENTS = Vidarr/Vidarr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_BLUETOOTH = YES;
@@ -572,7 +585,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.Vidarr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -590,11 +603,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -611,11 +624,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -631,10 +644,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -650,10 +663,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -671,12 +684,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -698,12 +711,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -725,7 +738,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
@@ -733,7 +746,7 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPhone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -755,7 +768,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSRequiresIPhoneOS = YES;
@@ -763,7 +776,7 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.1.11;
+				MARKETING_VERSION = 0.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.VidarrPhone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

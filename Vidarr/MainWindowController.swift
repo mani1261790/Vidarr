@@ -1,4 +1,5 @@
 import Cocoa
+import AuthenticationServices
 import AVFoundation
 import UniformTypeIdentifiers
 import VidarrCore
@@ -13,6 +14,58 @@ private final class PDFExportContext {
         self.controller = controller
         self.fallbackData = fallbackData
         self.destinationURL = destinationURL
+    }
+}
+
+private final class KeychainPasswordCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    typealias Completion = (Result<ASPasswordCredential, Error>) -> Void
+
+    private weak var presentationWindow: NSWindow?
+    private var completion: Completion?
+    private var authorizationController: ASAuthorizationController?
+
+    func begin(in window: NSWindow, completion: @escaping Completion) {
+        authorizationController?.cancel()
+        presentationWindow = window
+        self.completion = completion
+
+        let request = ASAuthorizationPasswordProvider().createRequest()
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        authorizationController = controller
+        controller.performRequests()
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        presentationWindow ?? NSApp.keyWindow ?? NSWindow()
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let credential = authorization.credential as? ASPasswordCredential else {
+            finish(.failure(NSError(
+                domain: "VidarrKeychainPassword",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "選択された項目からパスワードを取得できませんでした。"]
+            )))
+            return
+        }
+        finish(.success(credential))
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        finish(.failure(error))
+    }
+
+    private func finish(_ result: Result<ASPasswordCredential, Error>) {
+        let callback = completion
+        completion = nil
+        presentationWindow = nil
+        authorizationController = nil
+        callback?(result)
     }
 }
 
@@ -199,6 +252,7 @@ final class MainWindowController: NSWindowController {
     private var fullScreenHideTimer: Timer?
     private var isFullScreenToolbarHidden = false
     private var commandPaletteWindowController: CommandPaletteWindowController?
+    private let keychainPasswordCoordinator = KeychainPasswordCoordinator()
     private let trackingQueryKeys: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
         "gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "igshid", "rb_clickid"
@@ -836,7 +890,8 @@ final class MainWindowController: NSWindowController {
             CommandPaletteItem(title: "現在のページを再読み込み", detail: "操作", symbol: "arrow.clockwise", searchText: "reload 更新") { [weak self] in self?.menuReload() },
             CommandPaletteItem(title: "すべてのタブを再読み込み", detail: "操作", symbol: "arrow.triangle.2.circlepath", searchText: "reload all") { [weak self] in self?.menuReloadAllTabs() },
             CommandPaletteItem(title: "閉じたタブを復元", detail: "操作", symbol: "arrow.uturn.backward", searchText: "reopen restore") { [weak self] in self?.menuReopenClosedTab() },
-            CommandPaletteItem(title: "アドレスバーへ移動", detail: "操作", symbol: "location", searchText: "address location url") { [weak self] in self?.menuFocusAddressBar() }
+            CommandPaletteItem(title: "アドレスバーへ移動", detail: "操作", symbol: "location", searchText: "address location url") { [weak self] in self?.menuFocusAddressBar() },
+            CommandPaletteItem(title: "Keychainからログイン情報を入力", detail: "パスワード", symbol: "key.viewfinder", searchText: "password keychain login パスワード ログイン") { [weak self] in self?.menuFillLoginFromKeychain() }
         ]
 
         let tabs = tabManager.allTabSearchItems.map { item in
@@ -1053,23 +1108,22 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    func menuPreparePasswordAutoFill() {
-        guard let webView = tabManager.currentWebView else { return }
-
-        if BrowserPreferences.shared.ephemeralModeEnabled {
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = "一時モードではログイン保持が弱くなります"
-            alert.informativeText = "Appleの標準オートフィルは使えますが、再起動後の保持を重視するならフットプリント最小化をOFFにしてください。"
-            alert.addButton(withTitle: "OK")
-            if let window {
-                alert.beginSheetModal(for: window)
-            } else {
-                alert.runModal()
-            }
+    func menuFillLoginFromKeychain() {
+        guard let webView = tabManager.currentWebView,
+              let sourceURL = webView.url,
+              let scheme = sourceURL.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = sourceURL.host,
+              !host.isEmpty else {
+            presentTransientAlert(
+                title: "このページではKeychainを利用できません",
+                message: "HTTPまたはHTTPSのログインページを開いてください。",
+                style: .warning
+            )
+            return
         }
 
-        let script = """
+        let findLoginFormScript = """
         (() => {
           const isVisible = (el) => {
             const style = getComputedStyle(el);
@@ -1088,12 +1142,11 @@ final class MainWindowController: NSWindowController {
             return t === "text" || t === "email" || ac.includes("username") || ac.includes("email");
           });
 
-          (user || password).focus();
           return true;
         })();
         """
 
-        webView.evaluateJavaScript(script) { [weak self] result, _ in
+        webView.evaluateJavaScript(findLoginFormScript) { [weak self, weak webView] result, _ in
             guard let self else { return }
             guard let found = result as? Bool, found else {
                 let alert = NSAlert()
@@ -1107,6 +1160,101 @@ final class MainWindowController: NSWindowController {
                     alert.runModal()
                 }
                 return
+            }
+
+            guard let webView, let window = self.window else { return }
+            self.keychainPasswordCoordinator.begin(in: window) { [weak self, weak webView] result in
+                guard let self, let webView else { return }
+
+                switch result {
+                case .success(let credential):
+                    guard self.tabManager.currentWebView === webView,
+                          Self.sameWebOrigin(sourceURL, webView.url) else {
+                        self.presentTransientAlert(
+                            title: "入力を中止しました",
+                            message: "資格情報の選択中にページまたはサイトが変わりました。",
+                            style: .warning
+                        )
+                        return
+                    }
+                    self.fillLoginForm(
+                        in: webView,
+                        username: credential.user,
+                        password: credential.password
+                    )
+                case .failure(let error):
+                    let authorizationError = error as? ASAuthorizationError
+                    if authorizationError?.code == .canceled { return }
+                    self.presentTransientAlert(
+                        title: "Keychainから取得できませんでした",
+                        message: error.localizedDescription,
+                        style: .warning
+                    )
+                }
+            }
+        }
+    }
+
+    private static func sameWebOrigin(_ lhs: URL, _ rhs: URL?) -> Bool {
+        guard let rhs else { return false }
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && lhs.port == rhs.port
+    }
+
+    private func fillLoginForm(in webView: WKWebView, username: String, password: String) {
+        let script = """
+        const isVisible = (el) => {
+          const style = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0 && !el.disabled && !el.readOnly;
+        };
+        const setValue = (el, value) => {
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+          descriptor.set.call(el, value);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        const passwordField = Array.from(document.querySelectorAll('input[type="password"]')).find(isVisible);
+        if (!passwordField) { return false; }
+
+        const fields = passwordField.form
+          ? Array.from(passwordField.form.querySelectorAll("input"))
+          : Array.from(document.querySelectorAll("input"));
+        const usernameField = fields.find((el) => {
+          if (!isVisible(el) || el === passwordField) { return false; }
+          const type = (el.type || "").toLowerCase();
+          const autocomplete = (el.autocomplete || "").toLowerCase();
+          return autocomplete.includes("username") || autocomplete.includes("email") || type === "email" || type === "text";
+        });
+
+        if (usernameField) { setValue(usernameField, username); }
+        setValue(passwordField, password);
+        passwordField.focus();
+        return true;
+        """
+
+        webView.callAsyncJavaScript(
+            script,
+            arguments: ["username": username, "password": password],
+            in: nil,
+            in: .page
+        ) { [weak self] result in
+            switch result {
+            case .success(let value):
+                guard (value as? Bool) != true else { return }
+                self?.presentTransientAlert(
+                    title: "ログインフォームが変わりました",
+                    message: "もう一度Keychainからの入力を実行してください。",
+                    style: .warning
+                )
+            case .failure(let error):
+                self?.presentTransientAlert(
+                    title: "ログイン情報を入力できませんでした",
+                    message: error.localizedDescription,
+                    style: .warning
+                )
             }
         }
     }

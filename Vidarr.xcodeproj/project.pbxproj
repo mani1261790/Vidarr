@@ -538,7 +538,7 @@
 				CODE_SIGN_ENTITLEMENTS = Vidarr/Vidarr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_BLUETOOTH = YES;
@@ -551,7 +551,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.13;
+				MARKETING_VERSION = 0.1.14;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.Vidarr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -572,7 +572,7 @@
 				CODE_SIGN_ENTITLEMENTS = Vidarr/Vidarr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = PA8WHP7G46;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_BLUETOOTH = YES;
@@ -585,7 +585,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.13;
+				MARKETING_VERSION = 0.1.14;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mani.Vidarr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

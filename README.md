@@ -87,7 +87,7 @@ xcodebuild \
 
 現在のMac版では、ブックマーク、履歴、開いているタブ、Cookie、サイトデータ、ダウンロード一覧、サイト権限を端末内に保存します。iCloud同期はまだ有効にしていません。
 
-パスワード入力はWebKitのPassword AutoFillを使い、パスキーはmacOSの「Webブラウザのパスキーアクセス」許可を通してApple Passwordsから利用します。Vidarr自身はパスワードやパスキーを保存しません。
+ログインページでは、編集メニューの「Fill Login from Keychain…」からmacOS Keychainの資格情報を選択して入力できます。選択中にページやサイトが変わった場合は入力を中止し、Vidarr自身はパスワードを保存・一覧取得しません。ブラウザ向けManaged Entitlementが必要なパスキーは現在サポートしていません。
 
 プライベートグループの外部リンク振り分けルールはKeychainに保存し、端末のロック解除中だけ読み取れるようにしています。
 

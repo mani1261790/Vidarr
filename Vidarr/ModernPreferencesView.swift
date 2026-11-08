@@ -1,5 +1,4 @@
 import AppKit
-import AuthenticationServices
 import Combine
 import LocalAuthentication
 import SwiftUI
@@ -150,14 +149,9 @@ final class PreferencesViewModel: ObservableObject {
     @Published var downloadCount = 0
     @Published var siteControlCount = 0
     @Published var downloadFolderPath: String?
-    @Published var passkeyAccessTitle = "確認中"
-    @Published var passkeyAccessDetail = "パスキーの利用状態を確認しています"
-    @Published var passkeyAccessAuthorized = false
-    @Published var canRequestPasskeyAccess = false
     @Published var isClearingData = false
 
     private let tabGroupContext = BrowserProfileManager.shared
-    private let passkeyCredentialManager = ASAuthorizationWebBrowserPublicKeyCredentialManager()
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
@@ -227,7 +221,6 @@ final class PreferencesViewModel: ObservableObject {
             + prefs.harmfulSiteAllowedHosts.count
             + MediaPermissionStore.shared.all().count
         downloadFolderPath = prefs.preferredDownloadDirectoryPath
-        reloadPasskeyAccessState()
     }
 
     func commitTextFields() {
@@ -386,47 +379,6 @@ final class PreferencesViewModel: ObservableObject {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func reloadPasskeyAccessState() {
-        let deviceConfigured: Bool?
-        if #available(macOS 26.2, *) {
-            deviceConfigured = ASAuthorizationWebBrowserPublicKeyCredentialManager.isDeviceConfiguredForPasskeys
-        } else {
-            deviceConfigured = nil
-        }
-        switch passkeyCredentialManager.authorizationStateForPlatformCredentials {
-        case .authorized:
-            passkeyAccessTitle = "パスキーへのアクセスを許可済み"
-            if deviceConfigured == false {
-                passkeyAccessDetail = "このMacではパスキーがまだ設定されていません"
-            } else {
-                passkeyAccessDetail = "WebサイトのパスキーをApple Passwordsから利用できます"
-            }
-            passkeyAccessAuthorized = true
-            canRequestPasskeyAccess = false
-        case .notDetermined:
-            passkeyAccessTitle = "パスキーへのアクセスは未設定"
-            passkeyAccessDetail = "使用時にApple Passwordsへのアクセス許可が必要です"
-            passkeyAccessAuthorized = false
-            canRequestPasskeyAccess = true
-        case .denied:
-            passkeyAccessTitle = "パスキーへのアクセスが拒否されています"
-            passkeyAccessDetail = "システム設定の「Webブラウザのパスキーアクセス」で変更できます"
-            passkeyAccessAuthorized = false
-            canRequestPasskeyAccess = false
-        @unknown default:
-            passkeyAccessTitle = "パスキーの状態を確認できません"
-            passkeyAccessDetail = "macOSのシステム設定を確認してください"
-            passkeyAccessAuthorized = false
-            canRequestPasskeyAccess = false
-        }
-    }
-
-    func requestPasskeyAccess() {
-        passkeyCredentialManager.requestAuthorizationForPublicKeyCredentials { [model = WeakSendableBox(self)] _ in
-            Task { @MainActor in model.value?.reloadPasskeyAccessState() }
-        }
     }
 
     func openPasswords() {
@@ -840,18 +792,18 @@ struct ModernPreferencesView: View {
                 }
             }
 
-            PreferenceCard(title: "パスワードとパスキー", subtitle: "Apple Passwordsの標準機能を利用", symbol: "key", tint: .secondary) {
+            PreferenceCard(title: "パスワード", subtitle: "macOS Keychainから選んで入力", symbol: "key", tint: .secondary) {
                 StatusRow(
-                    title: "Password AutoFill",
-                    detail: "ログイン欄ではWebKitがApple Passwordsの候補を表示します",
-                    symbol: "text.cursor",
+                    title: "Keychainからログイン情報を入力",
+                    detail: "ログインページで「編集」メニュー、または⌘\\から実行できます",
+                    symbol: "key.viewfinder",
                     tint: .secondary
                 )
                 Divider().opacity(0.35)
                 StatusRow(
-                    title: model.passkeyAccessTitle,
-                    detail: model.passkeyAccessDetail,
-                    symbol: model.passkeyAccessAuthorized ? "checkmark.shield" : "person.badge.key",
+                    title: "選択した資格情報だけを使用",
+                    detail: "macOSの認証画面で選んだ1件を、現在のサイトへ入力します",
+                    symbol: "checkmark.shield",
                     tint: .secondary
                 )
                 HStack {
@@ -859,15 +811,8 @@ struct ModernPreferencesView: View {
                         Label("パスワードを開く", systemImage: "key")
                     }
                     .buttonStyle(RoundedActionButtonStyle(tint: .accentColor))
-                    if model.canRequestPasskeyAccess {
-                        Button("パスキーアクセスを許可") { model.requestPasskeyAccess() }
-                            .buttonStyle(RoundedActionButtonStyle(tint: .accentColor, prominent: true))
-                    } else if !model.passkeyAccessAuthorized {
-                        Button("システム設定を開く") { model.openPrivacySettings() }
-                            .buttonStyle(RoundedActionButtonStyle(tint: .secondary))
-                    }
                 }
-                Text("Vidarr自身はパスワードやパスキーを保存しません。")
+                Text("Vidarrは資格情報を保存・一覧取得しません。パスキーは現在サポートしていません。")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

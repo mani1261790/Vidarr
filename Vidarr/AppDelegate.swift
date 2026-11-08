@@ -266,7 +266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(makeMenuItem("Focus Login Form for AutoFill", action: #selector(menuAutoFillPassword), key: "\\"))
+        editMenu.addItem(makeMenuItem("Fill Login from Keychain…", action: #selector(menuFillLoginFromKeychain), key: "\\"))
         editMenu.addItem(makeMenuItem("Open Passwords", action: #selector(menuOpenPasswordsApp), key: "\\", modifiers: [.command, .option]))
 
         let viewMenu = NSMenu(title: "View")
@@ -472,8 +472,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mainWindowController?.menuSelectPreviousTab()
     }
 
-    @objc private func menuAutoFillPassword() {
-        mainWindowController?.menuPreparePasswordAutoFill()
+    @objc private func menuFillLoginFromKeychain() {
+        mainWindowController?.menuFillLoginFromKeychain()
     }
 
     @objc private func menuOpenPasswordsApp() {

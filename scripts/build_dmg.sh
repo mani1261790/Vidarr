@@ -58,8 +58,11 @@ xcodebuild \
   -jobs 1 \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   DEVELOPMENT_TEAM="$TEAM_ID" \
   ENABLE_HARDENED_RUNTIME=YES \
+  ENABLE_CODE_COVERAGE=NO \
+  CLANG_COVERAGE_MAPPING=NO \
   OTHER_CODE_SIGN_FLAGS="--timestamp" \
   "${BUILD_VERSION_ARGS[@]}" \
   clean build
@@ -78,6 +81,13 @@ if [[ -n "$RELEASE_VERSION" ]]; then
 fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+if codesign -d --entitlements :- "$APP_PATH" 2>/dev/null \
+  | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \
+  | grep -qx 'true'; then
+  echo "Release app must not request com.apple.security.get-task-allow." >&2
+  exit 1
+fi
 
 mkdir -p "$STAGING_DIR"
 ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME"

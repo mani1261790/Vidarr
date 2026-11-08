@@ -71,7 +71,7 @@ Xcodeで`Vidarr.xcodeproj`を開き、目的のターゲットを選んで実行
 | iPhone | `VidarrPhone` | iPhone実機またはSimulator |
 | iPad | `VidarrPad` | iPad実機またはSimulator |
 
-実機で動かす場合は、各ターゲットの「Signing & Capabilities」でTeamを設定してください。macOS版のブックマーク同期には、iCloud Key-Value Storeを利用できるTeamが必要です。
+実機で動かす場合は、各ターゲットの「Signing & Capabilities」でTeamを設定してください。
 
 ### テスト
 
@@ -83,9 +83,11 @@ xcodebuild \
   test -only-testing:VidarrTests
 ```
 
-## データと同期
+## データとパスワード
 
-ブックマーク同期を有効にした場合、同じApple Accountで使うVidarr間でブックマークだけをiCloud経由で同期します。履歴、開いているタブ、Cookie、サイトデータ、ダウンロード一覧、サイト権限は同期しません。
+現在のMac版では、ブックマーク、履歴、開いているタブ、Cookie、サイトデータ、ダウンロード一覧、サイト権限を端末内に保存します。iCloud同期はまだ有効にしていません。
+
+パスワード入力はWebKitのPassword AutoFillを使い、パスキーはmacOSの「Webブラウザのパスキーアクセス」許可を通してApple Passwordsから利用します。Vidarr自身はパスワードやパスキーを保存しません。
 
 プライベートグループの外部リンク振り分けルールはKeychainに保存し、端末のロック解除中だけ読み取れるようにしています。
 

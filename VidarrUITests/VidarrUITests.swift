@@ -52,6 +52,9 @@ final class VidarrUITests: XCTestCase {
         XCTAssertTrue(preferencesWindow.waitForExistence(timeout: 3))
         XCTAssertTrue(preferencesWindow.staticTexts["タブグループ"].waitForExistence(timeout: 3))
         XCTAssertTrue(preferencesWindow.staticTexts["外部リンクの自動振り分け"].exists)
+        XCTAssertTrue(preferencesWindow.staticTexts["パスワードとパスキー"].exists)
+        XCTAssertTrue(preferencesWindow.staticTexts["Vidarr自身はパスワードやパスキーを保存しません。"].exists)
+        XCTAssertFalse(preferencesWindow.staticTexts["Apple アカウントと同期"].exists)
         XCTAssertFalse(preferencesWindow.staticTexts["プロファイル"].exists)
         XCTAssertFalse(preferencesWindow.staticTexts["現在のプロファイル"].exists)
 

@@ -1088,8 +1088,7 @@ final class MainWindowController: NSWindowController {
             return t === "text" || t === "email" || ac.includes("username") || ac.includes("email");
           });
 
-          if (user) { user.focus(); }
-          password.focus();
+          (user || password).focus();
           return true;
         })();
         """
@@ -1100,7 +1099,7 @@ final class MainWindowController: NSWindowController {
                 let alert = NSAlert()
                 alert.alertStyle = .informational
                 alert.messageText = "ログインフォームが見つかりません"
-                alert.informativeText = "ログイン欄をクリックしてから、もう一度 AutoFill Password を実行してください。"
+                alert.informativeText = "このページに表示中のパスワード欄がありません。ログインページを開いてから、もう一度実行してください。"
                 alert.addButton(withTitle: "OK")
                 if let window = self.window {
                     alert.beginSheetModal(for: window)

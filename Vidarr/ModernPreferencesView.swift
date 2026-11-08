@@ -150,13 +150,14 @@ final class PreferencesViewModel: ObservableObject {
     @Published var downloadCount = 0
     @Published var siteControlCount = 0
     @Published var downloadFolderPath: String?
-    @Published var cloudSyncAvailable = false
-    @Published var appleAccountDescription = "未連携"
-    @Published var hasAppleAccount = false
+    @Published var passkeyAccessTitle = "確認中"
+    @Published var passkeyAccessDetail = "パスキーの利用状態を確認しています"
+    @Published var passkeyAccessAuthorized = false
+    @Published var canRequestPasskeyAccess = false
     @Published var isClearingData = false
 
     private let tabGroupContext = BrowserProfileManager.shared
-    private let appleSignInCoordinator = AppleSignInCoordinator()
+    private let passkeyCredentialManager = ASAuthorizationWebBrowserPublicKeyCredentialManager()
     private let openDownloadsAction: () -> Void
     private let openHistoryAction: () -> Void
     private let openBookmarksAction: () -> Void
@@ -226,19 +227,7 @@ final class PreferencesViewModel: ObservableObject {
             + prefs.harmfulSiteAllowedHosts.count
             + MediaPermissionStore.shared.all().count
         downloadFolderPath = prefs.preferredDownloadDirectoryPath
-        cloudSyncAvailable = BookmarkStore.shared.isCloudSyncAvailable
-
-        if let account = prefs.appleAccount {
-            hasAppleAccount = true
-            appleAccountDescription = [account.displayName, account.email]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: " · ")
-            if appleAccountDescription.isEmpty { appleAccountDescription = "連携済み" }
-        } else {
-            hasAppleAccount = false
-            appleAccountDescription = "未連携"
-        }
+        reloadPasskeyAccessState()
     }
 
     func commitTextFields() {
@@ -399,44 +388,61 @@ final class PreferencesViewModel: ObservableObject {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    func beginAppleSignIn() {
-        guard let window = windowProvider() else { return }
-        appleSignInCoordinator.begin(window: window) { [weak self] result in
-            guard let self else { return }
-            let name = [result.fullName?.givenName, result.fullName?.familyName]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-            self.prefs.setAppleAccount(
-                userID: result.userID,
-                email: result.email,
-                displayName: name.isEmpty ? nil : name
-            )
-            BookmarkStore.shared.forceSynchronize()
-            self.reload()
-        } onFailure: { [weak self] error in
-            guard let self else { return }
-            if let authError = error as? ASAuthorizationError, authError.code == .canceled { return }
-            self.showAlert(style: .warning, title: "Apple でサインインできませんでした", message: error.localizedDescription)
+    private func reloadPasskeyAccessState() {
+        let deviceConfigured: Bool?
+        if #available(macOS 26.2, *) {
+            deviceConfigured = ASAuthorizationWebBrowserPublicKeyCredentialManager.isDeviceConfiguredForPasskeys
+        } else {
+            deviceConfigured = nil
+        }
+        switch passkeyCredentialManager.authorizationStateForPlatformCredentials {
+        case .authorized:
+            passkeyAccessTitle = "パスキーへのアクセスを許可済み"
+            if deviceConfigured == false {
+                passkeyAccessDetail = "このMacではパスキーがまだ設定されていません"
+            } else {
+                passkeyAccessDetail = "WebサイトのパスキーをApple Passwordsから利用できます"
+            }
+            passkeyAccessAuthorized = true
+            canRequestPasskeyAccess = false
+        case .notDetermined:
+            passkeyAccessTitle = "パスキーへのアクセスは未設定"
+            passkeyAccessDetail = "使用時にApple Passwordsへのアクセス許可が必要です"
+            passkeyAccessAuthorized = false
+            canRequestPasskeyAccess = true
+        case .denied:
+            passkeyAccessTitle = "パスキーへのアクセスが拒否されています"
+            passkeyAccessDetail = "システム設定の「Webブラウザのパスキーアクセス」で変更できます"
+            passkeyAccessAuthorized = false
+            canRequestPasskeyAccess = false
+        @unknown default:
+            passkeyAccessTitle = "パスキーの状態を確認できません"
+            passkeyAccessDetail = "macOSのシステム設定を確認してください"
+            passkeyAccessAuthorized = false
+            canRequestPasskeyAccess = false
         }
     }
 
-    func signOutAppleAccount() {
-        let alert = confirmation(
-            title: "Apple アカウント連携を解除しますか？",
-            message: "Vidarr に保存している表示情報だけを削除します。iCloudからはサインアウトしません。",
-            actionTitle: "解除"
-        )
-        present(alert) { [weak self] response in
-            guard let self, response == .alertFirstButtonReturn else { return }
-            self.prefs.clearAppleAccount()
-            self.reload()
+    func requestPasskeyAccess() {
+        passkeyCredentialManager.requestAuthorizationForPublicKeyCredentials { [model = WeakSendableBox(self)] _ in
+            Task { @MainActor in model.value?.reloadPasskeyAccessState() }
         }
     }
 
-    func synchronizeBookmarks() {
-        BookmarkStore.shared.forceSynchronize()
-        reload()
+    func openPasswords() {
+        let passwordsApp = URL(fileURLWithPath: "/System/Applications/Passwords.app")
+        if FileManager.default.fileExists(atPath: passwordsApp.path) {
+            NSWorkspace.shared.openApplication(at: passwordsApp, configuration: .init(), completionHandler: nil)
+            return
+        }
+        if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension") {
+            NSWorkspace.shared.open(settingsURL)
+        }
+    }
+
+    func openPrivacySettings() {
+        guard let settingsURL = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension") else { return }
+        NSWorkspace.shared.open(settingsURL)
     }
 
     func chooseDownloadFolder() {
@@ -834,20 +840,36 @@ struct ModernPreferencesView: View {
                 }
             }
 
-            PreferenceCard(title: "Apple アカウントと同期", subtitle: "ブックマークをiCloud経由で同期", symbol: "icloud.fill", tint: .secondary) {
-                StatusRow(title: model.appleAccountDescription, detail: model.cloudSyncAvailable ? "iCloud同期を利用できます" : "iCloud同期は現在利用できません", symbol: model.hasAppleAccount ? "checkmark.seal.fill" : "person.crop.circle.badge.questionmark", tint: model.hasAppleAccount ? .green : .secondary)
+            PreferenceCard(title: "パスワードとパスキー", subtitle: "Apple Passwordsの標準機能を利用", symbol: "key", tint: .secondary) {
+                StatusRow(
+                    title: "Password AutoFill",
+                    detail: "ログイン欄ではWebKitがApple Passwordsの候補を表示します",
+                    symbol: "text.cursor",
+                    tint: .secondary
+                )
+                Divider().opacity(0.35)
+                StatusRow(
+                    title: model.passkeyAccessTitle,
+                    detail: model.passkeyAccessDetail,
+                    symbol: model.passkeyAccessAuthorized ? "checkmark.shield" : "person.badge.key",
+                    tint: .secondary
+                )
                 HStack {
-                    if model.hasAppleAccount {
-                        Button("連携を解除") { model.signOutAppleAccount() }
-                            .buttonStyle(RoundedActionButtonStyle(tint: .red))
-                    } else {
-                        Button { model.beginAppleSignIn() } label: { Label("Sign in with Apple", systemImage: "apple.logo") }
-                            .buttonStyle(RoundedActionButtonStyle(tint: .primary, prominent: true))
+                    Button { model.openPasswords() } label: {
+                        Label("パスワードを開く", systemImage: "key")
                     }
-                    Button { model.synchronizeBookmarks() } label: { Label("今すぐ同期", systemImage: "arrow.triangle.2.circlepath") }
-                        .buttonStyle(RoundedActionButtonStyle(tint: .accentColor))
-                        .disabled(!model.cloudSyncAvailable)
+                    .buttonStyle(RoundedActionButtonStyle(tint: .accentColor))
+                    if model.canRequestPasskeyAccess {
+                        Button("パスキーアクセスを許可") { model.requestPasskeyAccess() }
+                            .buttonStyle(RoundedActionButtonStyle(tint: .accentColor, prominent: true))
+                    } else if !model.passkeyAccessAuthorized {
+                        Button("システム設定を開く") { model.openPrivacySettings() }
+                            .buttonStyle(RoundedActionButtonStyle(tint: .secondary))
+                    }
                 }
+                Text("Vidarr自身はパスワードやパスキーを保存しません。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
         }
         .onDisappear { model.commitTextFields() }
